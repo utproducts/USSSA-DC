@@ -1229,7 +1229,7 @@ function EventDetailView({ev,onBack}){
 }
 
 /* ════════════════════ DASHBOARD ════════════════════ */
-function Dashboard({events,onSelect}){
+function Dashboard({events,onSelect,onNav}){
   const [stateF,setStateF]=useState("all");
   const [seasonF,setSeasonF]=useState("all");
   const [directorF,setDirectorF]=useState("all");
@@ -1273,7 +1273,7 @@ function Dashboard({events,onSelect}){
               <option value="all">All Statures</option>
               {statures.map(s=><option key={s}>{s}</option>)}
             </select>
-            <button className="btn btn-primary btn-sm">+ Create New Event</button>
+            <button className="btn btn-primary btn-sm" onClick={()=>onNav("create")}>+ Create New Event</button>
           </div>
         </div>
         <div className="tbl-scroll">
@@ -1677,7 +1677,7 @@ function App(){
           </div>
         </div>
         <div className="content">
-          {view==="events"&&<Dashboard events={events} onSelect={selectEvent}/>}
+          {view==="events"&&<Dashboard events={events} onSelect={selectEvent} onNav={nav}/>}
           {view==="event-detail"&&selEv&&<EventDetailView ev={selEv} onBack={()=>nav("events")}/>}
           {view==="create"&&<CreateEventView/>}
           {SHORTCUT_IDS.has(view)&&<ShortcutHint id={view}/>}
