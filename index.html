@@ -242,6 +242,8 @@ const T12=[
   {id:"v8",name:"Sharon Springs Spartans",city:"Cumming",state:"GA",cls:"12AAA",pts:0,pr:0,icr:"0-4",ovr:"2-10"},
 ];
 
+const ALL_TEAMS=[...T8,...T9,...T12];
+
 // Wellington 8Op pool games
 const PG8=[
   {id:"g1",num:"PPA-1",pool:"A",date:"2/14/2026",time:"12:00 PM",field:"Olym F4",t1:"t1",t2:"t4",s1:17,s2:2,status:"final"},
@@ -1777,6 +1779,7 @@ function App(){
   const [view,setView]=useState("events");
   const [selEv,setSelEv]=useState(null);
   const [events,setEvents]=useState(EVENTS_DB);
+  const [allGames,setAllGames]=useState([...PG8,...PG9,...PG12]);
   const [dbStatus,setDbStatus]=useState('connecting');
   useEffect(()=>{
     (async()=>{
@@ -1843,7 +1846,8 @@ function App(){
           {view==="events"&&<Dashboard events={events} onSelect={selectEvent} onNav={nav}/>}
           {view==="event-detail"&&selEv&&<EventDetailView ev={selEv} onBack={()=>nav("events")}/>}
           {view==="create"&&<CreateEventView/>}
-          {SHORTCUT_IDS.has(view)&&<ShortcutHint id={view}/>}
+          {view==="s-game-mgr"&&<GameMgrView games={allGames} setGames={setAllGames} teams={ALL_TEAMS}/>}
+          {SHORTCUT_IDS.has(view)&&view!=="s-game-mgr"&&<ShortcutHint id={view}/>}
         </div>
       </main>
     </div>
