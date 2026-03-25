@@ -1324,7 +1324,11 @@ function CreateEventView(){
     lodgingDirector:"",lwc:"open",divisions:[],
     quickDetails:"",advancedDesc:"",hotelInfo:"",
     alertEnabled:false,alertMsg:"",
-    streamEnabled:false,streamURL:"",rainoutEmbed:""
+    streamEnabled:false,streamURL:"",rainoutEmbed:"",
+    entryFeeAmt:"",entryFeePublic:"",teamEntryOption:"online_only",
+    gateFeeAmt:"",gateFeePublic:"",
+    otherFeeAmt:"",otherFeePublic:"",otherFeeDesc:"",
+    refundPolicy:""
   });
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
   const toggleDiv=d=>setF(p=>({...p,divisions:p.divisions.includes(d)?p.divisions.filter(x=>x!==d):[...p.divisions,d]}));
@@ -1346,12 +1350,16 @@ function CreateEventView(){
       quickDetails:f.quickDetails, advancedDesc:f.advancedDesc, hotelInfo:f.hotelInfo,
       alertEnabled:f.alertEnabled, alertMsg:f.alertMsg,
       streamEnabled:f.streamEnabled, streamURL:f.streamURL, rainoutEmbed:f.rainoutEmbed,
+      entryFeeAmt:f.entryFeeAmt, entryFeePublic:f.entryFeePublic, teamEntryOption:f.teamEntryOption,
+      gateFeeAmt:f.gateFeeAmt, gateFeePublic:f.gateFeePublic,
+      otherFeeAmt:f.otherFeeAmt, otherFeePublic:f.otherFeePublic, otherFeeDesc:f.otherFeeDesc,
+      refundPolicy:f.refundPolicy,
       parks:[],
       divisions:f.divisions.map((d,i)=>({id:Date.now()+i,code:d.replace(/\s+/g,""),label:d,wl:"0-0-0",teams:0,flights:[]}))
     };
     dbSave('events',newEvent);
     alert(`Event "${newEvent.name}" created! Event ID: ${newEvent.evid}`);
-    setF(p=>({...p,name:"",city:"",startDate:"",endDate:"",entryDeadline:"",director:"",lodgingDirector:"",quickDetails:"",advancedDesc:"",hotelInfo:"",alertMsg:"",streamURL:"",rainoutEmbed:"",divisions:[],alertEnabled:false,streamEnabled:false}));
+    setF(p=>({...p,name:"",city:"",startDate:"",endDate:"",entryDeadline:"",director:"",lodgingDirector:"",quickDetails:"",advancedDesc:"",hotelInfo:"",alertMsg:"",streamURL:"",rainoutEmbed:"",divisions:[],alertEnabled:false,streamEnabled:false,entryFeeAmt:"",entryFeePublic:"",gateFeeAmt:"",gateFeePublic:"",otherFeeAmt:"",otherFeePublic:"",otherFeeDesc:"",refundPolicy:""}));
   }
 
   const inputStyle={width:"100%",padding:"7px 10px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13};
@@ -1468,6 +1476,68 @@ function CreateEventView(){
             <div style={fieldWrap}><label style={labelStyle}>Hotel Information</label><textarea style={{...inputStyle,resize:"vertical"}} rows={3} value={f.hotelInfo} onChange={e=>set("hotelInfo",e.target.value)} placeholder="Hotel partner info, discount codes, booking links..."/></div>
           </div>
 
+          <SectionHead title="Fees & Payments"/>
+          <div style={{display:"grid",gap:16,marginBottom:8}}>
+            <div style={grid3}>
+              <div style={fieldWrap}>
+                <label style={{...labelStyle,color:"#c0392b"}}>Entry Fee Amount *</label>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontWeight:600,fontSize:15,color:"#4a5568"}}>$</span>
+                  <input style={inputStyle} type="number" min="0" step="0.01" value={f.entryFeeAmt} onChange={e=>set("entryFeeAmt",e.target.value)} placeholder="0.00"/>
+                </div>
+              </div>
+              <div style={fieldWrap}>
+                <label style={{...labelStyle,color:"#c0392b"}}>Entry Fees Displayed to Public *</label>
+                <input style={inputStyle} value={f.entryFeePublic} onChange={e=>set("entryFeePublic",e.target.value)} placeholder='e.g. "$395 per team"'/>
+              </div>
+              <div style={fieldWrap}>
+                <label style={{...labelStyle,color:"#c0392b"}}>Team Entry Options *</label>
+                <select style={inputStyle} value={f.teamEntryOption} onChange={e=>set("teamEntryOption",e.target.value)}>
+                  <option value="online_only">Online Only</option>
+                  <option value="online_check">Online or Check</option>
+                  <option value="online_cash">Online or Cash</option>
+                  <option value="check_only">Check Only</option>
+                  <option value="cash_only">Cash Only</option>
+                  <option value="any">Any Method</option>
+                </select>
+              </div>
+            </div>
+            <div style={grid3}>
+              <div style={fieldWrap}>
+                <label style={labelStyle}>Gate Fee Amount <span style={{color:"#888",fontWeight:400}}>(Optional)</span></label>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontWeight:600,fontSize:15,color:"#4a5568"}}>$</span>
+                  <input style={inputStyle} type="number" min="0" step="0.01" value={f.gateFeeAmt} onChange={e=>set("gateFeeAmt",e.target.value)} placeholder="0.00"/>
+                </div>
+              </div>
+              <div style={fieldWrap}>
+                <label style={labelStyle}>Gate Fees Displayed to Public</label>
+                <input style={inputStyle} value={f.gateFeePublic} onChange={e=>set("gateFeePublic",e.target.value)} placeholder='e.g. "$5 adults, kids free"'/>
+              </div>
+            </div>
+            <div style={grid3}>
+              <div style={fieldWrap}>
+                <label style={labelStyle}>Other Fee Amount <span style={{color:"#888",fontWeight:400}}>(Optional)</span></label>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontWeight:600,fontSize:15,color:"#4a5568"}}>$</span>
+                  <input style={inputStyle} type="number" min="0" step="0.01" value={f.otherFeeAmt} onChange={e=>set("otherFeeAmt",e.target.value)} placeholder="0.00"/>
+                </div>
+              </div>
+              <div style={fieldWrap}>
+                <label style={labelStyle}>Other Fees Displayed to Public</label>
+                <input style={inputStyle} value={f.otherFeePublic} onChange={e=>set("otherFeePublic",e.target.value)} placeholder="Public description of other fee"/>
+              </div>
+              <div style={fieldWrap}>
+                <label style={labelStyle}>Other Fee Description <span style={{color:"#888",fontWeight:400}}>(Optional)</span></label>
+                <input style={inputStyle} value={f.otherFeeDesc} onChange={e=>set("otherFeeDesc",e.target.value)} placeholder="Internal note on other fee"/>
+              </div>
+            </div>
+            <div style={fieldWrap}>
+              <label style={{...labelStyle,color:"#c0392b"}}>Refund Policy Notes *</label>
+              <textarea style={{...inputStyle,resize:"vertical"}} rows={3} value={f.refundPolicy} onChange={e=>set("refundPolicy",e.target.value)} placeholder="Describe your refund policy for teams..."/>
+            </div>
+          </div>
+
           <SectionHead title="Alerts & Features"/>
           <div style={{display:"grid",gap:12}}>
             <label style={{...toggleRow,cursor:"pointer"}}>
@@ -1485,7 +1555,7 @@ function CreateEventView(){
 
           <div style={{marginTop:28,display:"flex",gap:12}}>
             <button className="btn btn-primary" onClick={handleCreate}>✓ Create Event</button>
-            <button className="btn btn-secondary" onClick={()=>setF(p=>({...p,name:"",city:"",startDate:"",endDate:"",entryDeadline:"",director:"",lodgingDirector:"",quickDetails:"",advancedDesc:"",hotelInfo:"",alertMsg:"",streamURL:"",rainoutEmbed:"",divisions:[],alertEnabled:false,streamEnabled:false}))}>✕ Clear Form</button>
+            <button className="btn btn-secondary" onClick={()=>setF(p=>({...p,name:"",city:"",startDate:"",endDate:"",entryDeadline:"",director:"",lodgingDirector:"",quickDetails:"",advancedDesc:"",hotelInfo:"",alertMsg:"",streamURL:"",rainoutEmbed:"",divisions:[],alertEnabled:false,streamEnabled:false,entryFeeAmt:"",entryFeePublic:"",gateFeeAmt:"",gateFeePublic:"",otherFeeAmt:"",otherFeePublic:"",otherFeeDesc:"",refundPolicy:""}))}>✕ Clear Form</button>
           </div>
 
         </div>
