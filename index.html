@@ -1392,11 +1392,6 @@ function CreateEventView(){
                 {ALL_STATES.map(s=><option key={s}>{s}</option>)}
               </select>
             </div>
-            <div style={fieldWrap}><label style={labelStyle}>Sanction State</label>
-              <select style={inputStyle} value={f.sanctionState} onChange={e=>set("sanctionState",e.target.value)}>
-                {ALL_STATES.map(s=><option key={s}>{s}</option>)}
-              </select>
-            </div>
             <div style={fieldWrap}><label style={labelStyle}>Entry Policy</label>
               <select style={inputStyle} value={f.lwc} onChange={e=>set("lwc",e.target.value)}>
                 {LWC_OPTIONS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
