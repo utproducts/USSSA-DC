@@ -696,91 +696,289 @@ function GameMgrView({games,setGames,teams,readOnly}){
 }
 
 /* ════════════════════ LAYOUT BUILDER ════════════════════ */
-function LayoutView({games,teams}){
-  const [nf,setNf]=useState(1);
+function LayoutView({games,setGames,teams}){
+  const [nf,setNf]=useState(3);
   const [gl,setGl]=useState("90");
-  const TIMES=["8:00 AM","9:30 AM","11:00 AM","12:30 PM","2:00 PM","3:30 PM","5:00 PM","6:30 PM"];
-  const init={};
-  games.slice(0,TIMES.length).forEach((g,i)=>{init[`${TIMES[i]}-0`]={...g,chip:true}});
-  const [slots,setSlots]=useState(init);
-  const fields=Array.from({length:nf},(_,i)=>`Field ${i+1}`);
+  const [startT,setStartT]=useState("08:00");
+  const [endT,setEndT]=useState("19:00");
+  const [day,setDay]=useState(1);
+  const [fieldNames,setFieldNames]=useState(["Field 1","Field 2","Field 3","Field 4","Field 5","Field 6","Field 7","Field 8"]);
+  const [editFi,setEditFi]=useState(null);
+  const [layout,setLayout]=useState({}); // key:"D|time|fi" => gameId|"blocked"
+  const [picked,setPicked]=useState(null); // gameId selected to place
+  const [showNames,setShowNames]=useState(true);
+
+  function genTimes(s,e,len){
+    const r=[];
+    const toM=t=>{const[h,m]=t.split(":").map(Number);return h*60+m;};
+    const toL=m=>{const h=Math.floor(m/60),mn=m%60,ap=h>=12?"PM":"AM",h12=h>12?h-12:h===0?12:h;return`${h12}:${mn.toString().padStart(2,"0")} ${ap}`;};
+    let c=toM(s),max=toM(e);
+    while(c<=max){r.push(toL(c));c+=parseInt(len);}
+    return r;
+  }
+  const times=genTimes(startT,endT,gl);
+  const fields=fieldNames.slice(0,nf);
+  const sk=(t,fi)=>`${day}|${t}|${fi}`;
+  const assignedIds=new Set(Object.values(layout).filter(v=>v!=="blocked"));
+  const unscheduled=games.filter(g=>!assignedIds.has(g.id));
+
   function clickSlot(t,fi){
-    const k=`${t}-${fi}`;
-    setSlots(p=>{
-      const n={...p};
-      if(n[k]?.chip)return n;
-      if(n[k]?.blocked)delete n[k];
-      else n[k]={blocked:true};
-      return n;
+    const k=sk(t,fi);const cur=layout[k];
+    if(picked){
+      if(!cur||cur==="blocked"){
+        setLayout(p=>({...p,[k]:picked}));
+        setGames(prev=>prev.map(g=>g.id===picked?{...g,time:t,field:fields[fi]}:g));
+        setPicked(null);
+      }else if(cur&&cur!=="blocked"){
+        // swap: move current game back to unscheduled, place picked
+        setLayout(p=>({...p,[k]:picked}));
+        setGames(prev=>prev.map(g=>g.id===picked?{...g,time:t,field:fields[fi]}:g));
+        setPicked(cur);
+      }
+      return;
+    }
+    if(!cur){setLayout(p=>({...p,[k]:"blocked"}));}
+    else if(cur==="blocked"){setLayout(p=>{const n={...p};delete n[k];return n;});}
+    else{setLayout(p=>{const n={...p};delete n[k];return n;});}
+  }
+
+  function autoSchedule(){
+    const nl={...layout};
+    const toPlace=[...unscheduled];let i=0;
+    outer:for(const t of times){for(let f=0;f<nf;f++){const k=sk(t,f);if(!nl[k]&&i<toPlace.length){nl[k]=toPlace[i].id;i++;}if(i>=toPlace.length)break outer;}}
+    setLayout(nl);
+    setGames(prev=>{
+      const placed={};
+      Object.entries(nl).forEach(([k,id])=>{if(id!=="blocked"){const[,t,fi]=k.split("|");placed[id]={time:t,field:fieldNames[parseInt(fi)]};}});
+      return prev.map(g=>placed[g.id]?{...g,...placed[g.id]}:g);
     });
   }
+
+  function clearDay(){
+    const nl={};
+    Object.entries(layout).forEach(([k,v])=>{if(!k.startsWith(`${day}|`))nl[k]=v;});
+    setLayout(nl);setPicked(null);
+  }
+
+  const poolPal=["#dbeafe|#1d4ed8","#dcfce7|#15803d","#fae8ff|#7e22ce","#ffedd5|#c2410c","#e0f2fe|#0369a1","#fef9c3|#a16207"];
+  function poolCol(pool,i){const[bg,c]=(poolPal[i%poolPal.length]||"#f1f5f9|#475569").split("|");return{bg,c};}
+  const pools=[...new Set(games.map(g=>g.pool))].filter(Boolean).sort();
+  const poolIdx={};pools.forEach((p,i)=>poolIdx[p]=i);
+
+  const pickedGame=picked?games.find(g=>g.id===picked):null;
+
   return(
     <div>
+      {/* Settings */}
       <div className="card mb4">
         <div className="card-hd"><span className="card-title">Layout Settings</span></div>
-        <div className="card-body flex-w gap-3" style={{alignItems:"flex-end"}}>
-          <div><label># of Fields</label>
-            <select value={nf} onChange={e=>setNf(+e.target.value)}>
-              {[1,2,3,4,5,6].map(n=><option key={n}>{n}</option>)}
-            </select>
+        <div className="card-body">
+          <div className="flex-w gap-3" style={{alignItems:"flex-end"}}>
+            <div><label>Fields</label>
+              <select value={nf} onChange={e=>{setNf(+e.target.value);setEditFi(null);}}>
+                {[1,2,3,4,5,6,7,8].map(n=><option key={n}>{n}</option>)}
+              </select>
+            </div>
+            <div><label>Game Length</label>
+              <select value={gl} onChange={e=>setGl(e.target.value)}>
+                <option value="60">60 min (1 hr)</option>
+                <option value="75">75 min (1h 15m)</option>
+                <option value="90">90 min (1h 30m)</option>
+                <option value="105">105 min (1h 45m)</option>
+                <option value="120">120 min (2 hr)</option>
+              </select>
+            </div>
+            <div><label>Start Time</label>
+              <input type="time" value={startT} onChange={e=>setStartT(e.target.value)}
+                style={{padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}}/>
+            </div>
+            <div><label>End Time</label>
+              <input type="time" value={endT} onChange={e=>setEndT(e.target.value)}
+                style={{padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}}/>
+            </div>
+            <div><label>Day</label>
+              <div style={{display:"flex",gap:4}}>
+                {[1,2,3,4].map(d=>(
+                  <button key={d} onClick={()=>setDay(d)}
+                    style={{padding:"5px 14px",borderRadius:6,fontWeight:700,fontSize:12,cursor:"pointer",
+                      border:"none",background:day===d?"#1e3a5f":"#f1f5f9",color:day===d?"#fff":"#475569",
+                      boxShadow:day===d?"0 2px 6px rgba(0,0,0,.15)":"none"}}>
+                    Day {d}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setShowNames(v=>!v)} style={{marginLeft:8}}>
+              {showNames?"Hide":"Show"} Team Names
+            </button>
           </div>
-          <div><label>Game Time Length</label>
-            <select value={gl} onChange={e=>setGl(e.target.value)}>
-              <option value="60">1 hour</option>
-              <option value="75">1h 15m</option>
-              <option value="90">1h 30m</option>
-              <option value="120">2 hours</option>
-            </select>
-          </div>
-          <div><label>Time Range — Day 1</label>
-            <div className="flex gap-2">
-              <select><option>8:00 AM</option><option>9:00 AM</option></select>
-              <span style={{alignSelf:"center",padding:"0 4px"}}>to</span>
-              <select><option>7:00 PM</option><option>8:00 PM</option></select>
+          <div style={{display:"flex",gap:8,marginTop:14,alignItems:"center",flexWrap:"wrap"}}>
+            <button className="btn btn-primary btn-sm" onClick={autoSchedule} disabled={unscheduled.length===0}
+              style={{opacity:unscheduled.length===0?.5:1}}>
+              ⚡ Auto-Schedule {unscheduled.length>0?`(${unscheduled.length} left)`:""}
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={clearDay}>🗑 Clear Day {day}</button>
+            <div style={{marginLeft:"auto",fontSize:12,color:"#94a3b8"}}>
+              {times.length} slots · {nf} field{nf!==1?"s":""} · {times.length*nf} total · {assignedIds.size} assigned
             </div>
           </div>
-          <button className="btn btn-primary btn-sm">⏱ Set/Reset Times</button>
-          <button className="btn btn-secondary btn-sm">📅 Next Day →</button>
-          <button className="btn btn-secondary btn-sm">Show Team Names</button>
         </div>
       </div>
-      <Alrt type="info">💡 <strong>Blue cells</strong> = assigned games · Click empty cell to <strong>block</strong> it (red) · Click blocked to unblock</Alrt>
-      <div className="ly-wrap">
-        <div className="ly-hdr">
-          <div className="ly-time-hdr">Time</div>
-          {fields.map((f,fi)=>(
-            <div key={fi} className="ly-fld-hdr">{f} — {["Olym F4","Olym F5","Olym F6","Frank Brown F1","Frank Brown F2","Frank Brown F3"][fi]||f}</div>
-          ))}
-        </div>
-        {TIMES.map(t=>(
-          <div key={t} className="ly-row">
-            <div className="ly-time">{t}</div>
-            {fields.map((_,fi)=>{
-              const k=`${t}-${fi}`;const slot=slots[k];
-              const st1=slot?.chip?tByIdFrom(slot.t1,teams):null;
-              const st2=slot?.chip?tByIdFrom(slot.t2,teams):null;
+
+      {/* Unscheduled games */}
+      {unscheduled.length>0&&(
+        <div className="card mb4">
+          <div className="card-hd">
+            <span className="card-title">Unscheduled Games</span>
+            <span style={{fontSize:12,color:"#94a3b8",marginLeft:8}}>{unscheduled.length} game{unscheduled.length!==1?"s":""} need scheduling</span>
+            {picked&&<button onClick={()=>setPicked(null)}
+              style={{marginLeft:"auto",padding:"4px 12px",borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer",border:"1px solid #fca5a5",background:"#fff",color:"#dc2626"}}>
+              ✕ Cancel
+            </button>}
+          </div>
+          <div className="card-body" style={{display:"flex",flexWrap:"wrap",gap:8,paddingBottom:12}}>
+            {unscheduled.map(g=>{
+              const t1=tByIdFrom(g.t1,teams),t2=tByIdFrom(g.t2,teams);
+              const pal=g.pool?poolCol(g.pool,poolIdx[g.pool]||0):{bg:"#f1f5f9",c:"#475569"};
+              const isSel=picked===g.id;
               return(
-                <div key={fi} className={`ly-slot ${slot?.chip?"has-game":slot?.blocked?"blocked":""}`}
-                  onClick={()=>clickSlot(t,fi)}>
-                  {slot?.chip?(
-                    <div className="ly-chip">
-                      {slot.num}
-                      <div className="t2">{st1?.name?.split(" ").slice(-1)[0]||"?"} vs {st2?.name?.split(" ").slice(-1)[0]||"?"}</div>
-                    </div>
-                  ):slot?.blocked?(
-                    <span style={{fontSize:10,color:"var(--red)",fontWeight:700}}>BLOCKED</span>
-                  ):(
-                    <span style={{fontSize:10,color:"#d0d5dd"}}>+ assign</span>
-                  )}
+                <div key={g.id} onClick={()=>setPicked(isSel?null:g.id)}
+                  style={{padding:"9px 13px",borderRadius:8,cursor:"pointer",userSelect:"none",minWidth:130,
+                    border:isSel?"2px solid #2563eb":"1px solid #e2e8f0",
+                    background:isSel?"#eff6ff":"#f8fafc",
+                    boxShadow:isSel?"0 0 0 3px rgba(37,99,235,.15)":"none",
+                    transform:isSel?"translateY(-1px)":"none",transition:"all .1s"}}>
+                  <div style={{fontWeight:800,fontSize:13,color:"#1e293b"}}>{g.num}</div>
+                  <div style={{fontSize:11,color:"#64748b",marginTop:2,lineHeight:1.4}}>
+                    {showNames?(t1?.name?.split(" ").slice(-1)[0]||"TBD")+" vs "+(t2?.name?.split(" ").slice(-1)[0]||"TBD"):"—"}
+                  </div>
+                  {g.pool&&<span style={{fontSize:10,background:pal.bg,color:pal.c,borderRadius:4,padding:"1px 6px",fontWeight:700,marginTop:3,display:"inline-block"}}>Pool {g.pool}</span>}
                 </div>
               );
             })}
           </div>
-        ))}
+        </div>
+      )}
+
+      {picked&&pickedGame&&(
+        <div style={{background:"#eff6ff",border:"2px solid #93c5fd",borderRadius:8,padding:"10px 16px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:20}}>✋</span>
+          <div>
+            <strong style={{color:"#1d4ed8"}}>Game {pickedGame.num} selected</strong>
+            <span style={{fontSize:12,color:"#475569",marginLeft:10}}>Click any available slot to place it · Click it again or Cancel to deselect</span>
+          </div>
+        </div>
+      )}
+
+      {unscheduled.length===0&&assignedIds.size>0&&(
+        <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"10px 16px",marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:18}}>✅</span>
+          <span style={{fontSize:13,fontWeight:600,color:"#15803d"}}>All {assignedIds.size} games scheduled for Day {day}!</span>
+        </div>
+      )}
+
+      {/* Grid */}
+      <div className="card">
+        <div className="card-hd">
+          <span className="card-title">Day {day} — Schedule Grid</span>
+          <span style={{fontSize:11,color:"#94a3b8",marginLeft:8}}>{times[0]} – {times[times.length-1]}</span>
+        </div>
+        <div style={{overflowX:"auto"}}>
+          <table style={{borderCollapse:"collapse",width:"100%",minWidth:400}}>
+            <thead>
+              <tr>
+                <th style={{background:"#f8fafc",padding:"10px 14px",borderBottom:"2px solid #e2e8f0",
+                  fontSize:11,color:"#94a3b8",textAlign:"left",fontWeight:700,width:90,whiteSpace:"nowrap"}}>TIME</th>
+                {fields.map((f,fi)=>(
+                  <th key={fi} style={{background:"#f8fafc",padding:"8px 12px",borderBottom:"2px solid #e2e8f0",
+                    borderLeft:"1px solid #e8edf2",minWidth:140,textAlign:"center",fontWeight:700,color:"#1e293b",fontSize:13}}>
+                    {editFi===fi
+                      ?<input autoFocus value={fieldNames[fi]}
+                          onChange={e=>{const n=[...fieldNames];n[fi]=e.target.value;setFieldNames(n);}}
+                          onBlur={()=>setEditFi(null)}
+                          onKeyDown={e=>{if(e.key==="Enter")setEditFi(null);}}
+                          style={{width:"100%",fontSize:13,fontWeight:700,border:"1px solid #93c5fd",borderRadius:4,padding:"3px 6px",textAlign:"center"}}/>
+                      :<span onClick={()=>setEditFi(fi)} title="Click to rename"
+                          style={{cursor:"pointer",borderBottom:"1.5px dotted #cbd5e1",paddingBottom:1}}>{f}</span>
+                    }
+                    <div style={{fontSize:9,fontWeight:400,color:"#94a3b8",marginTop:2}}>click to rename</div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {times.map((t,ti)=>(
+                <tr key={t} style={{background:ti%2===0?"#fff":"#fafbfc"}}>
+                  <td style={{padding:"7px 14px",fontSize:12,fontWeight:700,color:"#475569",
+                    borderBottom:"1px solid #f1f5f9",whiteSpace:"nowrap",borderRight:"2px solid #e2e8f0"}}>
+                    {t}
+                  </td>
+                  {fields.map((_,fi)=>{
+                    const k=sk(t,fi);const val=layout[k];
+                    const game=val&&val!=="blocked"?games.find(g=>g.id===val):null;
+                    const isBlocked=val==="blocked";
+                    const canPlace=!!picked&&!isBlocked;
+                    const t1n=game&&showNames?(tByIdFrom(game.t1,teams)?.name?.split(" ").slice(-1)[0]||"?"):null;
+                    const t2n=game&&showNames?(tByIdFrom(game.t2,teams)?.name?.split(" ").slice(-1)[0]||"?"):null;
+                    const pal=game?.pool?poolCol(game.pool,poolIdx[game.pool]||0):{bg:"#dbeafe",c:"#1d4ed8"};
+                    return(
+                      <td key={fi} onClick={()=>clickSlot(t,fi)}
+                        title={isBlocked?"Click to unblock":game?`${game.num} — click to unassign`:picked?"Click to place game":"Click to block"}
+                        style={{borderLeft:"1px solid #e8edf2",borderBottom:"1px solid #f1f5f9",
+                          padding:5,verticalAlign:"middle",cursor:"pointer",
+                          background:isBlocked?"#fff5f5":canPlace&&!game?"#eff6ff":"transparent",
+                          transition:"background .1s"}}>
+                        {game?(
+                          <div style={{background:pal.bg,border:`1px solid ${pal.c}33`,borderRadius:7,padding:"7px 9px"}}>
+                            <div style={{fontWeight:800,fontSize:12,color:pal.c}}>{game.num}</div>
+                            {showNames&&t1n&&<div style={{fontSize:11,color:"#334155",fontWeight:500,marginTop:2,lineHeight:1.3}}>
+                              {t1n} <span style={{opacity:.5}}>vs</span> {t2n}
+                            </div>}
+                            {game.pool&&<span style={{fontSize:9,background:pal.bg,color:pal.c,fontWeight:700,
+                              borderRadius:3,padding:"1px 5px",marginTop:2,display:"inline-block",border:`1px solid ${pal.c}44`}}>
+                              Pool {game.pool}
+                            </span>}
+                          </div>
+                        ):isBlocked?(
+                          <div style={{background:"#fee2e2",border:"1px dashed #fca5a5",borderRadius:7,
+                            padding:"8px",textAlign:"center"}}>
+                            <span style={{fontSize:10,fontWeight:700,color:"#dc2626"}}>BLOCKED</span>
+                          </div>
+                        ):(
+                          <div style={{borderRadius:7,padding:"8px",textAlign:"center",
+                            border:`1px dashed ${canPlace?"#93c5fd":"#e2e8f0"}`,
+                            background:canPlace?"#eff6ff":"transparent"}}>
+                            <span style={{fontSize:10,fontWeight:canPlace?700:400,
+                              color:canPlace?"#2563eb":"#d1d5db"}}>
+                              {canPlace?"→ Place here":"+ Assign"}
+                            </span>
+                          </div>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
-      <div className="flex mt3" style={{justifyContent:"flex-end",gap:8}}>
-        <button className="btn btn-secondary">↩ Reset</button>
-        <button className="btn btn-green">💾 Save Layout</button>
+
+      {/* Legend */}
+      <div style={{display:"flex",gap:16,marginTop:14,fontSize:11,color:"#64748b",alignItems:"center",flexWrap:"wrap"}}>
+        <div style={{display:"flex",gap:5,alignItems:"center"}}>
+          <div style={{width:14,height:14,background:"#dbeafe",border:"1px solid #93c5fd44",borderRadius:3}}/>
+          <span>Assigned game</span>
+        </div>
+        <div style={{display:"flex",gap:5,alignItems:"center"}}>
+          <div style={{width:14,height:14,background:"#fee2e2",border:"1px dashed #fca5a5",borderRadius:3}}/>
+          <span>Blocked slot</span>
+        </div>
+        <div style={{display:"flex",gap:5,alignItems:"center"}}>
+          <div style={{width:14,height:14,background:"#fff",border:"1px dashed #e2e8f0",borderRadius:3}}/>
+          <span>Empty (click to block · click blocked to clear)</span>
+        </div>
+        <span style={{marginLeft:"auto",color:"#94a3b8"}}>💡 Select a game above → click a slot to place · Click field header to rename</span>
       </div>
     </div>
   );
@@ -1272,7 +1470,7 @@ function FlightView({flight,divId,eventParks}){
       {tab==="standings"&&<StandingsView teams={teams} games={pg}/>}
       {tab==="seeds"&&<SeedsView teams={teams}/>}
       {tab==="game-manager"&&<GameMgrView games={isPool?pg:bg} setGames={isPool?setPg:setBg} teams={teams} readOnly={false}/>}
-      {tab==="layout"&&<LayoutView games={isPool?pg:bg} teams={teams}/>}
+      {tab==="layout"&&<LayoutView games={isPool?pg:bg} setGames={isPool?setPg:setBg} teams={teams}/>}
       {tab==="pitching"&&<PitchingView teams={teams}/>}
       {tab==="parks"&&<ParksView eventParks={eventParks}/>}
       {tab==="umpires"&&<UmpiresView/>}
