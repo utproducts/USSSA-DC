@@ -1316,9 +1316,9 @@ function SectionHead({title}){
 
 function CreateEventView(){
   const [f,setF]=useState({
-    name:"",sport:"Baseball",state:"FL",sanctionState:"FL",city:"",
+    name:"",sport:"Baseball",state:"FL",city:"",
     startDate:"",endDate:"",entryDeadline:"",stature:"Double State Qualifier",
-    format:"Double Elimination",director:"",
+    format:"Double Elimination",minGames:3,maxEntries:16,director:"",
     lodgingDirector:"",lwc:"open",divisions:[],
     quickDetails:"",advancedDesc:"",hotelInfo:"",
     alertEnabled:false,alertMsg:"",
@@ -1339,7 +1339,7 @@ function CreateEventView(){
       state:f.state, city:f.city,
       date:new Date(f.startDate).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}),
       endDate:f.endDate, entryDeadline:f.entryDeadline, sport:f.sport, sanctionState:f.sanctionState,
-      status:"upcoming", stature:f.stature, format:f.format, director:f.director.trim(),
+      status:"upcoming", stature:f.stature, format:f.format, minGames:f.minGames, maxEntries:f.maxEntries, director:f.director.trim(),
       lodgingDirector:f.lodgingDirector, lwc:f.lwc,
       quickDetails:f.quickDetails, advancedDesc:f.advancedDesc, hotelInfo:f.hotelInfo,
       alertEnabled:f.alertEnabled, alertMsg:f.alertMsg,
@@ -1395,6 +1395,16 @@ function CreateEventView(){
             <div style={fieldWrap}><label style={labelStyle}>Entry Policy</label>
               <select style={inputStyle} value={f.lwc} onChange={e=>set("lwc",e.target.value)}>
                 {LWC_OPTIONS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+              </select>
+            </div>
+            <div style={fieldWrap}><label style={labelStyle}>Minimum Number of Games</label>
+              <select style={inputStyle} value={f.minGames} onChange={e=>set("minGames",Number(e.target.value))}>
+                {[2,3,4,5,6,7,8].map(n=><option key={n} value={n}>{n} Games</option>)}
+              </select>
+            </div>
+            <div style={fieldWrap}><label style={labelStyle}>Maximum Entries per Division</label>
+              <select style={inputStyle} value={f.maxEntries} onChange={e=>set("maxEntries",Number(e.target.value))}>
+                {[4,6,8,10,12,14,16,18,20,24,28,32,40,48,56,64].map(n=><option key={n} value={n}>{n} Teams</option>)}
               </select>
             </div>
           </div>
