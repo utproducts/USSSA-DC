@@ -427,257 +427,270 @@ function SeedsView({teams}){
 }
 
 /* ════════════════════ GAME MANAGER ════════════════════ */
+function GameCard({g,teams,readOnly,onUpdField,onUpdScore,onSetStatus,onSwapTeams}){
+  const [editSide,setEditSide]=useState(null);
+  const t1=tByIdFrom(g.t1,teams),t2=tByIdFrom(g.t2,teams);
+  const w=winOf(g);
+  const isW1=w&&w===g.t1,isW2=w&&w===g.t2;
+  const statusMap={
+    final:{bg:"#16a34a",c:"#fff",lbl:"✓ Final"},
+    no_score:{bg:"#2563eb",c:"#fff",lbl:"✓ Final (No Score)"},
+    forfeit:{bg:"#ea580c",c:"#fff",lbl:"⚠ Forfeit"},
+    coin:{bg:"#7c3aed",c:"#fff",lbl:"● Coin Flip"},
+    scheduled:{bg:"#e2e8f0",c:"#475569",lbl:"Scheduled"},
+    live:{bg:"#dc2626",c:"#fff",lbl:"● Live"},
+  };
+  const sc=statusMap[g.status]||statusMap.scheduled;
+  const scoreBoxStyle=(isWin,isLos)=>({
+    width:52,height:42,textAlign:"center",fontWeight:800,fontSize:22,
+    border:`2px solid ${isWin?"#16a34a":isLos?"#e2e8f0":"#cbd5e1"}`,
+    borderRadius:8,padding:0,
+    background:isWin?"#f0fdf4":isLos?"#f8fafc":"#fff",
+    color:isWin?"#16a34a":isLos?"#94a3b8":"#1e293b",
+    outline:"none",appearance:"textfield",MozAppearance:"textfield"
+  });
+  const actionBtns=[
+    {key:"final",lbl:"With Score",bg:"#16a34a",c:"#fff"},
+    {key:"no_score",lbl:"No Score",bg:"#2563eb",c:"#fff"},
+    {key:"forfeit",lbl:"Forfeit",bg:"#ea580c",c:"#fff"},
+    {key:"coin",lbl:"Coin Flip",bg:"#7c3aed",c:"#fff"},
+    {key:"scheduled",lbl:"Scheduled",bg:"#64748b",c:"#fff"},
+    {key:"clear",lbl:"Clear",bg:"#fff",c:"#dc2626"},
+  ];
+  return(
+    <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:10,padding:"14px 18px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,.06)"}}>
+      {/* Header row */}
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
+        <div style={{background:"#1e293b",color:"#fff",borderRadius:6,padding:"3px 12px",fontWeight:800,fontSize:14,minWidth:44,textAlign:"center"}}>{g.num}</div>
+        {g.pool&&<span style={{background:"#eff6ff",color:"#1d4ed8",borderRadius:20,padding:"2px 10px",fontSize:12,fontWeight:700}}>Pool {g.pool}</span>}
+        <div style={{display:"flex",gap:14,fontSize:12,color:"#64748b",marginLeft:4}}>
+          {g.date&&<span>📅 {g.date}</span>}
+          {g.time&&<span>⏰ {g.time}</span>}
+          {g.field&&<span>📍 {g.field}</span>}
+        </div>
+        <span style={{marginLeft:"auto",background:sc.bg,color:sc.c,padding:"3px 12px",borderRadius:20,fontSize:11,fontWeight:700,whiteSpace:"nowrap"}}>{sc.lbl}</span>
+      </div>
+      {/* Matchup */}
+      <div style={{display:"flex",alignItems:"center",gap:10,padding:"14px 0",borderTop:"1px solid #f1f5f9",borderBottom:"1px solid #f1f5f9"}}>
+        {/* Team 1 */}
+        <div style={{flex:1,textAlign:"right",paddingRight:4}}>
+          {editSide==="t1"&&!readOnly
+            ?<select autoFocus style={{fontSize:13,padding:"5px 8px",border:"2px solid #93c5fd",borderRadius:6,maxWidth:220}}
+                onBlur={()=>setEditSide(null)} value={g.t1||""}
+                onChange={e=>{onUpdField(g.id,"t1",e.target.value);setEditSide(null);}}>
+                <option value="">— TBD —</option>
+                {teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            :<div>
+              <span onClick={()=>!readOnly&&setEditSide("t1")}
+                style={{fontSize:15,fontWeight:isW1?800:600,
+                  color:isW1?"#16a34a":isW2?"#94a3b8":"#0f172a",
+                  cursor:readOnly?"default":"pointer",
+                  borderBottom:readOnly?"none":"1.5px dotted #cbd5e1",
+                  paddingBottom:1}}>
+                {t1?.name||"TBD"}
+              </span>
+              {g.home==="t1"&&<span style={{display:"block",fontSize:10,color:"#94a3b8",fontWeight:700,marginTop:2}}>HOME</span>}
+            </div>
+          }
+        </div>
+        {/* Scores */}
+        <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+          <input type="number" min="0" disabled={readOnly} value={g.s1??""} placeholder="—"
+            style={scoreBoxStyle(isW1,isW2&&g.s1!=null)}
+            onChange={e=>onUpdScore(g.id,"s1",e.target.value)}/>
+          <span style={{fontSize:20,fontWeight:700,color:"#cbd5e1",userSelect:"none"}}>–</span>
+          <input type="number" min="0" disabled={readOnly} value={g.s2??""} placeholder="—"
+            style={scoreBoxStyle(isW2,isW1&&g.s2!=null)}
+            onChange={e=>onUpdScore(g.id,"s2",e.target.value)}/>
+        </div>
+        {/* Team 2 */}
+        <div style={{flex:1,paddingLeft:4}}>
+          {editSide==="t2"&&!readOnly
+            ?<select autoFocus style={{fontSize:13,padding:"5px 8px",border:"2px solid #93c5fd",borderRadius:6,maxWidth:220}}
+                onBlur={()=>setEditSide(null)} value={g.t2||""}
+                onChange={e=>{onUpdField(g.id,"t2",e.target.value);setEditSide(null);}}>
+                <option value="">— TBD —</option>
+                {teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            :<div>
+              <span onClick={()=>!readOnly&&setEditSide("t2")}
+                style={{fontSize:15,fontWeight:isW2?800:600,
+                  color:isW2?"#16a34a":isW1?"#94a3b8":"#0f172a",
+                  cursor:readOnly?"default":"pointer",
+                  borderBottom:readOnly?"none":"1.5px dotted #cbd5e1",
+                  paddingBottom:1}}>
+                {t2?.name||"TBD"}
+              </span>
+              {g.home==="t2"&&<span style={{display:"block",fontSize:10,color:"#94a3b8",fontWeight:700,marginTop:2}}>HOME</span>}
+            </div>
+          }
+        </div>
+      </div>
+      {/* Action row */}
+      {!readOnly&&(
+        <div style={{display:"flex",gap:6,marginTop:12,alignItems:"center",flexWrap:"wrap"}}>
+          {actionBtns.map(b=>(
+            <button key={b.key} onClick={()=>onSetStatus(g.id,b.key)}
+              style={{padding:"6px 13px",borderRadius:7,fontSize:12,fontWeight:600,cursor:"pointer",
+                border:b.key==="clear"?"1.5px solid #fca5a5":"none",
+                background:g.status===b.key&&b.key!=="clear"?b.bg:b.key==="clear"?"#fff":"#f1f5f9",
+                color:g.status===b.key&&b.key!=="clear"?b.c:b.key==="clear"?"#dc2626":"#475569",
+                boxShadow:g.status===b.key&&b.key!=="clear"?"0 2px 6px rgba(0,0,0,.18)":"none",
+                transform:g.status===b.key&&b.key!=="clear"?"translateY(-1px)":"none",
+                transition:"all .12s"}}>
+              {b.lbl}
+            </button>
+          ))}
+          <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
+            <select value={g.home||""} onChange={e=>onUpdField(g.id,"home",e.target.value)}
+              style={{fontSize:11,padding:"5px 8px",border:"1px solid #e2e8f0",borderRadius:6,color:"#64748b",background:"#f8fafc"}}>
+              <option value="">No Home Team</option>
+              <option value="t1">{t1?.name?.split(" ")[0]||"Team 1"} (Home)</option>
+              <option value="t2">{t2?.name?.split(" ")[0]||"Team 2"} (Home)</option>
+            </select>
+            <button onClick={()=>onSwapTeams(g.id)}
+              style={{padding:"6px 12px",borderRadius:7,fontSize:12,fontWeight:600,cursor:"pointer",
+                border:"none",background:"#f1f5f9",color:"#475569"}}>⇄ Swap</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GameMgrView({games,setGames,teams,readOnly}){
   const [fTeam,setFTeam]=useState("all");
   const [fPool,setFPool]=useState("all");
   const [showAddGame,setShowAddGame]=useState(false);
   const [newGame,setNewGame]=useState({pool:"A",date:"",time:"",field:"",t1:"",t2:""});
   const pools=[...new Set(games.map(g=>g.pool))].filter(Boolean).sort();
-
   const shown=games.filter(g=>(fPool==="all"||g.pool===fPool)&&(fTeam==="all"||g.t1===fTeam||g.t2===fTeam));
+  const byPool={};
+  shown.forEach(g=>{if(!byPool[g.pool])byPool[g.pool]=[];byPool[g.pool].push(g);});
+  const poolPalette=[
+    {bg:"#eff6ff",c:"#1d4ed8"},{bg:"#f0fdf4",c:"#15803d"},{bg:"#fdf4ff",c:"#7e22ce"},
+    {bg:"#fff7ed",c:"#c2410c"},{bg:"#f0f9ff",c:"#0369a1"},{bg:"#fefce8",c:"#a16207"},
+  ];
 
   function updField(id,k,v){
     if(readOnly)return;
-    setGames(prev=>{
-      const updated=prev.map(g=>g.id===id?{...g,[k]:v}:g);
-      const game=updated.find(g=>g.id===id);
-      if(game)dbSave('games',game);
-      return updated;
-    });
+    setGames(prev=>{const u=prev.map(g=>g.id===id?{...g,[k]:v}:g);const gm=u.find(g=>g.id===id);if(gm)dbSave('games',gm);return u;});
   }
-
   function updScore(id,k,v){
     if(readOnly)return;
     const n=v===""?null:parseInt(v);
     setGames(prev=>{
-      const updated=prev.map(g=>{
-        if(g.id!==id)return g;
-        const updated2={...g,[k]:isNaN(n)?null:n};
-        if(updated2.s1!=null&&updated2.s2!=null)updated2.status="final";
-        return updated2;
-      });
-      const game=updated.find(g=>g.id===id);
-      if(game)dbSave('games',game);
-      return updated;
+      const u=prev.map(g=>{if(g.id!==id)return g;const u2={...g,[k]:isNaN(n)?null:n};if(u2.s1!=null&&u2.s2!=null)u2.status="final";return u2;});
+      const gm=u.find(g=>g.id===id);if(gm)dbSave('games',gm);return u;
     });
   }
-
   function setStatus(id,status){
     if(readOnly)return;
     setGames(prev=>{
-      const updated=prev.map(g=>{
-        if(g.id!==id)return g;
+      const u=prev.map(g=>{if(g.id!==id)return g;
         if(status==="clear")return{...g,s1:null,s2:null,status:"scheduled",home:null,gameType:"scored"};
         if(status==="scheduled")return{...g,s1:null,s2:null,status:"scheduled"};
-        return{...g,status,gameType:status};
-      });
-      const game=updated.find(g=>g.id===id);
-      if(game)dbSave('games',game);
-      return updated;
+        return{...g,status,gameType:status};});
+      const gm=u.find(g=>g.id===id);if(gm)dbSave('games',gm);return u;
     });
   }
-
   function swapTeams(id){
-    setGames(prev=>{
-      const updated=prev.map(g=>g.id===id?{...g,t1:g.t2,t2:g.t1,s1:g.s2,s2:g.s1}:g);
-      const game=updated.find(g=>g.id===id);
-      if(game)dbSave('games',game);
-      return updated;
-    });
+    setGames(prev=>{const u=prev.map(g=>g.id===id?{...g,t1:g.t2,t2:g.t1,s1:g.s2,s2:g.s1}:g);const gm=u.find(g=>g.id===id);if(gm)dbSave('games',gm);return u;});
   }
-
   function renumber(){
-    setGames(prev=>{
-      const byPool={};
-      const updated=prev.map(g=>{
-        byPool[g.pool]=(byPool[g.pool]||0)+1;
-        const num=`${g.pool||"G"}${byPool[g.pool]}`;
-        return{...g,num};
-      });
-      updated.forEach(g=>dbSave('games',g));
-      return updated;
-    });
+    setGames(prev=>{const byP={};const u=prev.map(g=>{byP[g.pool]=(byP[g.pool]||0)+1;return{...g,num:`${g.pool||"G"}${byP[g.pool]}`};});u.forEach(g=>dbSave('games',g));return u;});
   }
-
   function addGame(){
     if(!newGame.t1||!newGame.t2){alert("Please select both teams.");return;}
     const pool=newGame.pool||"A";
-    const poolGames=games.filter(g=>g.pool===pool);
-    const num=`${pool}${poolGames.length+1}`;
-    const g={id:"g_"+Date.now(),num,pool,date:newGame.date,time:newGame.time,
-      field:newGame.field,t1:newGame.t1,t2:newGame.t2,
-      s1:null,s2:null,status:"scheduled",home:null,gameType:"scored"};
-    setGames(prev=>[...prev,g]);
-    dbSave('games',g);
-    setNewGame({pool:"A",date:"",time:"",field:"",t1:"",t2:""});
-    setShowAddGame(false);
+    const pGames=games.filter(g=>g.pool===pool);
+    const g={id:"g_"+Date.now(),num:`${pool}${pGames.length+1}`,pool,date:newGame.date,time:newGame.time,
+      field:newGame.field,t1:newGame.t1,t2:newGame.t2,s1:null,s2:null,status:"scheduled",home:null,gameType:"scored"};
+    setGames(prev=>[...prev,g]);dbSave('games',g);
+    setNewGame({pool:"A",date:"",time:"",field:"",t1:"",t2:""});setShowAddGame(false);
   }
-
-  const btnSm={fontSize:11,padding:"3px 7px",borderRadius:3,cursor:"pointer",border:"1px solid",fontWeight:600,lineHeight:"1.4"};
-  const statusBtns=[
-    {key:"final",label:"wScor",bg:"#27ae60",color:"#fff",title:"With Score"},
-    {key:"no_score",label:"noScr",bg:"#2980b9",color:"#fff",title:"No Score"},
-    {key:"forfeit",label:"Forf",bg:"#e67e22",color:"#fff",title:"Forfeit"},
-    {key:"coin",label:"Coin",bg:"#8e44ad",color:"#fff",title:"Coin Flip"},
-    {key:"scheduled",label:"Sched",bg:"#95a5a6",color:"#fff",title:"Scheduled"},
-    {key:"clear",label:"Clear",bg:"#fff",color:"#c0392b",title:"Clear all data"},
-  ];
 
   return(
     <div>
-      {!readOnly&&(
-        <div className="card mb4">
-          <div className="card-hd"><span className="card-title">Filters & Actions</span></div>
-          <div className="card-body flex-w gap-3" style={{alignItems:"flex-end"}}>
-            <div><label>Filter by Pool</label>
-              <select value={fPool} onChange={e=>setFPool(e.target.value)}>
-                <option value="all">All Pools</option>
-                {pools.map(p=><option key={p} value={p}>Pool {p}</option>)}
-              </select>
-            </div>
-            <div><label>Filter by Team</label>
-              <select value={fTeam} onChange={e=>setFTeam(e.target.value)} style={{width:180}}>
-                <option value="all">All Teams</option>
-                {teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </div>
-            <div className="flex-w gap-2" style={{alignItems:"flex-end",marginLeft:"auto"}}>
+      {/* Top bar */}
+      <div className="card mb4">
+        <div className="card-body flex-w gap-3" style={{alignItems:"flex-end"}}>
+          <div><label>Pool</label>
+            <select value={fPool} onChange={e=>setFPool(e.target.value)}>
+              <option value="all">All Pools</option>
+              {pools.map(p=><option key={p} value={p}>Pool {p}</option>)}
+            </select>
+          </div>
+          <div><label>Team</label>
+            <select value={fTeam} onChange={e=>setFTeam(e.target.value)} style={{width:200}}>
+              <option value="all">All Teams</option>
+              {teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
+            <span style={{fontSize:13,color:"#94a3b8",fontWeight:500}}>{shown.length} game{shown.length!==1?"s":""}</span>
+            {!readOnly&&<>
               <button className="btn btn-secondary btn-sm" onClick={renumber}>🔢 Renumber</button>
               <button className="btn btn-primary btn-sm" onClick={()=>setShowAddGame(v=>!v)}>+ Add Game</button>
+            </>}
+          </div>
+        </div>
+        {showAddGame&&!readOnly&&(
+          <div className="card-body" style={{borderTop:"1px solid #e8edf2",background:"#f8fafc"}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10,alignItems:"end"}}>
+              <div><label style={{fontSize:11,fontWeight:600}}>Pool</label>
+                <input style={{width:"100%",padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}} value={newGame.pool} onChange={e=>setNewGame(p=>({...p,pool:e.target.value.toUpperCase()}))} placeholder="A"/></div>
+              <div><label style={{fontSize:11,fontWeight:600}}>Date</label>
+                <input type="date" style={{width:"100%",padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}} value={newGame.date} onChange={e=>setNewGame(p=>({...p,date:e.target.value}))}/></div>
+              <div><label style={{fontSize:11,fontWeight:600}}>Time</label>
+                <input type="time" style={{width:"100%",padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}} value={newGame.time} onChange={e=>setNewGame(p=>({...p,time:e.target.value}))}/></div>
+              <div><label style={{fontSize:11,fontWeight:600}}>Field</label>
+                <input style={{width:"100%",padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}} value={newGame.field} onChange={e=>setNewGame(p=>({...p,field:e.target.value}))} placeholder="Field 1"/></div>
+              <div><label style={{fontSize:11,fontWeight:600}}>Team 1</label>
+                <select style={{width:"100%",padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}} value={newGame.t1} onChange={e=>setNewGame(p=>({...p,t1:e.target.value}))}>
+                  <option value="">— Select —</option>
+                  {teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+                </select></div>
+              <div><label style={{fontSize:11,fontWeight:600}}>Team 2</label>
+                <select style={{width:"100%",padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}} value={newGame.t2} onChange={e=>setNewGame(p=>({...p,t2:e.target.value}))}>
+                  <option value="">— Select —</option>
+                  {teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+                </select></div>
+            </div>
+            <div style={{display:"flex",gap:8,marginTop:10}}>
+              <button className="btn btn-primary btn-sm" onClick={addGame}>✓ Add Game</button>
+              <button className="btn btn-secondary btn-sm" onClick={()=>setShowAddGame(false)}>Cancel</button>
             </div>
           </div>
-          {showAddGame&&(
-            <div className="card-body" style={{borderTop:"1px solid #e8edf2",background:"#f8fafc"}}>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10,alignItems:"end"}}>
-                <div><label style={{fontSize:11,fontWeight:600}}>Pool</label>
-                  <input style={{width:"100%",padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}} value={newGame.pool} onChange={e=>setNewGame(p=>({...p,pool:e.target.value.toUpperCase()}))} placeholder="A"/></div>
-                <div><label style={{fontSize:11,fontWeight:600}}>Date</label>
-                  <input type="date" style={{width:"100%",padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}} value={newGame.date} onChange={e=>setNewGame(p=>({...p,date:e.target.value}))}/></div>
-                <div><label style={{fontSize:11,fontWeight:600}}>Time</label>
-                  <input type="time" style={{width:"100%",padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}} value={newGame.time} onChange={e=>setNewGame(p=>({...p,time:e.target.value}))}/></div>
-                <div><label style={{fontSize:11,fontWeight:600}}>Field</label>
-                  <input style={{width:"100%",padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}} value={newGame.field} onChange={e=>setNewGame(p=>({...p,field:e.target.value}))} placeholder="Field 1"/></div>
-                <div><label style={{fontSize:11,fontWeight:600}}>Team 1</label>
-                  <select style={{width:"100%",padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}} value={newGame.t1} onChange={e=>setNewGame(p=>({...p,t1:e.target.value}))}>
-                    <option value="">— Select —</option>
-                    {teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select></div>
-                <div><label style={{fontSize:11,fontWeight:600}}>Team 2</label>
-                  <select style={{width:"100%",padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}} value={newGame.t2} onChange={e=>setNewGame(p=>({...p,t2:e.target.value}))}>
-                    <option value="">— Select —</option>
-                    {teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select></div>
-              </div>
-              <div className="flex gap-2" style={{marginTop:10}}>
-                <button className="btn btn-primary btn-sm" onClick={addGame}>✓ Add Game</button>
-                <button className="btn btn-secondary btn-sm" onClick={()=>setShowAddGame(false)}>Cancel</button>
-              </div>
+        )}
+      </div>
+
+      {/* Games by Pool */}
+      {Object.keys(byPool).sort().map((pool,pi)=>{
+        const pal=poolPalette[pi%poolPalette.length];
+        return(
+          <div key={pool} style={{marginBottom:28}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+              <span style={{background:pal.bg,color:pal.c,padding:"5px 16px",borderRadius:20,fontSize:13,fontWeight:700}}>Pool {pool}</span>
+              <span style={{color:"#94a3b8",fontSize:12}}>{byPool[pool].length} game{byPool[pool].length!==1?"s":""}</span>
+              <div style={{flex:1,height:1,background:"#e2e8f0"}}/>
             </div>
-          )}
+            {byPool[pool].map(g=>(
+              <GameCard key={g.id} g={g} teams={teams} readOnly={readOnly}
+                onUpdField={updField} onUpdScore={updScore} onSetStatus={setStatus} onSwapTeams={swapTeams}/>
+            ))}
+          </div>
+        );
+      })}
+
+      {shown.length===0&&(
+        <div style={{textAlign:"center",padding:"56px 0",color:"#94a3b8"}}>
+          <div style={{fontSize:44,marginBottom:10}}>⚾</div>
+          <div style={{fontSize:16,fontWeight:600,color:"#475569",marginBottom:4}}>No games found</div>
+          <div style={{fontSize:13}}>Adjust filters or add a game above</div>
         </div>
       )}
-      <div className="card">
-        <div className="card-hd">
-          <span className="card-title">Schedule — {shown.length} game{shown.length!==1?"s":""}</span>
-          <div className="flex gap-2" style={{fontSize:11,color:"#888",alignItems:"center"}}>
-            {statusBtns.slice(0,5).map(b=><span key={b.key} style={{...btnSm,background:b.bg,color:b.color,border:`1px solid ${b.bg}`}}>{b.label}</span>)}
-            <span style={{...btnSm,background:"#fff",color:"#c0392b",border:"1px solid #c0392b"}}>Clear</span>
-          </div>
-        </div>
-        <div className="tbl-scroll">
-          <table>
-            <thead><tr>
-              <th style={{width:60}}>#</th>
-              <th style={{width:70}}>Pool</th>
-              <th style={{width:90}}>Date</th>
-              <th style={{width:80}}>Time</th>
-              <th style={{width:90}}>Field</th>
-              <th>Team 1</th>
-              <th style={{width:65,textAlign:"center"}}>Score</th>
-              <th style={{width:90,textAlign:"center"}}>Home</th>
-              <th style={{width:65,textAlign:"center"}}>Score</th>
-              <th>Team 2</th>
-              <th style={{width:210}}>Game Status</th>
-            </tr></thead>
-            <tbody>{shown.map(g=>{
-              const t1=tByIdFrom(g.t1,teams),t2=tByIdFrom(g.t2,teams);
-              const w=winOf(g);
-              const isLocked=readOnly;
-              const rowBg=g.status==="final"?"#f0fff4":g.status==="forfeit"?"#fff8f0":g.status==="coin"?"#f8f0ff":g.status==="no_score"?"#f0f7ff":"#fff";
-              return(
-                <tr key={g.id} style={{background:rowBg}}>
-                  <td className="fw7 t-sm">{g.num}</td>
-                  <td>{g.pool&&<span className={`chip ${poolChipClass(g.pool)}`}>{g.pool}</span>}</td>
-                  <td className="t-sm">{g.date}</td>
-                  <td className="t-sm">{g.time}</td>
-                  <td className="t-sm t-gray">{g.field}</td>
-                  <td>
-                    {isLocked
-                      ? <span style={{fontWeight:w===g.t1?700:400,color:w===g.t1?"var(--green)":"inherit"}}>{t1?.name||"—"}</span>
-                      : <select style={{width:"100%",fontSize:12,padding:"2px 4px",border:"1px solid #e2e8f0",borderRadius:3}} value={g.t1||""} onChange={e=>updField(g.id,"t1",e.target.value)}>
-                          <option value="">— TBD —</option>
-                          {teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
-                        </select>
-                    }
-                  </td>
-                  <td style={{textAlign:"center"}}>
-                    {isLocked
-                      ? <span className="fw8">{g.s1??""}</span>
-                      : <input className={`score-in ${w===g.t1?"score-w":w&&w!==g.t1?"score-l":""}`}
-                          type="number" min="0" value={g.s1??""} placeholder="—"
-                          onChange={e=>updScore(g.id,"s1",e.target.value)}/>}
-                  </td>
-                  <td style={{textAlign:"center"}}>
-                    {isLocked
-                      ? <span style={{fontSize:11,color:"#888"}}>{g.home==="t1"?`(${t1?.name?.split(" ")[0]||"T1"})`:g.home==="t2"?`(${t2?.name?.split(" ")[0]||"T2"})`:""}</span>
-                      : <select style={{fontSize:11,padding:"2px 4px",border:"1px solid #e2e8f0",borderRadius:3,width:"100%"}} value={g.home||""} onChange={e=>updField(g.id,"home",e.target.value)}>
-                          <option value="">No Home</option>
-                          <option value="t1">Team 1</option>
-                          <option value="t2">Team 2</option>
-                        </select>
-                    }
-                  </td>
-                  <td style={{textAlign:"center"}}>
-                    {isLocked
-                      ? <span className="fw8">{g.s2??""}</span>
-                      : <input className={`score-in ${w===g.t2?"score-w":w&&w!==g.t2?"score-l":""}`}
-                          type="number" min="0" value={g.s2??""} placeholder="—"
-                          onChange={e=>updScore(g.id,"s2",e.target.value)}/>}
-                  </td>
-                  <td>
-                    {isLocked
-                      ? <span style={{fontWeight:w===g.t2?700:400,color:w===g.t2?"var(--green)":"inherit"}}>{t2?.name||"—"}</span>
-                      : <select style={{width:"100%",fontSize:12,padding:"2px 4px",border:"1px solid #e2e8f0",borderRadius:3}} value={g.t2||""} onChange={e=>updField(g.id,"t2",e.target.value)}>
-                          <option value="">— TBD —</option>
-                          {teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
-                        </select>
-                    }
-                  </td>
-                  <td>
-                    {isLocked
-                      ? <span className={`status ${g.status==="final"||g.status==="no_score"?"s-final":g.status==="live"?"s-live":"s-scheduled"}`}>
-                          {g.status==="final"?"✓ Final":g.status==="no_score"?"✓ Final (no score)":g.status==="forfeit"?"⚠ Forfeit":g.status==="coin"?"● Coin Flip":"Scheduled"}
-                        </span>
-                      : <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
-                          {statusBtns.map(b=>(
-                            <button key={b.key} title={b.title} onClick={()=>setStatus(g.id,b.key)}
-                              style={{...btnSm,background:g.status===b.key&&b.key!=="clear"?b.bg:"#f4f6f8",
-                                color:g.status===b.key&&b.key!=="clear"?b.color:b.key==="clear"?"#c0392b":"#555",
-                                border:`1px solid ${g.status===b.key&&b.key!=="clear"?b.bg:"#cdd5df"}`}}>
-                              {b.label}
-                            </button>
-                          ))}
-                          {!isLocked&&<button title="Swap Teams" onClick={()=>swapTeams(g.id)}
-                            style={{...btnSm,background:"#f4f6f8",color:"#555",border:"1px solid #cdd5df"}}>↔</button>}
-                        </div>
-                    }
-                  </td>
-                </tr>
-              );
-            })}</tbody>
-          </table>
-        </div>
-      </div>
     </div>
   );
 }
