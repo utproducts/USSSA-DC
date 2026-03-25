@@ -1305,7 +1305,9 @@ function Dashboard({events,onSelect}){
 
 /* ════════════════════ CREATE EVENT ════════════════════ */
 const ALL_STATES=["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
-const ALL_DIVS=["7U CP","8U CP","9U Open","10U Open","11U Open","12U Open","13U Open","14U Open 60/90","15U Open","16U Open","17U Open","18U Open"];
+const AGES_WITH_CLASS=["5U","6U","7U","8U","9U","10U","11U","12U","13U","14U"];
+const AGES_NO_CLASS=["15U","16U","17U","18U"];
+const DIV_CLASSES=["A","AA","AAA","Major","Open"];
 const STATURES=["All American Games - Baseball","Baseball World Series","Double State Qualifier","Elite World Series","Fall/Winter Nationals","Global State","Global World Series","Global WS Qualifier","Individual Event","League","League 2","Major Championship","NABC National Championship","One Day Event","Select - Baseball","Select Super NIT","Select Super Regional NIT","State Qualifier","Super NIT","Super Regional NIT","UACS Double Qualifier","UACS NIT","USSSA Fall State","USSSA NIT","USSSA State"];
 const LWC_OPTIONS=[{v:"open",l:"Open — Accepting Entries"},{v:"waitlist",l:"Wait List"},{v:"closed",l:"Closed"},{v:"hold",l:"On Hold"}];
 const EVENT_FORMATS=["Double Elimination","Single Elimination","Pool Play into Double Elimination","Pool Play into Single Elimination","Pool Play into 3GG","3GG - 3 Game Guarantee Bracket","Pool Play into Split Bracket Single Elim","Pool Play into Split Bracket Double Elim","Pool Play into Multiple Bracket","Round Robin","World Fastpitch Championship","Global World Series","Elite World Series","All American Games","League","TBA"];
@@ -1416,17 +1418,48 @@ function CreateEventView(){
           </div>
 
           <SectionHead title="Age Divisions"/>
-          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8}}>
-            {ALL_DIVS.map(d=>{
-              const sel=f.divisions.includes(d);
-              return(
-                <label key={d} onClick={()=>toggleDiv(d)} style={{display:"flex",alignItems:"center",gap:6,fontSize:13,cursor:"pointer",padding:"5px 12px",background:sel?"#1a3a5c":"#f4f6f8",color:sel?"#fff":"#4a5568",borderRadius:20,border:`1px solid ${sel?"#1a3a5c":"#cdd5df"}`,userSelect:"none",transition:"all .15s"}}>
-                  <input type="checkbox" checked={sel} onChange={()=>toggleDiv(d)} style={{display:"none"}}/>{d}
-                </label>
-              );
-            })}
+          <div style={{overflowX:"auto",marginBottom:8}}>
+            <table style={{borderCollapse:"collapse",fontSize:13,width:"auto"}}>
+              <thead>
+                <tr>
+                  <th style={{padding:"6px 14px",background:"#1a3a5c",color:"#fff",textAlign:"left",borderRadius:"4px 0 0 0",fontWeight:700,fontSize:12,letterSpacing:.5}}>Age</th>
+                  {DIV_CLASSES.map(c=><th key={c} style={{padding:"6px 20px",background:"#1a3a5c",color:"#fff",textAlign:"center",fontWeight:700,fontSize:12,letterSpacing:.5,minWidth:60}}>{c}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {AGES_WITH_CLASS.map((age,i)=>(
+                  <tr key={age} style={{background:i%2===0?"#f8fafc":"#fff"}}>
+                    <td style={{padding:"7px 14px",fontWeight:700,color:"#1a3a5c",borderRight:"1px solid #e2e8f0",whiteSpace:"nowrap"}}>{age}</td>
+                    {DIV_CLASSES.map(cls=>{
+                      const key=`${age} ${cls}`;
+                      const sel=f.divisions.includes(key);
+                      return(
+                        <td key={cls} style={{padding:"7px 20px",textAlign:"center",border:"1px solid #e2e8f0"}}>
+                          <input type="checkbox" checked={sel} onChange={()=>toggleDiv(key)}
+                            style={{width:16,height:16,cursor:"pointer",accentColor:"#1a3a5c"}}/>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+                {AGES_NO_CLASS.map((age,i)=>(
+                  <tr key={age} style={{background:(AGES_WITH_CLASS.length+i)%2===0?"#f8fafc":"#fff"}}>
+                    <td style={{padding:"7px 14px",fontWeight:700,color:"#1a3a5c",borderRight:"1px solid #e2e8f0"}}>{age}</td>
+                    <td colSpan={5} style={{padding:"7px 20px",textAlign:"center",border:"1px solid #e2e8f0",color:"#888",fontSize:12}}>
+                      <label style={{display:"inline-flex",alignItems:"center",gap:8,cursor:"pointer"}}>
+                        <input type="checkbox" checked={f.divisions.includes(age)} onChange={()=>toggleDiv(age)}
+                          style={{width:16,height:16,cursor:"pointer",accentColor:"#1a3a5c"}}/>
+                        <span>Single Age Division</span>
+                      </label>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          {f.divisions.length>0&&<div style={{fontSize:12,color:"#666",marginBottom:4}}>{f.divisions.length} division{f.divisions.length!==1?"s":""} selected</div>}
+          {f.divisions.length>0&&<div style={{fontSize:12,color:"#1a3a5c",fontWeight:600,marginBottom:4}}>
+            {f.divisions.length} selected: {f.divisions.join(" · ")}
+          </div>}
 
           <SectionHead title="Event Details"/>
           <div style={{display:"grid",gap:14}}>
