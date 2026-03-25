@@ -1315,9 +1315,9 @@ function SectionHead({title}){
 
 function CreateEventView(){
   const [f,setF]=useState({
-    name:"",sport:"Baseball",state:"FL",sanctionState:"FL",city:"",county:"",
-    startDate:"",endDate:"",stature:"Double State Qualifier",director:"",
-    lodgingDirector:"",lwc:"open",berthOnly:false,divisions:[],
+    name:"",sport:"Baseball",state:"FL",sanctionState:"FL",city:"",
+    startDate:"",endDate:"",entryDeadline:"",stature:"Double State Qualifier",director:"",
+    lodgingDirector:"",lwc:"open",divisions:[],
     quickDetails:"",advancedDesc:"",hotelInfo:"",
     alertEnabled:false,alertMsg:"",
     streamEnabled:false,streamURL:"",rainoutEmbed:""
@@ -1334,11 +1334,11 @@ function CreateEventView(){
       evid:String(Math.floor(410000+Math.random()*20000)),
       name:f.name.trim(),
       loc:`${f.city}, ${f.state}`,
-      state:f.state, city:f.city, county:f.county,
+      state:f.state, city:f.city,
       date:new Date(f.startDate).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}),
-      endDate:f.endDate, sport:f.sport, sanctionState:f.sanctionState,
+      endDate:f.endDate, entryDeadline:f.entryDeadline, sport:f.sport, sanctionState:f.sanctionState,
       status:"upcoming", stature:f.stature, director:f.director.trim(),
-      lodgingDirector:f.lodgingDirector, lwc:f.lwc, berthOnly:f.berthOnly,
+      lodgingDirector:f.lodgingDirector, lwc:f.lwc,
       quickDetails:f.quickDetails, advancedDesc:f.advancedDesc, hotelInfo:f.hotelInfo,
       alertEnabled:f.alertEnabled, alertMsg:f.alertMsg,
       streamEnabled:f.streamEnabled, streamURL:f.streamURL, rainoutEmbed:f.rainoutEmbed,
@@ -1347,7 +1347,7 @@ function CreateEventView(){
     };
     dbSave('events',newEvent);
     alert(`Event "${newEvent.name}" created! Event ID: ${newEvent.evid}`);
-    setF(p=>({...p,name:"",city:"",county:"",startDate:"",endDate:"",director:"",lodgingDirector:"",quickDetails:"",advancedDesc:"",hotelInfo:"",alertMsg:"",streamURL:"",rainoutEmbed:"",divisions:[],alertEnabled:false,streamEnabled:false,berthOnly:false}));
+    setF(p=>({...p,name:"",city:"",startDate:"",endDate:"",entryDeadline:"",director:"",lodgingDirector:"",quickDetails:"",advancedDesc:"",hotelInfo:"",alertMsg:"",streamURL:"",rainoutEmbed:"",divisions:[],alertEnabled:false,streamEnabled:false}));
   }
 
   const inputStyle={width:"100%",padding:"7px 10px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13};
@@ -1378,8 +1378,8 @@ function CreateEventView(){
             </div>
             <div style={fieldWrap}><label style={labelStyle}>Start Date *</label><input style={inputStyle} type="date" value={f.startDate} onChange={e=>set("startDate",e.target.value)}/></div>
             <div style={fieldWrap}><label style={labelStyle}>End Date</label><input style={inputStyle} type="date" value={f.endDate} onChange={e=>set("endDate",e.target.value)}/></div>
+            <div style={fieldWrap}><label style={labelStyle}>Entry Deadline</label><input style={inputStyle} type="date" value={f.entryDeadline} onChange={e=>set("entryDeadline",e.target.value)}/></div>
             <div style={fieldWrap}><label style={labelStyle}>City / Location *</label><input style={inputStyle} value={f.city} onChange={e=>set("city",e.target.value)} placeholder="City"/></div>
-            <div style={fieldWrap}><label style={labelStyle}>County</label><input style={inputStyle} value={f.county} onChange={e=>set("county",e.target.value)} placeholder="County"/></div>
             <div style={fieldWrap}><label style={labelStyle}>State *</label>
               <select style={inputStyle} value={f.state} onChange={e=>set("state",e.target.value)}>
                 {ALL_STATES.map(s=><option key={s}>{s}</option>)}
@@ -1394,12 +1394,6 @@ function CreateEventView(){
               <select style={inputStyle} value={f.lwc} onChange={e=>set("lwc",e.target.value)}>
                 {LWC_OPTIONS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
               </select>
-            </div>
-            <div style={{...fieldWrap,justifyContent:"flex-end",paddingBottom:4}}>
-              <label style={{...toggleRow,cursor:"pointer"}}>
-                <input type="checkbox" checked={f.berthOnly} onChange={e=>set("berthOnly",e.target.checked)} style={{width:16,height:16}}/>
-                <span style={{fontSize:13,fontWeight:600}}>Berth / Entry Only Event</span>
-              </label>
             </div>
           </div>
 
@@ -1446,7 +1440,7 @@ function CreateEventView(){
 
           <div style={{marginTop:28,display:"flex",gap:12}}>
             <button className="btn btn-primary" onClick={handleCreate}>✓ Create Event</button>
-            <button className="btn btn-secondary" onClick={()=>setF(p=>({...p,name:"",city:"",county:"",startDate:"",endDate:"",director:"",lodgingDirector:"",quickDetails:"",advancedDesc:"",hotelInfo:"",alertMsg:"",streamURL:"",rainoutEmbed:"",divisions:[],alertEnabled:false,streamEnabled:false,berthOnly:false}))}>✕ Clear Form</button>
+            <button className="btn btn-secondary" onClick={()=>setF(p=>({...p,name:"",city:"",startDate:"",endDate:"",entryDeadline:"",director:"",lodgingDirector:"",quickDetails:"",advancedDesc:"",hotelInfo:"",alertMsg:"",streamURL:"",rainoutEmbed:"",divisions:[],alertEnabled:false,streamEnabled:false}))}>✕ Clear Form</button>
           </div>
 
         </div>
