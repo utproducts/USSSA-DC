@@ -1308,6 +1308,7 @@ const ALL_STATES=["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","I
 const ALL_DIVS=["7U CP","8U CP","9U Open","10U Open","11U Open","12U Open","13U Open","14U Open 60/90","15U Open","16U Open","17U Open","18U Open"];
 const STATURES=["All American Games - Baseball","Baseball World Series","Double State Qualifier","Elite World Series","Fall/Winter Nationals","Global State","Global World Series","Global WS Qualifier","Individual Event","League","League 2","Major Championship","NABC National Championship","One Day Event","Select - Baseball","Select Super NIT","Select Super Regional NIT","State Qualifier","Super NIT","Super Regional NIT","UACS Double Qualifier","UACS NIT","USSSA Fall State","USSSA NIT","USSSA State"];
 const LWC_OPTIONS=[{v:"open",l:"Open — Accepting Entries"},{v:"waitlist",l:"Wait List"},{v:"closed",l:"Closed"},{v:"hold",l:"On Hold"}];
+const EVENT_FORMATS=["Double Elimination","Single Elimination","Pool Play into Double Elimination","Pool Play into Single Elimination","Pool Play into 3GG","3GG - 3 Game Guarantee Bracket","Pool Play into Split Bracket Single Elim","Pool Play into Split Bracket Double Elim","Pool Play into Multiple Bracket","Round Robin","World Fastpitch Championship","Global World Series","Elite World Series","All American Games","League","TBA"];
 
 function SectionHead({title}){
   return <div style={{fontWeight:700,fontSize:14,color:"#1a3a5c",textTransform:"uppercase",letterSpacing:1,margin:"24px 0 12px",paddingBottom:6,borderBottom:"2px solid #e8edf2"}}>{title}</div>;
@@ -1316,7 +1317,8 @@ function SectionHead({title}){
 function CreateEventView(){
   const [f,setF]=useState({
     name:"",sport:"Baseball",state:"FL",sanctionState:"FL",city:"",
-    startDate:"",endDate:"",entryDeadline:"",stature:"Double State Qualifier",director:"",
+    startDate:"",endDate:"",entryDeadline:"",stature:"Double State Qualifier",
+    format:"Double Elimination",director:"",
     lodgingDirector:"",lwc:"open",divisions:[],
     quickDetails:"",advancedDesc:"",hotelInfo:"",
     alertEnabled:false,alertMsg:"",
@@ -1337,7 +1339,7 @@ function CreateEventView(){
       state:f.state, city:f.city,
       date:new Date(f.startDate).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}),
       endDate:f.endDate, entryDeadline:f.entryDeadline, sport:f.sport, sanctionState:f.sanctionState,
-      status:"upcoming", stature:f.stature, director:f.director.trim(),
+      status:"upcoming", stature:f.stature, format:f.format, director:f.director.trim(),
       lodgingDirector:f.lodgingDirector, lwc:f.lwc,
       quickDetails:f.quickDetails, advancedDesc:f.advancedDesc, hotelInfo:f.hotelInfo,
       alertEnabled:f.alertEnabled, alertMsg:f.alertMsg,
@@ -1374,6 +1376,11 @@ function CreateEventView(){
             <div style={fieldWrap}><label style={labelStyle}>Stature</label>
               <select style={inputStyle} value={f.stature} onChange={e=>set("stature",e.target.value)}>
                 {STATURES.map(s=><option key={s}>{s}</option>)}
+              </select>
+            </div>
+            <div style={fieldWrap}><label style={labelStyle}>Event Format</label>
+              <select style={inputStyle} value={f.format} onChange={e=>set("format",e.target.value)}>
+                {EVENT_FORMATS.map(s=><option key={s}>{s}</option>)}
               </select>
             </div>
             <div style={fieldWrap}><label style={labelStyle}>Start Date *</label><input style={inputStyle} type="date" value={f.startDate} onChange={e=>set("startDate",e.target.value)}/></div>
