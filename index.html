@@ -1304,49 +1304,151 @@ function Dashboard({events,onSelect}){
 }
 
 /* ════════════════════ CREATE EVENT ════════════════════ */
+const ALL_STATES=["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY"];
+const ALL_DIVS=["7U CP","8U CP","9U Open","10U Open","11U Open","12U Open","13U Open","14U Open 60/90","15U Open","16U Open","17U Open","18U Open"];
+const STATURES=["Double State Qualifier","State Qualifier","Super NIT","Global World Series","NABC National Championship","Individual Event","Showcase","Tournament of Champions"];
+const LWC_OPTIONS=[{v:"open",l:"Open — Accepting Entries"},{v:"waitlist",l:"Wait List"},{v:"closed",l:"Closed"},{v:"hold",l:"On Hold"}];
+
+function SectionHead({title}){
+  return <div style={{fontWeight:700,fontSize:14,color:"#1a3a5c",textTransform:"uppercase",letterSpacing:1,margin:"24px 0 12px",paddingBottom:6,borderBottom:"2px solid #e8edf2"}}>{title}</div>;
+}
+
 function CreateEventView(){
-  const [f,setF]=useState({name:"",state:"FL",city:"",date:"",stature:"Double State Qualifier",director:""});
+  const [f,setF]=useState({
+    name:"",sport:"Baseball",state:"FL",sanctionState:"FL",city:"",county:"",
+    startDate:"",endDate:"",stature:"Double State Qualifier",director:"",
+    lodgingDirector:"",lwc:"open",berthOnly:false,divisions:[],
+    quickDetails:"",advancedDesc:"",hotelInfo:"",
+    alertEnabled:false,alertMsg:"",
+    streamEnabled:false,streamURL:"",rainoutEmbed:""
+  });
   const set=(k,v)=>setF(p=>({...p,[k]:v}));
+  const toggleDiv=d=>setF(p=>({...p,divisions:p.divisions.includes(d)?p.divisions.filter(x=>x!==d):[...p.divisions,d]}));
+
   function handleCreate(){
-    const newEvent={id:Date.now().toString(),...f,divisions:[]};
+    if(!f.name.trim()){alert("Event Name is required.");return;}
+    if(!f.startDate){alert("Start Date is required.");return;}
+    if(!f.director.trim()){alert("Event Director is required.");return;}
+    const newEvent={
+      id:Date.now(),
+      evid:String(Math.floor(410000+Math.random()*20000)),
+      name:f.name.trim(),
+      loc:`${f.city}, ${f.state}`,
+      state:f.state, city:f.city, county:f.county,
+      date:new Date(f.startDate).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'}),
+      endDate:f.endDate, sport:f.sport, sanctionState:f.sanctionState,
+      status:"upcoming", stature:f.stature, director:f.director.trim(),
+      lodgingDirector:f.lodgingDirector, lwc:f.lwc, berthOnly:f.berthOnly,
+      quickDetails:f.quickDetails, advancedDesc:f.advancedDesc, hotelInfo:f.hotelInfo,
+      alertEnabled:f.alertEnabled, alertMsg:f.alertMsg,
+      streamEnabled:f.streamEnabled, streamURL:f.streamURL, rainoutEmbed:f.rainoutEmbed,
+      parks:[],
+      divisions:f.divisions.map((d,i)=>({id:Date.now()+i,code:d.replace(/\s+/g,""),label:d,wl:"0-0-0",teams:0,flights:[]}))
+    };
     dbSave('events',newEvent);
+    alert(`Event "${newEvent.name}" created! Event ID: ${newEvent.evid}`);
+    setF(p=>({...p,name:"",city:"",county:"",startDate:"",endDate:"",director:"",lodgingDirector:"",quickDetails:"",advancedDesc:"",hotelInfo:"",alertMsg:"",streamURL:"",rainoutEmbed:"",divisions:[],alertEnabled:false,streamEnabled:false,berthOnly:false}));
   }
+
+  const inputStyle={width:"100%",padding:"7px 10px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13};
+  const labelStyle={display:"block",fontWeight:600,fontSize:12,color:"#4a5568",marginBottom:4,textTransform:"uppercase",letterSpacing:.5};
+  const fieldWrap={display:"flex",flexDirection:"column"};
+  const grid2={display:"grid",gridTemplateColumns:"1fr 1fr",gap:16};
+  const grid3={display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16};
+  const toggleRow={display:"flex",alignItems:"center",gap:10,padding:"6px 0"};
+
   return(
-    <div>
+    <div style={{maxWidth:900}}>
       <div className="card">
-        <div className="card-hd"><span className="card-title">Create New Event</span></div>
+        <div className="card-hd"><span className="card-title">➕ Create New Event</span></div>
         <div className="card-body">
-          <div className="g2" style={{gap:20}}>
-            <div><label>Event Name *</label><input type="text" className="w100" value={f.name} onChange={e=>set("name",e.target.value)} placeholder="e.g. Spring State Qualifier"/></div>
-            <div><label>Sport</label><select className="w100"><option>Baseball</option><option>Softball</option><option>Soccer</option></select></div>
-            <div><label>State</label>
-              <select className="w100" value={f.state} onChange={e=>set("state",e.target.value)}>
-                {["FL","GA","AL","NC","MS","TX","OK","KY","TN","AZ"].map(s=><option key={s}>{s}</option>)}
+
+          <SectionHead title="Event Information"/>
+          <div style={grid2}>
+            <div style={{...fieldWrap,gridColumn:"1/-1"}}><label style={labelStyle}>Event Name *</label><input style={inputStyle} value={f.name} onChange={e=>set("name",e.target.value)} placeholder="e.g. Spring State Qualifier"/></div>
+            <div style={fieldWrap}><label style={labelStyle}>Sport</label>
+              <select style={inputStyle} value={f.sport} onChange={e=>set("sport",e.target.value)}>
+                <option>Baseball</option><option>Softball</option><option>Soccer</option>
               </select>
             </div>
-            <div><label>City / Location</label><input type="text" className="w100" value={f.city} onChange={e=>set("city",e.target.value)} placeholder="City, Park Name"/></div>
-            <div><label>Start Date *</label><input type="text" className="w100" value={f.date} onChange={e=>set("date",e.target.value)} placeholder="MM/DD/YYYY"/></div>
-            <div><label>Stature</label>
-              <select className="w100" value={f.stature} onChange={e=>set("stature",e.target.value)}>
-                {["Double State Qualifier","Super NIT","Global World Series","NABC National Championship","Individual Event"].map(s=><option key={s}>{s}</option>)}
+            <div style={fieldWrap}><label style={labelStyle}>Stature</label>
+              <select style={inputStyle} value={f.stature} onChange={e=>set("stature",e.target.value)}>
+                {STATURES.map(s=><option key={s}>{s}</option>)}
               </select>
             </div>
-            <div><label>Director Name</label><input type="text" className="w100" value={f.director} onChange={e=>set("director",e.target.value)} placeholder="Director full name"/></div>
-            <div><label>Sanction State</label><select className="w100"><option>FL</option><option>AZ</option><option>GA</option><option>NC</option></select></div>
-          </div>
-          <hr/>
-          <div className="fw7 mb3 t-navy">Age Divisions</div>
-          <div className="flex-w gap-2 mb4">
-            {["7U CP","8U CP","9U Open","10U Open","11U Open","12U Open","13U Open","14U Open 60/90","15U Open"].map(d=>(
-              <label key={d} style={{display:"flex",alignItems:"center",gap:5,fontSize:13,cursor:"pointer"}}>
-                <input type="checkbox" style={{width:14,height:14}}/> {d}
+            <div style={fieldWrap}><label style={labelStyle}>Start Date *</label><input style={inputStyle} type="date" value={f.startDate} onChange={e=>set("startDate",e.target.value)}/></div>
+            <div style={fieldWrap}><label style={labelStyle}>End Date</label><input style={inputStyle} type="date" value={f.endDate} onChange={e=>set("endDate",e.target.value)}/></div>
+            <div style={fieldWrap}><label style={labelStyle}>City / Location *</label><input style={inputStyle} value={f.city} onChange={e=>set("city",e.target.value)} placeholder="City"/></div>
+            <div style={fieldWrap}><label style={labelStyle}>County</label><input style={inputStyle} value={f.county} onChange={e=>set("county",e.target.value)} placeholder="County"/></div>
+            <div style={fieldWrap}><label style={labelStyle}>State *</label>
+              <select style={inputStyle} value={f.state} onChange={e=>set("state",e.target.value)}>
+                {ALL_STATES.map(s=><option key={s}>{s}</option>)}
+              </select>
+            </div>
+            <div style={fieldWrap}><label style={labelStyle}>Sanction State</label>
+              <select style={inputStyle} value={f.sanctionState} onChange={e=>set("sanctionState",e.target.value)}>
+                {ALL_STATES.map(s=><option key={s}>{s}</option>)}
+              </select>
+            </div>
+            <div style={fieldWrap}><label style={labelStyle}>Entry Policy</label>
+              <select style={inputStyle} value={f.lwc} onChange={e=>set("lwc",e.target.value)}>
+                {LWC_OPTIONS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+              </select>
+            </div>
+            <div style={{...fieldWrap,justifyContent:"flex-end",paddingBottom:4}}>
+              <label style={{...toggleRow,cursor:"pointer"}}>
+                <input type="checkbox" checked={f.berthOnly} onChange={e=>set("berthOnly",e.target.checked)} style={{width:16,height:16}}/>
+                <span style={{fontSize:13,fontWeight:600}}>Berth / Entry Only Event</span>
               </label>
-            ))}
+            </div>
           </div>
-          <div className="flex gap-3">
+
+          <SectionHead title="Directors"/>
+          <div style={grid2}>
+            <div style={fieldWrap}><label style={labelStyle}>Event Director *</label><input style={inputStyle} value={f.director} onChange={e=>set("director",e.target.value)} placeholder="Director full name"/></div>
+            <div style={fieldWrap}><label style={labelStyle}>Lodging Director</label><input style={inputStyle} value={f.lodgingDirector} onChange={e=>set("lodgingDirector",e.target.value)} placeholder="Lodging contact (optional)"/></div>
+          </div>
+
+          <SectionHead title="Age Divisions"/>
+          <div style={{display:"flex",flexWrap:"wrap",gap:8,marginBottom:8}}>
+            {ALL_DIVS.map(d=>{
+              const sel=f.divisions.includes(d);
+              return(
+                <label key={d} onClick={()=>toggleDiv(d)} style={{display:"flex",alignItems:"center",gap:6,fontSize:13,cursor:"pointer",padding:"5px 12px",background:sel?"#1a3a5c":"#f4f6f8",color:sel?"#fff":"#4a5568",borderRadius:20,border:`1px solid ${sel?"#1a3a5c":"#cdd5df"}`,userSelect:"none",transition:"all .15s"}}>
+                  <input type="checkbox" checked={sel} onChange={()=>toggleDiv(d)} style={{display:"none"}}/>{d}
+                </label>
+              );
+            })}
+          </div>
+          {f.divisions.length>0&&<div style={{fontSize:12,color:"#666",marginBottom:4}}>{f.divisions.length} division{f.divisions.length!==1?"s":""} selected</div>}
+
+          <SectionHead title="Event Details"/>
+          <div style={{display:"grid",gap:14}}>
+            <div style={fieldWrap}><label style={labelStyle}>Quick Details</label><input style={inputStyle} value={f.quickDetails} onChange={e=>set("quickDetails",e.target.value)} placeholder="Short summary shown on public event listing"/></div>
+            <div style={fieldWrap}><label style={labelStyle}>Advanced Description</label><textarea style={{...inputStyle,resize:"vertical"}} rows={4} value={f.advancedDesc} onChange={e=>set("advancedDesc",e.target.value)} placeholder="Full event description, rules, special notes..."/></div>
+            <div style={fieldWrap}><label style={labelStyle}>Hotel Information</label><textarea style={{...inputStyle,resize:"vertical"}} rows={3} value={f.hotelInfo} onChange={e=>set("hotelInfo",e.target.value)} placeholder="Hotel partner info, discount codes, booking links..."/></div>
+          </div>
+
+          <SectionHead title="Alerts & Features"/>
+          <div style={{display:"grid",gap:12}}>
+            <label style={{...toggleRow,cursor:"pointer"}}>
+              <input type="checkbox" checked={f.alertEnabled} onChange={e=>set("alertEnabled",e.target.checked)} style={{width:16,height:16}}/>
+              <span style={{fontSize:13,fontWeight:600}}>Enable Alert Message</span>
+            </label>
+            {f.alertEnabled&&<div style={fieldWrap}><input style={inputStyle} value={f.alertMsg} onChange={e=>set("alertMsg",e.target.value)} placeholder="Alert message shown to teams on this event..."/></div>}
+            <label style={{...toggleRow,cursor:"pointer"}}>
+              <input type="checkbox" checked={f.streamEnabled} onChange={e=>set("streamEnabled",e.target.checked)} style={{width:16,height:16}}/>
+              <span style={{fontSize:13,fontWeight:600}}>Enable Live Streaming</span>
+            </label>
+            {f.streamEnabled&&<div style={fieldWrap}><input style={inputStyle} value={f.streamURL} onChange={e=>set("streamURL",e.target.value)} placeholder="Live stream URL..."/></div>}
+            <div style={fieldWrap}><label style={labelStyle}>Rainout Line Embed</label><input style={inputStyle} value={f.rainoutEmbed} onChange={e=>set("rainoutEmbed",e.target.value)} placeholder="Rainout line embed code or URL"/></div>
+          </div>
+
+          <div style={{marginTop:28,display:"flex",gap:12}}>
             <button className="btn btn-primary" onClick={handleCreate}>✓ Create Event</button>
-            <button className="btn btn-secondary">Cancel</button>
+            <button className="btn btn-secondary" onClick={()=>setF(p=>({...p,name:"",city:"",county:"",startDate:"",endDate:"",director:"",lodgingDirector:"",quickDetails:"",advancedDesc:"",hotelInfo:"",alertMsg:"",streamURL:"",rainoutEmbed:"",divisions:[],alertEnabled:false,streamEnabled:false,berthOnly:false}))}>✕ Clear Form</button>
           </div>
+
         </div>
       </div>
     </div>
