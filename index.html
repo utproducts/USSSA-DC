@@ -1404,7 +1404,7 @@ function CreateEventView(){
             </div>
             <div style={fieldWrap}><label style={labelStyle}>Maximum Entries per Division</label>
               <select style={inputStyle} value={f.maxEntries} onChange={e=>set("maxEntries",Number(e.target.value))}>
-                {[4,6,8,10,12,14,16,18,20,24,28,32,40,48,56,64].map(n=><option key={n} value={n}>{n} Teams</option>)}
+                {[3,4,5,6,7,8,9,10,12,14,16,18,20,24,28,32,40,48,56,64].map(n=><option key={n} value={n}>{n} Teams</option>)}
               </select>
             </div>
           </div>
