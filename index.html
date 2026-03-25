@@ -1493,12 +1493,8 @@ function CreateEventView(){
               <div style={fieldWrap}>
                 <label style={{...labelStyle,color:"#c0392b"}}>Team Entry Options *</label>
                 <select style={inputStyle} value={f.teamEntryOption} onChange={e=>set("teamEntryOption",e.target.value)}>
-                  <option value="online_only">Online Only</option>
-                  <option value="online_check">Online or Check</option>
-                  <option value="online_cash">Online or Cash</option>
-                  <option value="check_only">Check Only</option>
-                  <option value="cash_only">Cash Only</option>
-                  <option value="any">Any Method</option>
+                  <option value="cc_only">Allow credit card entries only</option>
+                  <option value="with_or_without">Allow entries with or without payment</option>
                 </select>
               </div>
             </div>
