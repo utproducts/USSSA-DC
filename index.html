@@ -1234,13 +1234,13 @@ function Dashboard({events,onSelect}){
   const [filter,setFilter]=useState("");
   const [stateF,setStateF]=useState("all");
   const shown=events.filter(e=>e.name.toLowerCase().includes(filter.toLowerCase())&&(stateF==="all"||e.state===stateF));
-  const totalTeams=events.reduce((a,ev)=>a+ev.divisions.reduce((b,d)=>b+d.teams,0),0);
+  const totalTeams=shown.reduce((a,ev)=>a+ev.divisions.reduce((b,d)=>b+d.teams,0),0);
   return(
     <div>
       <div className="g4 mb4">
-        <div className="stat-card"><div className="stat-ico" style={{background:"#fde8e8"}}>📅</div><div><div className="stat-val">{events.length}</div><div className="stat-lbl">Total Events</div></div></div>
-        <div className="stat-card"><div className="stat-ico" style={{background:"#d6eaf8"}}>⏳</div><div><div className="stat-val">{events.filter(e=>e.status==="upcoming").length}</div><div className="stat-lbl">Upcoming</div></div></div>
-        <div className="stat-card"><div className="stat-ico" style={{background:"#d5f5e3"}}>✅</div><div><div className="stat-val">{events.filter(e=>e.status==="complete").length}</div><div className="stat-lbl">Completed</div></div></div>
+        <div className="stat-card"><div className="stat-ico" style={{background:"#fde8e8"}}>📅</div><div><div className="stat-val">{shown.length}</div><div className="stat-lbl">Total Events</div></div></div>
+        <div className="stat-card"><div className="stat-ico" style={{background:"#d6eaf8"}}>⏳</div><div><div className="stat-val">{shown.filter(e=>e.status==="upcoming").length}</div><div className="stat-lbl">Upcoming</div></div></div>
+        <div className="stat-card"><div className="stat-ico" style={{background:"#d5f5e3"}}>✅</div><div><div className="stat-val">{shown.filter(e=>e.status==="complete").length}</div><div className="stat-lbl">Completed</div></div></div>
         <div className="stat-card"><div className="stat-ico" style={{background:"#fef5e7"}}>👥</div><div><div className="stat-val">{totalTeams}</div><div className="stat-lbl">Total Teams</div></div></div>
       </div>
       <div className="card">
