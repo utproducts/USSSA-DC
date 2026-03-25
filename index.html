@@ -428,85 +428,248 @@ function SeedsView({teams}){
 function GameMgrView({games,setGames,teams,readOnly}){
   const [fTeam,setFTeam]=useState("all");
   const [fPool,setFPool]=useState("all");
+  const [showAddGame,setShowAddGame]=useState(false);
+  const [newGame,setNewGame]=useState({pool:"A",date:"",time:"",field:"",t1:"",t2:""});
   const pools=[...new Set(games.map(g=>g.pool))].filter(Boolean).sort();
+
   const shown=games.filter(g=>(fPool==="all"||g.pool===fPool)&&(fTeam==="all"||g.t1===fTeam||g.t2===fTeam));
-  function upd(id,k,v){
+
+  function updField(id,k,v){
     if(readOnly)return;
-    const n=v===""?null:parseInt(v);
     setGames(prev=>{
-      const updated=prev.map(g=>g.id===id?{...g,[k]:isNaN(n)?null:n,status:n!==null?"final":g.status}:g);
+      const updated=prev.map(g=>g.id===id?{...g,[k]:v}:g);
       const game=updated.find(g=>g.id===id);
       if(game)dbSave('games',game);
       return updated;
     });
   }
+
+  function updScore(id,k,v){
+    if(readOnly)return;
+    const n=v===""?null:parseInt(v);
+    setGames(prev=>{
+      const updated=prev.map(g=>{
+        if(g.id!==id)return g;
+        const updated2={...g,[k]:isNaN(n)?null:n};
+        if(updated2.s1!=null&&updated2.s2!=null)updated2.status="final";
+        return updated2;
+      });
+      const game=updated.find(g=>g.id===id);
+      if(game)dbSave('games',game);
+      return updated;
+    });
+  }
+
+  function setStatus(id,status){
+    if(readOnly)return;
+    setGames(prev=>{
+      const updated=prev.map(g=>{
+        if(g.id!==id)return g;
+        if(status==="clear")return{...g,s1:null,s2:null,status:"scheduled",home:null,gameType:"scored"};
+        if(status==="scheduled")return{...g,s1:null,s2:null,status:"scheduled"};
+        return{...g,status,gameType:status};
+      });
+      const game=updated.find(g=>g.id===id);
+      if(game)dbSave('games',game);
+      return updated;
+    });
+  }
+
+  function swapTeams(id){
+    setGames(prev=>{
+      const updated=prev.map(g=>g.id===id?{...g,t1:g.t2,t2:g.t1,s1:g.s2,s2:g.s1}:g);
+      const game=updated.find(g=>g.id===id);
+      if(game)dbSave('games',game);
+      return updated;
+    });
+  }
+
+  function renumber(){
+    setGames(prev=>{
+      const byPool={};
+      const updated=prev.map(g=>{
+        byPool[g.pool]=(byPool[g.pool]||0)+1;
+        const num=`${g.pool||"G"}${byPool[g.pool]}`;
+        return{...g,num};
+      });
+      updated.forEach(g=>dbSave('games',g));
+      return updated;
+    });
+  }
+
+  function addGame(){
+    if(!newGame.t1||!newGame.t2){alert("Please select both teams.");return;}
+    const pool=newGame.pool||"A";
+    const poolGames=games.filter(g=>g.pool===pool);
+    const num=`${pool}${poolGames.length+1}`;
+    const g={id:"g_"+Date.now(),num,pool,date:newGame.date,time:newGame.time,
+      field:newGame.field,t1:newGame.t1,t2:newGame.t2,
+      s1:null,s2:null,status:"scheduled",home:null,gameType:"scored"};
+    setGames(prev=>[...prev,g]);
+    dbSave('games',g);
+    setNewGame({pool:"A",date:"",time:"",field:"",t1:"",t2:""});
+    setShowAddGame(false);
+  }
+
+  const btnSm={fontSize:11,padding:"3px 7px",borderRadius:3,cursor:"pointer",border:"1px solid",fontWeight:600,lineHeight:"1.4"};
+  const statusBtns=[
+    {key:"final",label:"wScor",bg:"#27ae60",color:"#fff",title:"With Score"},
+    {key:"no_score",label:"noScr",bg:"#2980b9",color:"#fff",title:"No Score"},
+    {key:"forfeit",label:"Forf",bg:"#e67e22",color:"#fff",title:"Forfeit"},
+    {key:"coin",label:"Coin",bg:"#8e44ad",color:"#fff",title:"Coin Flip"},
+    {key:"scheduled",label:"Sched",bg:"#95a5a6",color:"#fff",title:"Scheduled"},
+    {key:"clear",label:"Clear",bg:"#fff",color:"#c0392b",title:"Clear all data"},
+  ];
+
   return(
     <div>
       {!readOnly&&(
         <div className="card mb4">
-          <div className="card-hd"><span className="card-title">Filter & Bulk Actions</span></div>
+          <div className="card-hd"><span className="card-title">Filters & Actions</span></div>
           <div className="card-body flex-w gap-3" style={{alignItems:"flex-end"}}>
+            <div><label>Filter by Pool</label>
+              <select value={fPool} onChange={e=>setFPool(e.target.value)}>
+                <option value="all">All Pools</option>
+                {pools.map(p=><option key={p} value={p}>Pool {p}</option>)}
+              </select>
+            </div>
             <div><label>Filter by Team</label>
-              <select value={fTeam} onChange={e=>setFTeam(e.target.value)} style={{width:200}}>
+              <select value={fTeam} onChange={e=>setFTeam(e.target.value)} style={{width:180}}>
                 <option value="all">All Teams</option>
                 {teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
-            <div><label>Filter by Pool</label>
-              <select value={fPool} onChange={e=>setFPool(e.target.value)}>
-                <option value="all">All Pools</option>
-                {pools.map(p=><option key={p}>Pool {p}</option>)}
-              </select>
-            </div>
-            <div className="flex-w gap-2" style={{alignItems:"flex-end"}}>
-              <button className="btn btn-secondary btn-sm">↔ Swap Teams</button>
-              <button className="btn btn-secondary btn-sm">🔄 Replace Team</button>
-              <button className="btn btn-secondary btn-sm">🔢 Renumber</button>
-              <button className="btn btn-danger btn-sm">🗑 Remove All</button>
+            <div className="flex-w gap-2" style={{alignItems:"flex-end",marginLeft:"auto"}}>
+              <button className="btn btn-secondary btn-sm" onClick={renumber}>🔢 Renumber</button>
+              <button className="btn btn-primary btn-sm" onClick={()=>setShowAddGame(v=>!v)}>+ Add Game</button>
             </div>
           </div>
+          {showAddGame&&(
+            <div className="card-body" style={{borderTop:"1px solid #e8edf2",background:"#f8fafc"}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10,alignItems:"end"}}>
+                <div><label style={{fontSize:11,fontWeight:600}}>Pool</label>
+                  <input style={{width:"100%",padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}} value={newGame.pool} onChange={e=>setNewGame(p=>({...p,pool:e.target.value.toUpperCase()}))} placeholder="A"/></div>
+                <div><label style={{fontSize:11,fontWeight:600}}>Date</label>
+                  <input type="date" style={{width:"100%",padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}} value={newGame.date} onChange={e=>setNewGame(p=>({...p,date:e.target.value}))}/></div>
+                <div><label style={{fontSize:11,fontWeight:600}}>Time</label>
+                  <input type="time" style={{width:"100%",padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}} value={newGame.time} onChange={e=>setNewGame(p=>({...p,time:e.target.value}))}/></div>
+                <div><label style={{fontSize:11,fontWeight:600}}>Field</label>
+                  <input style={{width:"100%",padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}} value={newGame.field} onChange={e=>setNewGame(p=>({...p,field:e.target.value}))} placeholder="Field 1"/></div>
+                <div><label style={{fontSize:11,fontWeight:600}}>Team 1</label>
+                  <select style={{width:"100%",padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}} value={newGame.t1} onChange={e=>setNewGame(p=>({...p,t1:e.target.value}))}>
+                    <option value="">— Select —</option>
+                    {teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select></div>
+                <div><label style={{fontSize:11,fontWeight:600}}>Team 2</label>
+                  <select style={{width:"100%",padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}} value={newGame.t2} onChange={e=>setNewGame(p=>({...p,t2:e.target.value}))}>
+                    <option value="">— Select —</option>
+                    {teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select></div>
+              </div>
+              <div className="flex gap-2" style={{marginTop:10}}>
+                <button className="btn btn-primary btn-sm" onClick={addGame}>✓ Add Game</button>
+                <button className="btn btn-secondary btn-sm" onClick={()=>setShowAddGame(false)}>Cancel</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
       <div className="card">
         <div className="card-hd">
           <span className="card-title">Schedule — {shown.length} game{shown.length!==1?"s":""}</span>
-          {!readOnly&&<button className="btn btn-green btn-sm">💾 Save Changes</button>}
+          <div className="flex gap-2" style={{fontSize:11,color:"#888",alignItems:"center"}}>
+            {statusBtns.slice(0,5).map(b=><span key={b.key} style={{...btnSm,background:b.bg,color:b.color,border:`1px solid ${b.bg}`}}>{b.label}</span>)}
+            <span style={{...btnSm,background:"#fff",color:"#c0392b",border:"1px solid #c0392b"}}>Clear</span>
+          </div>
         </div>
         <div className="tbl-scroll">
           <table>
             <thead><tr>
-              <th style={{width:70}}>#</th><th>Pool</th><th>Date</th><th>Time</th><th>Field</th>
-              <th>Team 1</th><th>Score</th><th style={{textAlign:"center",width:28}}>vs</th>
-              <th>Score</th><th>Team 2</th><th>Status</th>
+              <th style={{width:60}}>#</th>
+              <th style={{width:70}}>Pool</th>
+              <th style={{width:90}}>Date</th>
+              <th style={{width:80}}>Time</th>
+              <th style={{width:90}}>Field</th>
+              <th>Team 1</th>
+              <th style={{width:65,textAlign:"center"}}>Score</th>
+              <th style={{width:90,textAlign:"center"}}>Home</th>
+              <th style={{width:65,textAlign:"center"}}>Score</th>
+              <th>Team 2</th>
+              <th style={{width:210}}>Game Status</th>
             </tr></thead>
             <tbody>{shown.map(g=>{
               const t1=tByIdFrom(g.t1,teams),t2=tByIdFrom(g.t2,teams);
               const w=winOf(g);
+              const isLocked=readOnly;
+              const rowBg=g.status==="final"?"#f0fff4":g.status==="forfeit"?"#fff8f0":g.status==="coin"?"#f8f0ff":g.status==="no_score"?"#f0f7ff":"#fff";
               return(
-                <tr key={g.id}>
+                <tr key={g.id} style={{background:rowBg}}>
                   <td className="fw7 t-sm">{g.num}</td>
-                  <td>{g.pool&&<span className={`chip ${poolChipClass(g.pool)}`}>Pool {g.pool}</span>}</td>
+                  <td>{g.pool&&<span className={`chip ${poolChipClass(g.pool)}`}>{g.pool}</span>}</td>
                   <td className="t-sm">{g.date}</td>
                   <td className="t-sm">{g.time}</td>
                   <td className="t-sm t-gray">{g.field}</td>
-                  <td style={{fontWeight:w===g.t1?700:400,color:w===g.t1?"var(--green)":"inherit"}}>{t1?.name||"—"}</td>
                   <td>
-                    {readOnly?<span className="fw8">{g.s1??""}</span>:
-                    <input className={`score-in ${w===g.t1?"score-w":w&&w!==g.t1?"score-l":""}`}
-                      type="number" min="0" value={g.s1??""} placeholder="—"
-                      onChange={e=>upd(g.id,"s1",e.target.value)}/>}
+                    {isLocked
+                      ? <span style={{fontWeight:w===g.t1?700:400,color:w===g.t1?"var(--green)":"inherit"}}>{t1?.name||"—"}</span>
+                      : <select style={{width:"100%",fontSize:12,padding:"2px 4px",border:"1px solid #e2e8f0",borderRadius:3}} value={g.t1||""} onChange={e=>updField(g.id,"t1",e.target.value)}>
+                          <option value="">— TBD —</option>
+                          {teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                    }
                   </td>
-                  <td style={{textAlign:"center",fontWeight:700,fontSize:11,color:"var(--gray)"}}>VS</td>
+                  <td style={{textAlign:"center"}}>
+                    {isLocked
+                      ? <span className="fw8">{g.s1??""}</span>
+                      : <input className={`score-in ${w===g.t1?"score-w":w&&w!==g.t1?"score-l":""}`}
+                          type="number" min="0" value={g.s1??""} placeholder="—"
+                          onChange={e=>updScore(g.id,"s1",e.target.value)}/>}
+                  </td>
+                  <td style={{textAlign:"center"}}>
+                    {isLocked
+                      ? <span style={{fontSize:11,color:"#888"}}>{g.home==="t1"?`(${t1?.name?.split(" ")[0]||"T1"})`:g.home==="t2"?`(${t2?.name?.split(" ")[0]||"T2"})`:""}</span>
+                      : <select style={{fontSize:11,padding:"2px 4px",border:"1px solid #e2e8f0",borderRadius:3,width:"100%"}} value={g.home||""} onChange={e=>updField(g.id,"home",e.target.value)}>
+                          <option value="">No Home</option>
+                          <option value="t1">Team 1</option>
+                          <option value="t2">Team 2</option>
+                        </select>
+                    }
+                  </td>
+                  <td style={{textAlign:"center"}}>
+                    {isLocked
+                      ? <span className="fw8">{g.s2??""}</span>
+                      : <input className={`score-in ${w===g.t2?"score-w":w&&w!==g.t2?"score-l":""}`}
+                          type="number" min="0" value={g.s2??""} placeholder="—"
+                          onChange={e=>updScore(g.id,"s2",e.target.value)}/>}
+                  </td>
                   <td>
-                    {readOnly?<span className="fw8">{g.s2??""}</span>:
-                    <input className={`score-in ${w===g.t2?"score-w":w&&w!==g.t2?"score-l":""}`}
-                      type="number" min="0" value={g.s2??""} placeholder="—"
-                      onChange={e=>upd(g.id,"s2",e.target.value)}/>}
+                    {isLocked
+                      ? <span style={{fontWeight:w===g.t2?700:400,color:w===g.t2?"var(--green)":"inherit"}}>{t2?.name||"—"}</span>
+                      : <select style={{width:"100%",fontSize:12,padding:"2px 4px",border:"1px solid #e2e8f0",borderRadius:3}} value={g.t2||""} onChange={e=>updField(g.id,"t2",e.target.value)}>
+                          <option value="">— TBD —</option>
+                          {teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                    }
                   </td>
-                  <td style={{fontWeight:w===g.t2?700:400,color:w===g.t2?"var(--green)":"inherit"}}>{t2?.name||"—"}</td>
-                  <td><span className={`status ${g.status==="final"?"s-final":g.status==="live"?"s-live":"s-scheduled"}`}>
-                    {g.status==="final"?"✓ Final":g.status==="live"?"● Live":"Scheduled"}
-                  </span></td>
+                  <td>
+                    {isLocked
+                      ? <span className={`status ${g.status==="final"||g.status==="no_score"?"s-final":g.status==="live"?"s-live":"s-scheduled"}`}>
+                          {g.status==="final"?"✓ Final":g.status==="no_score"?"✓ Final (no score)":g.status==="forfeit"?"⚠ Forfeit":g.status==="coin"?"● Coin Flip":"Scheduled"}
+                        </span>
+                      : <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+                          {statusBtns.map(b=>(
+                            <button key={b.key} title={b.title} onClick={()=>setStatus(g.id,b.key)}
+                              style={{...btnSm,background:g.status===b.key&&b.key!=="clear"?b.bg:"#f4f6f8",
+                                color:g.status===b.key&&b.key!=="clear"?b.color:b.key==="clear"?"#c0392b":"#555",
+                                border:`1px solid ${g.status===b.key&&b.key!=="clear"?b.bg:"#cdd5df"}`}}>
+                              {b.label}
+                            </button>
+                          ))}
+                          {!isLocked&&<button title="Swap Teams" onClick={()=>swapTeams(g.id)}
+                            style={{...btnSm,background:"#f4f6f8",color:"#555",border:"1px solid #cdd5df"}}>↔</button>}
+                        </div>
+                    }
+                  </td>
                 </tr>
               );
             })}</tbody>
