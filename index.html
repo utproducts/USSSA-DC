@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>USSSA Tournament Manager</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#1a1a2e;min-height:100vh}
+:root{
+  --red:#c0392b;--red-d:#922b21;--red-l:#fadbd8;
+  --navy:#1a1a2e;--navy-m:#16213e;--navy-l:#0f3460;
+  --gold:#e67e22;--gold-l:#fef5e7;
+  --green:#27ae60;--green-l:#d5f5e3;
+  --blue:#2980b9;--blue-l:#d6eaf8;
+  --purple:#8e44ad;--purple-l:#f4ecf7;
+  --gray:#95a5a6;--gray-l:#f8f9fa;--gray-m:#ecf0f1;--gray-d:#7f8c8d;
+  --white:#fff;
+  --sh:0 2px 8px rgba(0,0,0,.1);--sh-lg:0 8px 32px rgba(0,0,0,.15);
+  --r:10px;--r-sm:6px
+}
+.app{display:flex;min-height:100vh}
+.sidebar{width:230px;background:var(--navy);color:#fff;display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:200;overflow-y:auto;flex-shrink:0}
+.main{margin-left:230px;flex:1;display:flex;flex-direction:column;min-height:100vh}
+.topbar{background:#fff;padding:12px 24px;display:flex;align-items:center;justify-content:space-between;box-shadow:0 1px 4px rgba(0,0,0,.08);position:sticky;top:0;z-index:100}
+.content{padding:20px 24px;flex:1}
+.sb-logo{padding:18px 16px 14px;border-bottom:1px solid rgba(255,255,255,.1)}
+.sb-logo .brand{font-size:20px;font-weight:900;color:var(--red);letter-spacing:-.5px}
+.sb-logo .sub{font-size:10px;color:rgba(255,255,255,.45);text-transform:uppercase;letter-spacing:1px;margin-top:1px}
+.sb-sec{padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.sb-lbl{font-size:9.5px;font-weight:700;color:rgba(255,255,255,.3);text-transform:uppercase;letter-spacing:1.2px;padding:6px 14px 3px}
+.sb-item{display:flex;align-items:center;gap:9px;padding:8px 14px;cursor:pointer;font-size:13px;color:rgba(255,255,255,.7);transition:.15s;border-left:3px solid transparent;white-space:nowrap}
+.sb-item:hover{background:rgba(255,255,255,.07);color:#fff}
+.sb-item.active{background:rgba(192,57,43,.22);color:#fff;border-left-color:var(--red);font-weight:600}
+.sb-item .ico{font-size:15px;width:18px;text-align:center;flex-shrink:0}
+.sb-user{padding:14px 16px;border-top:1px solid rgba(255,255,255,.1);margin-top:auto}
+.tb-title{font-size:17px;font-weight:800;color:var(--navy)}
+.tb-sub{font-size:11px;color:var(--gray);margin-top:1px}
+.tb-right{display:flex;align-items:center;gap:10px}
+.card{background:#fff;border-radius:var(--r);box-shadow:var(--sh)}
+.card-hd{padding:14px 18px 10px;border-bottom:1px solid var(--gray-m);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.card-title{font-size:13.5px;font-weight:700;color:var(--navy)}
+.card-body{padding:18px}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:var(--r-sm);font-size:13px;font-weight:600;cursor:pointer;border:none;transition:.15s;white-space:nowrap}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:var(--red);color:#fff}.btn-primary:hover{background:var(--red-d)}
+.btn-navy{background:var(--navy);color:#fff}.btn-navy:hover{background:var(--navy-m)}
+.btn-green{background:var(--green);color:#fff}.btn-green:hover{background:#1e8449}
+.btn-blue{background:var(--blue);color:#fff}.btn-blue:hover{background:#1a6fa0}
+.btn-gold{background:var(--gold);color:#fff}.btn-gold:hover{background:#ca6f1e}
+.btn-secondary{background:var(--gray-m);color:var(--navy)}.btn-secondary:hover{background:#dde}
+.btn-outline{background:transparent;border:1.5px solid var(--gray);color:#555}.btn-outline:hover{border-color:var(--navy);color:var(--navy)}
+.btn-sm{padding:5px 10px;font-size:12px}
+.btn-xs{padding:3px 7px;font-size:11px}
+.btn-danger{background:var(--red-l);color:var(--red-d)}.btn-danger:hover{background:var(--red-d);color:#fff}
+.badge{display:inline-flex;align-items:center;gap:3px;padding:3px 8px;border-radius:12px;font-size:11px;font-weight:700}
+.b-red{background:var(--red-l);color:var(--red-d)}
+.b-green{background:var(--green-l);color:#1e6b3d}
+.b-blue{background:var(--blue-l);color:#1a5276}
+.b-gold{background:var(--gold-l);color:#7a4f00}
+.b-gray{background:var(--gray-m);color:#555}
+.b-navy{background:var(--navy);color:#fff}
+.status{display:inline-flex;align-items:center;padding:3px 9px;border-radius:10px;font-size:11px;font-weight:700}
+.s-final{background:var(--green-l);color:var(--green)}
+.s-live{background:#fef3cd;color:#b7770d}
+.s-scheduled{background:var(--blue-l);color:var(--blue)}
+.s-upcoming{background:var(--gray-m);color:var(--gray-d)}
+.tabs{display:flex;border-bottom:2px solid var(--gray-m);margin-bottom:18px;overflow-x:auto;gap:0}
+.tab{padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;color:var(--gray);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:.15s}
+.tab:hover{color:var(--navy)}
+.tab.active{color:var(--red);border-bottom-color:var(--red)}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.flex{display:flex}.flex-c{display:flex;align-items:center}.flex-b{display:flex;align-items:center;justify-content:space-between}.flex-w{display:flex;flex-wrap:wrap}
+.gap-2{gap:8px}.gap-3{gap:12px}.gap-4{gap:16px}
+.stat-card{background:#fff;border-radius:var(--r);padding:16px 18px;box-shadow:var(--sh);display:flex;align-items:center;gap:14px}
+.stat-ico{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.stat-val{font-size:26px;font-weight:900;color:var(--navy);line-height:1}
+.stat-lbl{font-size:11px;color:var(--gray);margin-top:2px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{background:var(--navy);color:#fff;padding:9px 12px;text-align:left;font-weight:600;font-size:11.5px;letter-spacing:.3px;white-space:nowrap}
+td{padding:9px 12px;border-bottom:1px solid var(--gray-m);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#fafbff}
+.tbl-wrap{border-radius:var(--r);overflow:hidden;box-shadow:var(--sh)}
+.tbl-scroll{overflow-x:auto}
+.div-pills{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.div-pill{padding:6px 13px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;border:2px solid transparent;transition:.15s}
+.dp-off{background:var(--gray-m);color:#555}.dp-off:hover{background:#dde}
+.dp-on{background:var(--navy);color:#fff;border-color:var(--navy)}
+.fl-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.fl-tab{padding:6px 12px;border-radius:var(--r-sm);font-size:12px;font-weight:600;cursor:pointer;border:2px solid var(--gray-m);color:#666;background:#fff;transition:.15s}
+.fl-tab:hover{border-color:var(--navy-l);color:var(--navy)}
+.fl-tab.on{border-color:var(--red);color:var(--red);background:var(--red-l)}
+.fl-tab.fl-live::after{content:" 🔴";font-size:9px}
+.fl-add{border-style:dashed!important}
+.score-in{width:54px;padding:5px 6px;border:2px solid var(--gray-m);border-radius:var(--r-sm);font-size:14px;font-weight:800;text-align:center;transition:.15s}
+.score-in:focus{outline:none;border-color:var(--blue)}
+.score-w{background:var(--green-l);border-color:var(--green);color:var(--green)}
+.score-l{color:var(--gray)}
+.seed-rank{width:26px;height:26px;border-radius:50%;background:var(--navy);color:#fff;font-weight:800;font-size:11px;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.sr-1{background:#f39c12;color:#7a5000}
+.sr-2{background:#adb5bd}
+.sr-3{background:#cd7f32}
+.brk-wrap{overflow-x:auto;padding:8px 0}
+.brk{display:flex;align-items:flex-start;min-width:600px}
+.brk-col{display:flex;flex-direction:column;min-width:195px}
+.brk-rnd-lbl{text-align:center;font-size:10px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.8px;padding:4px 0 10px}
+.brk-game{border:2px solid var(--gray-m);border-radius:8px;margin:5px 8px;background:#fff;overflow:hidden;box-shadow:var(--sh)}
+.brk-team{display:flex;align-items:center;justify-content:space-between;padding:7px 11px;font-size:12px;border-bottom:1px solid var(--gray-m);gap:8px;min-height:34px}
+.brk-team:last-child{border-bottom:none}
+.brk-w{background:var(--green-l);font-weight:700}
+.brk-l{color:#bbb}
+.brk-tbd{color:#ccc;font-style:italic;font-size:11px}
+.brk-sc{font-weight:900;font-size:14px;min-width:22px;text-align:right}
+.brk-sc-w{color:var(--green)}
+.brk-meta{font-size:10px;color:var(--gray);padding:0 8px 4px;text-align:center}
+.ly-wrap{border:2px solid var(--gray-m);border-radius:var(--r);overflow:hidden;margin-top:12px}
+.ly-hdr{display:flex;background:var(--navy)}
+.ly-time-hdr{width:85px;padding:8px;font-size:10px;font-weight:700;color:rgba(255,255,255,.5);text-align:center;flex-shrink:0;border-right:1px solid rgba(255,255,255,.1)}
+.ly-fld-hdr{flex:1;padding:8px;text-align:center;font-size:11px;font-weight:700;color:#fff;border-left:1px solid rgba(255,255,255,.1)}
+.ly-row{display:flex;border-top:1px solid var(--gray-m)}
+.ly-row:hover{background:#fafbff}
+.ly-time{width:85px;padding:8px 6px;font-size:11px;font-weight:600;color:var(--gray-d);text-align:center;flex-shrink:0;border-right:2px solid var(--gray-m);display:flex;align-items:center;justify-content:center}
+.ly-slot{flex:1;border-left:1px solid var(--gray-m);min-height:50px;cursor:pointer;transition:background .1s;display:flex;align-items:center;justify-content:center;padding:4px}
+.ly-slot:hover{background:#eff6ff}
+.ly-slot.has-game{background:#e8f4fd;cursor:default}
+.ly-slot.blocked{background:var(--red-l);cursor:not-allowed}
+.ly-chip{background:var(--blue);color:#fff;border-radius:4px;padding:3px 6px;font-size:10px;font-weight:700;text-align:center;width:100%;line-height:1.3}
+.ly-chip .t2{font-size:9px;opacity:.8;margin-top:2px}
+.pool-hdr{font-size:12px;font-weight:800;padding:8px 12px;background:var(--navy);color:#fff;border-radius:var(--r-sm) var(--r-sm) 0 0;letter-spacing:.3px}
+.pool-tbl{border:1px solid var(--gray-m);border-top:none;border-radius:0 0 var(--r-sm) var(--r-sm);overflow:hidden;margin-bottom:18px}
+.alert{padding:10px 14px;border-radius:var(--r-sm);font-size:12.5px;margin-bottom:14px;display:flex;gap:9px;align-items:flex-start}
+.a-info{background:var(--blue-l);color:#1a5276;border-left:4px solid var(--blue)}
+.a-warn{background:var(--gold-l);color:#7a4f00;border-left:4px solid var(--gold)}
+.a-success{background:var(--green-l);color:#1e6b3d;border-left:4px solid var(--green)}
+.a-purple{background:var(--purple-l);color:#5b2c6f;border-left:4px solid var(--purple)}
+input[type=text],input[type=number],select,textarea{padding:7px 10px;border:1.5px solid var(--gray-m);border-radius:var(--r-sm);font-size:13px;color:var(--navy);background:#fff;transition:.15s}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue)}
+label{font-size:12px;font-weight:600;color:var(--gray-d);display:block;margin-bottom:3px}
+.pp-cell{width:34px;height:34px;border-radius:6px;background:var(--gray-m);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;margin:auto}
+.pp-cell-top{background:var(--gold-l);color:#7a4f00}
+.pp-cell-2{background:#e8f4fd;color:var(--blue)}
+.pitch-bar{height:12px;border-radius:6px;background:var(--green-l);overflow:hidden;margin-top:4px}
+.pitch-fill{height:100%;background:var(--green);border-radius:6px;transition:width .3s}
+.pitch-fill.warn{background:var(--gold)}
+.pitch-fill.danger{background:var(--red)}
+.place-card{background:#fff;border-radius:10px;padding:16px;box-shadow:var(--sh);text-align:center}
+.place-medal{font-size:36px;margin-bottom:8px}
+.place-team{font-size:14px;font-weight:800;color:var(--navy)}
+.place-detail{font-size:11px;color:var(--gray);margin-top:3px}
+.pub-header{background:linear-gradient(135deg,var(--navy) 0%,var(--navy-l) 100%);color:#fff;padding:28px 32px 0}
+.pub-ename{font-size:24px;font-weight:900;letter-spacing:-.5px}
+.pub-meta{font-size:13px;opacity:.7;margin-top:3px}
+.pub-divs{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
+.pub-div{padding:5px 13px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;color:rgba(255,255,255,.6);border:2px solid rgba(255,255,255,.2);transition:.15s}
+.pub-div:hover{color:#fff;border-color:rgba(255,255,255,.5)}
+.pub-div.on{color:#fff;background:var(--red);border-color:var(--red)}
+.pub-tabs{display:flex;margin-top:16px}
+.pub-tab{padding:11px 18px;font-size:13px;font-weight:700;cursor:pointer;color:rgba(255,255,255,.6);border-bottom:3px solid transparent;transition:.15s}
+.pub-tab:hover{color:#fff}
+.pub-tab.on{color:#fff;border-bottom-color:var(--red)}
+.pub-body{padding:22px 32px}
+.v-toggle{display:flex;border:2px solid var(--gray-m);border-radius:8px;overflow:hidden}
+.v-btn{padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;border:none;background:#fff;color:#777;transition:.15s}
+.v-btn.on{background:var(--navy);color:#fff}
+.mt1{margin-top:4px}.mt2{margin-top:8px}.mt3{margin-top:12px}.mt4{margin-top:16px}
+.mb2{margin-bottom:8px}.mb3{margin-bottom:12px}.mb4{margin-bottom:16px}
+.t-sm{font-size:12px}.t-xs{font-size:11px}.t-gray{color:var(--gray)}.t-navy{color:var(--navy)}.t-red{color:var(--red)}.t-green{color:var(--green)}
+.fw7{font-weight:700}.fw8{font-weight:800}.fw9{font-weight:900}
+.w100{width:100%}
+hr{border:none;border-top:1px solid var(--gray-m);margin:16px 0}
+.chip{display:inline-flex;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700}
+.chip-a{background:#dbeafe;color:#1e40af}
+.chip-b{background:#dcfce7;color:#15803d}
+.chip-c{background:#fef3c7;color:#92400e}
+.chip-d{background:#fce7f3;color:#9d174d}
+.tgl{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--gray-m)}
+.tgl:last-child{border-bottom:none}
+.tgl-sw{width:44px;height:24px;border-radius:12px;cursor:pointer;position:relative;transition:.2s;flex-shrink:0}
+.tgl-dot{width:18px;height:18px;border-radius:50%;background:#fff;position:absolute;top:3px;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useMemo,useEffect} = React;
+
+/* ════════════════════ SUPABASE ════════════════════ */
+const SUPABASE_URL='https://nzwsbcuvttdmwpfjlhnl.supabase.co';
+const SUPABASE_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56d3NiY3V2dHRkbXdwZmpsaG5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQzODI3MTgsImV4cCI6MjA4OTk1ODcxOH0.hKUBGkk_KA_NKo6VYeKF72l8oiQ3RWkDncL0t05sfFA';
+const sb=window.supabase?.createClient(SUPABASE_URL,SUPABASE_KEY);
+async function dbSave(table,data){try{if(sb)await sb.from(table).upsert(data);}catch(e){console.warn('DB sync:',e)}}
+async function dbLoad(table){try{if(!sb)return null;const{data}=await sb.from(table).select('*');return data;}catch(e){return null;}}
+
+/* ════════════════════════ DATA ════════════════════════ */
+const PARKS_DB=[
+  {id:"p1",name:"Frank Brown Complex",loc:"Panama City Beach, FL",fields:9},
+  {id:"p2",name:"Publix Sports Park",loc:"Panama City Beach, FL",fields:10},
+  {id:"p3",name:"Olym Sports Complex",loc:"Wellington, FL",fields:6},
+  {id:"p4",name:"Bob Lewis Park",loc:"Asheville, NC",fields:4},
+  {id:"p5",name:"Veteran's Park",loc:"Gulfport, MS",fields:8},
+];
+const EXTRA_PARKS=[
+  {id:"px1",name:"BYE Fields (no game time display)",loc:"",fields:0},
+  {id:"px2",name:"Alabama — Al Trione Sports Complex",loc:"Daphne, AL",fields:5},
+  {id:"px3",name:"Alabama — Alabaster Veterans Park",loc:"Alabaster, AL",fields:6},
+  {id:"px4",name:"Florida — Bradenton Prep",loc:"Bradenton, FL",fields:8},
+  {id:"px5",name:"Georgia — East Cobb Athletic Complex",loc:"Marietta, GA",fields:12},
+];
+
+// Wellington 8Op
+const T8=[
+  {id:"t1",name:"Wellington Colts",city:"Wellington",state:"FL",cls:"8AA",pts:600,pr:977,icr:"3-2",ovr:"14-4"},
+  {id:"t2",name:"Palm Beach Gardens Storm",city:"Palm Beach Gardens",state:"FL",cls:"8AA",pts:415,pr:853,icr:"2-2",ovr:"10-1"},
+  {id:"t3",name:"Original Florida Pokers White",city:"Florida",state:"FL",cls:"8AAA",pts:225,pr:779,icr:"1-3",ovr:"1-3"},
+  {id:"t4",name:"Acreage Chiefs",city:"Acreage",state:"FL",cls:"8AA",pts:75,pr:415,icr:"2-2",ovr:"2-5"},
+];
+// Wellington 9AAA/AA (6 teams, 2 pools)
+const T9=[
+  {id:"u1",name:"South Florida Thunder",city:"Weston",state:"FL",cls:"9AAA",pts:780,pr:1020,icr:"4-1",ovr:"18-3"},
+  {id:"u2",name:"Palm Beach Elite",city:"Palm Beach",state:"FL",cls:"9AAA",pts:620,pr:950,icr:"3-2",ovr:"15-6"},
+  {id:"u3",name:"Jupiter Warriors",city:"Jupiter",state:"FL",cls:"9AAA",pts:510,pr:890,icr:"2-3",ovr:"12-8"},
+  {id:"u4",name:"Boca Raton Hurricanes",city:"Boca Raton",state:"FL",cls:"9AAA",pts:390,pr:760,icr:"1-4",ovr:"9-11"},
+  {id:"u5",name:"Ft. Lauderdale Aces",city:"Ft. Lauderdale",state:"FL",cls:"9AA",pts:280,pr:680,icr:"0-5",ovr:"7-13"},
+  {id:"u6",name:"Wellington Mustangs",city:"Wellington",state:"FL",cls:"9AA",pts:190,pr:590,icr:"2-3",ovr:"10-10"},
+];
+// PCB 12Op (8 teams, 2 pools A+B)
+const T12=[
+  {id:"v1",name:"Tulsa Crew",city:"Tulsa",state:"OK",cls:"12Maj",pts:600,pr:977,icr:"3-2",ovr:"14-4"},
+  {id:"v2",name:"Power Gulf South — PCB",city:"Panama City",state:"FL",cls:"12Maj",pts:0,pr:0,icr:"2-2",ovr:"8-5"},
+  {id:"v3",name:"USA Prime SE Mid-South 12u",city:"Bartlett",state:"TN",cls:"12AAA",pts:550,pr:174,icr:"0-3",ovr:"14-7"},
+  {id:"v4",name:"OK Stealth",city:"Muskogee",state:"OK",cls:"12AAA",pts:415,pr:415,icr:"2-2",ovr:"10-1"},
+  {id:"v5",name:"Wily Mo Dragons Blue 12U",city:"Tampa",state:"FL",cls:"12AAA",pts:225,pr:853,icr:"2-2",ovr:"2-5"},
+  {id:"v6",name:"Owensboro Smoke",city:"Owensboro",state:"KY",cls:"12AAA",pts:75,pr:779,icr:"1-3",ovr:"1-3"},
+  {id:"v7",name:"TACA Storm Homeschool",city:"Rowlett",state:"TX",cls:"12AAA",pts:0,pr:0,icr:"0-4",ovr:"3-9"},
+  {id:"v8",name:"Sharon Springs Spartans",city:"Cumming",state:"GA",cls:"12AAA",pts:0,pr:0,icr:"0-4",ovr:"2-10"},
+];
+
+// Wellington 8Op pool games
+const PG8=[
+  {id:"g1",num:"PPA-1",pool:"A",date:"2/14/2026",time:"12:00 PM",field:"Olym F4",t1:"t1",t2:"t4",s1:17,s2:2,status:"final"},
+  {id:"g2",num:"PPA-2",pool:"A",date:"2/14/2026",time:"1:30 PM",field:"Olym F4",t1:"t2",t2:"t4",s1:20,s2:3,status:"final"},
+  {id:"g3",num:"PPA-3",pool:"A",date:"2/14/2026",time:"3:00 PM",field:"Olym F4",t1:"t3",t2:"t1",s1:11,s2:3,status:"final"},
+  {id:"g4",num:"PPA-4",pool:"A",date:"2/14/2026",time:"4:30 PM",field:"Olym F4",t1:"t3",t2:"t2",s1:18,s2:10,status:"final"},
+];
+// Wellington 8Op bracket
+const BG8=[
+  {id:"bg1",num:"A1",round:1,date:"2/15/2026",time:"12:00 PM",field:"Olym F4",t1:"t2",t2:"t1",s1:20,s2:14,status:"final"},
+  {id:"bg2",num:"A2",round:1,date:"2/15/2026",time:"12:00 PM",field:"Olym F5",t1:"t3",t2:"t4",s1:15,s2:0,status:"final"},
+  {id:"bg3",num:"A3",round:2,date:"2/15/2026",time:"2:00 PM",field:"Olym F4",t1:"t3",t2:"t2",s1:15,s2:3,status:"final"},
+];
+// Wellington 9AAA pool games
+const PG9=[
+  {id:"h1",num:"PPA-1",pool:"A",date:"2/14/2026",time:"8:00 AM",field:"Olym F1",t1:"u1",t2:"u3",s1:8,s2:2,status:"final"},
+  {id:"h2",num:"PPA-2",pool:"A",date:"2/14/2026",time:"9:30 AM",field:"Olym F1",t1:"u2",t2:"u3",s1:6,s2:4,status:"final"},
+  {id:"h3",num:"PPA-3",pool:"A",date:"2/14/2026",time:"11:00 AM",field:"Olym F1",t1:"u1",t2:"u2",s1:9,s2:1,status:"final"},
+  {id:"h4",num:"PPB-1",pool:"B",date:"2/14/2026",time:"8:00 AM",field:"Olym F2",t1:"u4",t2:"u6",s1:5,s2:3,status:"final"},
+  {id:"h5",num:"PPB-2",pool:"B",date:"2/14/2026",time:"9:30 AM",field:"Olym F2",t1:"u5",t2:"u6",s1:7,s2:2,status:"final"},
+  {id:"h6",num:"PPB-3",pool:"B",date:"2/14/2026",time:"11:00 AM",field:"Olym F2",t1:"u4",t2:"u5",s1:4,s2:6,status:"final"},
+];
+// Wellington 9AAA bracket
+const BG9=[
+  {id:"bh1",num:"QF1",round:1,date:"2/14/2026",time:"1:00 PM",field:"Olym F1",t1:"u1",t2:"u6",s1:11,s2:2,status:"final"},
+  {id:"bh2",num:"QF2",round:1,date:"2/14/2026",time:"1:00 PM",field:"Olym F2",t1:"u4",t2:"u3",s1:4,s2:7,status:"final"},
+  {id:"bh3",num:"QF3",round:1,date:"2/14/2026",time:"1:00 PM",field:"Olym F3",t1:"u2",t2:"u5",s1:8,s2:3,status:"final"},
+  {id:"bh4",num:"SF1",round:2,date:"2/14/2026",time:"3:00 PM",field:"Olym F1",t1:"u1",t2:"u3",s1:7,s2:5,status:"final"},
+  {id:"bh5",num:"SF2",round:2,date:"2/14/2026",time:"3:00 PM",field:"Olym F2",t1:"u2",t2:null,s1:null,s2:null,status:"scheduled"},
+  {id:"bh6",num:"Final",round:3,date:"2/14/2026",time:"5:00 PM",field:"Olym F1",t1:"u1",t2:null,s1:null,s2:null,status:"scheduled"},
+];
+// PCB 12Op pool games (future/scheduled)
+const PG12=[
+  {id:"p1",num:"PPA-1",pool:"A",date:"6/2/2026",time:"8:00 AM",field:"Frank Brown F1",t1:"v1",t2:"v5",s1:null,s2:null,status:"scheduled"},
+  {id:"p2",num:"PPA-2",pool:"A",date:"6/2/2026",time:"9:30 AM",field:"Frank Brown F1",t1:"v3",t2:"v7",s1:null,s2:null,status:"scheduled"},
+  {id:"p3",num:"PPB-1",pool:"B",date:"6/2/2026",time:"8:00 AM",field:"Frank Brown F2",t1:"v2",t2:"v6",s1:null,s2:null,status:"scheduled"},
+  {id:"p4",num:"PPB-2",pool:"B",date:"6/2/2026",time:"9:30 AM",field:"Frank Brown F2",t1:"v4",t2:"v8",s1:null,s2:null,status:"scheduled"},
+  {id:"p5",num:"PPA-3",pool:"A",date:"6/2/2026",time:"11:00 AM",field:"Frank Brown F1",t1:"v1",t2:"v3",s1:null,s2:null,status:"scheduled"},
+  {id:"p6",num:"PPB-3",pool:"B",date:"6/2/2026",time:"11:00 AM",field:"Frank Brown F2",t1:"v2",t2:"v4",s1:null,s2:null,status:"scheduled"},
+];
+
+// Pitching data keyed by teamId
+const PITCH_DATA={
+  t1:[{name:"Connor Wells",inn:"3.1",pitches:52,rest:0},{name:"Jake Morrison",inn:"2.0",pitches:31,rest:1}],
+  t2:[{name:"Ethan Park",inn:"4.0",pitches:67,rest:0},{name:"Liam Torres",inn:"1.2",pitches:24,rest:2}],
+  t3:[{name:"Caleb Hughes",inn:"3.0",pitches:75,rest:1},{name:"Noah Rivera",inn:"2.1",pitches:36,rest:0}],
+  t4:[{name:"Mason Clark",inn:"1.1",pitches:22,rest:2},{name:"Carter Lee",inn:"2.0",pitches:35,rest:1}],
+};
+
+const EVENTS_DB=[
+  {id:1,evid:"410959",name:"Wellington President's Day Classic",loc:"Wellington, FL",state:"FL",
+   date:"Feb 14, 2026",status:"complete",stature:"Double State Qualifier",director:"Sebastian Hassett",parks:["p3"],
+   divisions:[
+     {id:101,code:"13Op",label:"13U Open",wl:"5-0-4",teams:13,flights:[{id:"f101",type:"pool",name:"Pool Flight 1",status:"Final",live:false}]},
+     {id:102,code:"12Op",label:"12U Open",wl:"7-0-6",teams:12,flights:[
+       {id:"f102",type:"pool",name:"Pool Flight 1",status:"Final",live:false},
+       {id:"f102b",type:"bracket",name:"Gold Division Brk A [SE-4]",status:"Final",live:false}
+     ]},
+     {id:103,code:"11AA",label:"11U AA",wl:"11-0-4",teams:11,flights:[{id:"f103",type:"pool",name:"Pool Flight 1",status:"Final",live:false}]},
+     {id:104,code:"10Op",label:"10U Open",wl:"5-0-4",teams:10,flights:[{id:"f104",type:"pool",name:"Pool Flight 1",status:"Final",live:false}]},
+     {id:105,code:"9AAA",label:"9U AA/AAA",wl:"6-0-5",teams:6,flights:[
+       {id:"f105",type:"pool",name:"Pool Flight 1 — Pools A+B",status:"Final",live:false},
+       {id:"f105b",type:"bracket",name:"Gold Division Brk A [SE-8]",status:"Final",live:false}
+     ]},
+     {id:106,code:"8Op",label:"8U Coach Pitch",wl:"4-3-0",teams:4,flights:[
+       {id:"f106",type:"pool",name:"Pool Flight 1 [4]",status:"Final",live:false},
+       {id:"f106b",type:"bracket",name:"Gold Division Brk A [SE-4]",status:"Final",live:false}
+     ]}
+   ]},
+  {id:2,evid:"407745",name:"Panama City Beach World Series Week 1",loc:"Panama City Beach, FL",state:"FL",
+   date:"Jun 2, 2026",status:"upcoming",stature:"Global World Series",director:"Darrell Hannaseck",parks:["p1","p2"],
+   divisions:[
+     {id:201,code:"14Op",label:"14U Open 60/90",wl:"0-0-0",teams:6,flights:[{id:"f201",type:"pool",name:"Pool Flight 1",status:"Scheduled",live:false}]},
+     {id:202,code:"13Op",label:"13U Open",wl:"0-0-0",teams:54,flights:[{id:"f202",type:"pool",name:"Pool Flight 1 — 54/80",status:"Scheduled",live:false}]},
+     {id:203,code:"12Op",label:"12U Open",wl:"0-0-0",teams:12,flights:[
+       {id:"f203",type:"pool",name:"Pool Flight 1 [A+B]",status:"Scheduled",live:false},
+       {id:"f203b",type:"bracket",name:"Gold Division Brk A [SE-8]",status:"Scheduled",live:false}
+     ]},
+     {id:204,code:"11Op",label:"11U Open",wl:"0-0-0",teams:16,flights:[{id:"f204",type:"pool",name:"Pool Flight 1",status:"Scheduled",live:false}]},
+     {id:205,code:"10Op",label:"10U Open",wl:"0-0-0",teams:8,flights:[{id:"f205",type:"pool",name:"Pool Flight 1",status:"Scheduled",live:false}]},
+     {id:206,code:"9Op",label:"9U Open",wl:"0-0-0",teams:8,flights:[{id:"f206",type:"pool",name:"Pool Flight 1",status:"Scheduled",live:false}]},
+     {id:207,code:"8Op",label:"8U Coach Pitch",wl:"0-0-0",teams:4,flights:[{id:"f207",type:"pool",name:"Pool Flight 1",status:"Scheduled",live:false}]},
+     {id:208,code:"7Op",label:"7U Coach Pitch",wl:"0-0-0",teams:1,flights:[{id:"f208",type:"pool",name:"Pool Flight 1",status:"Scheduled",live:false}]},
+   ]},
+  {id:3,evid:"408331",name:"Gulfport Global World Series",loc:"Gulfport, MS",state:"MS",
+   date:"Jun 17, 2026",status:"upcoming",stature:"Global World Series",director:"Steve Hassett",parks:["p5"],
+   divisions:[
+     {id:301,code:"12Op",label:"12U Open",wl:"0-0-0",teams:9,flights:[{id:"f301",type:"pool",name:"Pool Flight 1",status:"Scheduled",live:false}]},
+     {id:302,code:"11Op",label:"11U Open",wl:"0-0-0",teams:7,flights:[{id:"f302",type:"pool",name:"Pool Flight 1",status:"Scheduled",live:false}]},
+     {id:303,code:"10Op",label:"10U Open",wl:"0-0-0",teams:5,flights:[{id:"f303",type:"pool",name:"Pool Flight 1",status:"Scheduled",live:false}]},
+   ]},
+  {id:4,evid:"411918",name:"Ripken Nationals Qualifier (12u Only)",loc:"Bob Lewis Park — Asheville, NC",state:"NC",
+   date:"Apr 11, 2026",status:"upcoming",stature:"Super NIT",director:"NC State Office",parks:["p4"],
+   divisions:[
+     {id:401,code:"12Op",label:"12U Open",wl:"0-0-0",teams:21,flights:[{id:"f401",type:"pool",name:"Pool Flight 1",status:"Scheduled",live:false}]},
+   ]},
+  {id:5,evid:"410126",name:"Top 72 Prospects",loc:"Gilbert, AZ",state:"AZ",
+   date:"Nov 28, 2025",status:"complete",stature:"Individual Event",director:"Steve Hassett",parks:[],
+   divisions:[
+     {id:501,code:"14Op",label:"14U Open",wl:"6-0-0",teams:30,flights:[{id:"f501",type:"pool",name:"Pool Flight 1",status:"Final",live:false}]},
+   ]},
+];
+
+/* ════════════════════ HELPERS ════════════════════ */
+function tByIdFrom(id,db){return db.find(t=>t.id===id)}
+function winOf(g){if(g.status!=="final"||g.s1===null)return null;return g.s1>g.s2?g.t1:g.t2}
+function loseOf(g){if(g.status!=="final"||g.s1===null)return null;return g.s1>g.s2?g.t2:g.t1}
+function calcStandings(teams,games){
+  const s={};
+  teams.forEach(t=>{s[t.id]={...t,w:0,l:0,t_:0,pf:0,pa:0,pts:0}});
+  games.forEach(g=>{
+    if(g.status!=="final"||g.s1===null)return;
+    if(!s[g.t1]||!s[g.t2])return;
+    s[g.t1].pf+=g.s1;s[g.t1].pa+=g.s2;
+    s[g.t2].pf+=g.s2;s[g.t2].pa+=g.s1;
+    if(g.s1>g.s2){s[g.t1].w++;s[g.t2].l++;s[g.t1].pts+=2}
+    else if(g.s2>g.s1){s[g.t2].w++;s[g.t1].l++;s[g.t2].pts+=2}
+    else{s[g.t1].t_++;s[g.t2].t_++;s[g.t1].pts++;s[g.t2].pts++}
+  });
+  return Object.values(s).sort((a,b)=>b.pts-a.pts||(b.pf-b.pa)-(a.pf-a.pa)||b.pf-a.pf);
+}
+function poolChipClass(pool){return{A:"chip-a",B:"chip-b",C:"chip-c",D:"chip-d"}[pool]||"chip-a"}
+function teamDB(divId){
+  const map={101:T9,102:T12,103:T9,104:T9,105:T9,106:T8,203:T12,501:T12};
+  return map[divId]||T8;
+}
+function poolGamesDB(divId){
+  const map={106:PG8,105:PG9,203:PG12};
+  return map[divId]||[];
+}
+function bracketGamesDB(divId){
+  const map={106:BG8,105:BG9};
+  return map[divId]||[];
+}
+
+/* ════════════════════ SMALL COMPONENTS ════════════════════ */
+function Ev_StatusBadge({status}){
+  if(status==="complete")return <span className="badge b-green">✓ Complete</span>;
+  if(status==="live")return <span className="badge b-red">● Live</span>;
+  return <span className="badge b-blue">📅 Upcoming</span>;
+}
+function SeedRank({n}){
+  const c=n===1?"sr-1":n===2?"sr-2":n===3?"sr-3":"";
+  return <div className={`seed-rank ${c}`}>{n}</div>;
+}
+function Alrt({type="info",children}){
+  const c={info:"a-info",warn:"a-warn",success:"a-success",purple:"a-purple"}[type];
+  return <div className={`alert ${c}`}>{children}</div>;
+}
+
+/* ════════════════════ SEEDS ════════════════════ */
+function SeedsView({teams}){
+  const sorted=[...teams].sort((a,b)=>(b.pts+b.pr)-(a.pts+a.pr));
+  return(
+    <div>
+      <Alrt type="info">📊 Teams seeded by USSSA Points + Power Rating combined score. Power Seeds use a different algorithm weighting recent performance.</Alrt>
+      <div className="tbl-wrap tbl-scroll">
+        <table>
+          <thead><tr>
+            <th style={{width:40}}>#</th><th>Team</th><th>State · City</th>
+            <th>USSSA Pts</th><th>Power Rating</th><th>Total</th>
+            <th>APV</th><th>In-Class</th><th>Overall</th><th>Class</th>
+          </tr></thead>
+          <tbody>{sorted.map((t,i)=>(
+            <tr key={t.id}>
+              <td><SeedRank n={i+1}/></td>
+              <td className="fw7" style={{color:"var(--blue)"}}>{t.name}</td>
+              <td className="t-sm">{t.state} · {t.city}</td>
+              <td className="fw7">{t.pts||"—"}</td>
+              <td>{t.pr||"—"}</td>
+              <td className="fw8" style={{color:"var(--navy)"}}>{t.pts+t.pr||"—"}</td>
+              <td className="t-gray">0</td>
+              <td>{t.icr}</td><td>{t.ovr}</td>
+              <td><span className="badge b-gray">{t.cls}</span></td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════ GAME MANAGER ════════════════════ */
+function GameMgrView({games,setGames,teams,readOnly}){
+  const [fTeam,setFTeam]=useState("all");
+  const [fPool,setFPool]=useState("all");
+  const pools=[...new Set(games.map(g=>g.pool))].filter(Boolean).sort();
+  const shown=games.filter(g=>(fPool==="all"||g.pool===fPool)&&(fTeam==="all"||g.t1===fTeam||g.t2===fTeam));
+  function upd(id,k,v){
+    if(readOnly)return;
+    const n=v===""?null:parseInt(v);
+    setGames(prev=>{
+      const updated=prev.map(g=>g.id===id?{...g,[k]:isNaN(n)?null:n,status:n!==null?"final":g.status}:g);
+      const game=updated.find(g=>g.id===id);
+      if(game)dbSave('games',game);
+      return updated;
+    });
+  }
+  return(
+    <div>
+      {!readOnly&&(
+        <div className="card mb4">
+          <div className="card-hd"><span className="card-title">Filter & Bulk Actions</span></div>
+          <div className="card-body flex-w gap-3" style={{alignItems:"flex-end"}}>
+            <div><label>Filter by Team</label>
+              <select value={fTeam} onChange={e=>setFTeam(e.target.value)} style={{width:200}}>
+                <option value="all">All Teams</option>
+                {teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
+            <div><label>Filter by Pool</label>
+              <select value={fPool} onChange={e=>setFPool(e.target.value)}>
+                <option value="all">All Pools</option>
+                {pools.map(p=><option key={p}>Pool {p}</option>)}
+              </select>
+            </div>
+            <div className="flex-w gap-2" style={{alignItems:"flex-end"}}>
+              <button className="btn btn-secondary btn-sm">↔ Swap Teams</button>
+              <button className="btn btn-secondary btn-sm">🔄 Replace Team</button>
+              <button className="btn btn-secondary btn-sm">🔢 Renumber</button>
+              <button className="btn btn-danger btn-sm">🗑 Remove All</button>
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="card">
+        <div className="card-hd">
+          <span className="card-title">Schedule — {shown.length} game{shown.length!==1?"s":""}</span>
+          {!readOnly&&<button className="btn btn-green btn-sm">💾 Save Changes</button>}
+        </div>
+        <div className="tbl-scroll">
+          <table>
+            <thead><tr>
+              <th style={{width:70}}>#</th><th>Pool</th><th>Date</th><th>Time</th><th>Field</th>
+              <th>Team 1</th><th>Score</th><th style={{textAlign:"center",width:28}}>vs</th>
+              <th>Score</th><th>Team 2</th><th>Status</th>
+            </tr></thead>
+            <tbody>{shown.map(g=>{
+              const t1=tByIdFrom(g.t1,teams),t2=tByIdFrom(g.t2,teams);
+              const w=winOf(g);
+              return(
+                <tr key={g.id}>
+                  <td className="fw7 t-sm">{g.num}</td>
+                  <td>{g.pool&&<span className={`chip ${poolChipClass(g.pool)}`}>Pool {g.pool}</span>}</td>
+                  <td className="t-sm">{g.date}</td>
+                  <td className="t-sm">{g.time}</td>
+                  <td className="t-sm t-gray">{g.field}</td>
+                  <td style={{fontWeight:w===g.t1?700:400,color:w===g.t1?"var(--green)":"inherit"}}>{t1?.name||"—"}</td>
+                  <td>
+                    {readOnly?<span className="fw8">{g.s1??""}</span>:
+                    <input className={`score-in ${w===g.t1?"score-w":w&&w!==g.t1?"score-l":""}`}
+                      type="number" min="0" value={g.s1??""} placeholder="—"
+                      onChange={e=>upd(g.id,"s1",e.target.value)}/>}
+                  </td>
+                  <td style={{textAlign:"center",fontWeight:700,fontSize:11,color:"var(--gray)"}}>VS</td>
+                  <td>
+                    {readOnly?<span className="fw8">{g.s2??""}</span>:
+                    <input className={`score-in ${w===g.t2?"score-w":w&&w!==g.t2?"score-l":""}`}
+                      type="number" min="0" value={g.s2??""} placeholder="—"
+                      onChange={e=>upd(g.id,"s2",e.target.value)}/>}
+                  </td>
+                  <td style={{fontWeight:w===g.t2?700:400,color:w===g.t2?"var(--green)":"inherit"}}>{t2?.name||"—"}</td>
+                  <td><span className={`status ${g.status==="final"?"s-final":g.status==="live"?"s-live":"s-scheduled"}`}>
+                    {g.status==="final"?"✓ Final":g.status==="live"?"● Live":"Scheduled"}
+                  </span></td>
+                </tr>
+              );
+            })}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════ LAYOUT BUILDER ════════════════════ */
+function LayoutView({games,teams}){
+  const [nf,setNf]=useState(1);
+  const [gl,setGl]=useState("90");
+  const TIMES=["8:00 AM","9:30 AM","11:00 AM","12:30 PM","2:00 PM","3:30 PM","5:00 PM","6:30 PM"];
+  const init={};
+  games.slice(0,TIMES.length).forEach((g,i)=>{init[`${TIMES[i]}-0`]={...g,chip:true}});
+  const [slots,setSlots]=useState(init);
+  const fields=Array.from({length:nf},(_,i)=>`Field ${i+1}`);
+  function clickSlot(t,fi){
+    const k=`${t}-${fi}`;
+    setSlots(p=>{
+      const n={...p};
+      if(n[k]?.chip)return n;
+      if(n[k]?.blocked)delete n[k];
+      else n[k]={blocked:true};
+      return n;
+    });
+  }
+  return(
+    <div>
+      <div className="card mb4">
+        <div className="card-hd"><span className="card-title">Layout Settings</span></div>
+        <div className="card-body flex-w gap-3" style={{alignItems:"flex-end"}}>
+          <div><label># of Fields</label>
+            <select value={nf} onChange={e=>setNf(+e.target.value)}>
+              {[1,2,3,4,5,6].map(n=><option key={n}>{n}</option>)}
+            </select>
+          </div>
+          <div><label>Game Time Length</label>
+            <select value={gl} onChange={e=>setGl(e.target.value)}>
+              <option value="60">1 hour</option>
+              <option value="75">1h 15m</option>
+              <option value="90">1h 30m</option>
+              <option value="120">2 hours</option>
+            </select>
+          </div>
+          <div><label>Time Range — Day 1</label>
+            <div className="flex gap-2">
+              <select><option>8:00 AM</option><option>9:00 AM</option></select>
+              <span style={{alignSelf:"center",padding:"0 4px"}}>to</span>
+              <select><option>7:00 PM</option><option>8:00 PM</option></select>
+            </div>
+          </div>
+          <button className="btn btn-primary btn-sm">⏱ Set/Reset Times</button>
+          <button className="btn btn-secondary btn-sm">📅 Next Day →</button>
+          <button className="btn btn-secondary btn-sm">Show Team Names</button>
+        </div>
+      </div>
+      <Alrt type="info">💡 <strong>Blue cells</strong> = assigned games · Click empty cell to <strong>block</strong> it (red) · Click blocked to unblock</Alrt>
+      <div className="ly-wrap">
+        <div className="ly-hdr">
+          <div className="ly-time-hdr">Time</div>
+          {fields.map((f,fi)=>(
+            <div key={fi} className="ly-fld-hdr">{f} — {["Olym F4","Olym F5","Olym F6","Frank Brown F1","Frank Brown F2","Frank Brown F3"][fi]||f}</div>
+          ))}
+        </div>
+        {TIMES.map(t=>(
+          <div key={t} className="ly-row">
+            <div className="ly-time">{t}</div>
+            {fields.map((_,fi)=>{
+              const k=`${t}-${fi}`;const slot=slots[k];
+              const st1=slot?.chip?tByIdFrom(slot.t1,teams):null;
+              const st2=slot?.chip?tByIdFrom(slot.t2,teams):null;
+              return(
+                <div key={fi} className={`ly-slot ${slot?.chip?"has-game":slot?.blocked?"blocked":""}`}
+                  onClick={()=>clickSlot(t,fi)}>
+                  {slot?.chip?(
+                    <div className="ly-chip">
+                      {slot.num}
+                      <div className="t2">{st1?.name?.split(" ").slice(-1)[0]||"?"} vs {st2?.name?.split(" ").slice(-1)[0]||"?"}</div>
+                    </div>
+                  ):slot?.blocked?(
+                    <span style={{fontSize:10,color:"var(--red)",fontWeight:700}}>BLOCKED</span>
+                  ):(
+                    <span style={{fontSize:10,color:"#d0d5dd"}}>+ assign</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      <div className="flex mt3" style={{justifyContent:"flex-end",gap:8}}>
+        <button className="btn btn-secondary">↩ Reset</button>
+        <button className="btn btn-green">💾 Save Layout</button>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════ POOL STANDINGS ════════════════════ */
+function StandingsView({teams,games}){
+  const pools=[...new Set(games.map(g=>g.pool))].filter(Boolean).sort();
+  if(pools.length===0)return <Alrt type="info">No pool play games scheduled yet for this flight.</Alrt>;
+  return(
+    <div>
+      {pools.map(pool=>{
+        const pgTeamIds=[...new Set(games.filter(g=>g.pool===pool).flatMap(g=>[g.t1,g.t2]))];
+        const pgTeams=teams.filter(t=>pgTeamIds.includes(t.id));
+        const pgGames=games.filter(g=>g.pool===pool);
+        const st=calcStandings(pgTeams,pgGames);
+        return(
+          <div key={pool}>
+            <div className="pool-hdr">POOL {pool} — {pgTeams.length} Teams</div>
+            <div className="pool-tbl">
+              <table>
+                <thead><tr>
+                  <th style={{width:40}}>#</th><th>Team</th><th>Class</th>
+                  <th style={{width:40}}>W</th><th style={{width:40}}>L</th><th style={{width:40}}>T</th>
+                  <th>PF</th><th>PA</th><th>+/-</th><th>Pts</th>
+                </tr></thead>
+                <tbody>{st.map((t,i)=>(
+                  <tr key={t.id} style={{background:i===0?"#f0fdf4":i===1?"#f8f9fa":""}}>
+                    <td><SeedRank n={i+1}/></td>
+                    <td className="fw7">{t.name}</td>
+                    <td><span className="badge b-gray">{t.cls}</span></td>
+                    <td className="fw7" style={{color:"var(--green)"}}>{t.w}</td>
+                    <td style={{color:"var(--red)"}}>{t.l}</td>
+                    <td>{t.t_}</td>
+                    <td className="fw7">{t.pf}</td><td>{t.pa}</td>
+                    <td className="fw7" style={{color:t.pf-t.pa>=0?"var(--green)":"var(--red)"}}>
+                      {t.pf-t.pa>=0?"+":""}{t.pf-t.pa}
+                    </td>
+                    <td className="fw8">{t.pts}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
+      <Alrt type="success">✅ Pool play complete. Teams advance to bracket by finishing position.</Alrt>
+    </div>
+  );
+}
+
+/* ════════════════════ BRACKET ════════════════════ */
+function BracketView({bGames,setBGames,teams,editable}){
+  const rounds=[...new Set(bGames.map(g=>g.round))].sort((a,b)=>a-b);
+  const maxRound=Math.max(...rounds);
+  const totalRounds=rounds.length;
+  const rndLabel={};
+  if(totalRounds===1){rndLabel[1]="Championship"}
+  else if(totalRounds===2){rndLabel[1]="Semifinal";rndLabel[2]="Championship"}
+  else if(totalRounds===3){rndLabel[1]="Quarterfinal";rndLabel[2]="Semifinal";rndLabel[3]="Championship"}
+  else{rounds.forEach((r,i)=>{rndLabel[r]=i===totalRounds-1?"Championship":i===totalRounds-2?"Semifinal":`Round ${r}`})}
+  function upd(id,k,v){
+    if(!editable)return;
+    const n=v===""?null:parseInt(v);
+    setBGames(prev=>prev.map(g=>g.id===id?{...g,[k]:isNaN(n)?null:n,status:n!==null?"final":"scheduled"}:g));
+  }
+  function getT(id){return tByIdFrom(id,teams)}
+  const finalGame=bGames.find(g=>g.round===maxRound);
+  const champ=finalGame?winOf(finalGame):null;
+  return(
+    <div>
+      {champ&&(
+        <div style={{background:"linear-gradient(135deg,#f39c12,#e67e22)",color:"#fff",padding:"14px 20px",borderRadius:10,marginBottom:16,display:"flex",alignItems:"center",gap:16,boxShadow:"var(--sh-lg)"}}>
+          <span style={{fontSize:36}}>🏆</span>
+          <div>
+            <div style={{fontSize:11,fontWeight:700,opacity:.8,textTransform:"uppercase",letterSpacing:1}}>Division Champion</div>
+            <div style={{fontSize:20,fontWeight:900}}>{getT(champ)?.name}</div>
+          </div>
+        </div>
+      )}
+      {editable&&<Alrt type="info">✏️ Click any score field to update bracket results.</Alrt>}
+      <div className="brk-wrap">
+        <div className="brk">
+          {rounds.map((round,ri)=>{
+            const rGames=bGames.filter(g=>g.round===round);
+            const spacer=Math.pow(2,ri)*14;
+            return(
+              <div key={round} className="brk-col">
+                <div className="brk-rnd-lbl">{rndLabel[round]||`Round ${round}`}</div>
+                {rGames.map(g=>{
+                  const t1=getT(g.t1),t2=g.t2?getT(g.t2):null;
+                  const w=winOf(g);
+                  return(
+                    <div key={g.id} style={{marginBottom:spacer}}>
+                      <div className="brk-game">
+                        <div className={`brk-team ${w===g.t1?"brk-w":w&&w!==g.t1?"brk-l":""}${!g.t1?" brk-tbd":""}`}>
+                          <span style={{flex:1,fontSize:12}}>{t1?t1.name:"TBD"}</span>
+                          {editable&&g.t1?(
+                            <input className={`score-in ${w===g.t1?"score-w":""}`}
+                              type="number" min="0" value={g.s1??""} placeholder="—"
+                              style={{width:44,fontSize:12,padding:"3px 4px"}}
+                              onChange={e=>upd(g.id,"s1",e.target.value)}/>
+                          ):<span className={`brk-sc ${w===g.t1?"brk-sc-w":""}`}>{g.s1??""}</span>}
+                        </div>
+                        <div className={`brk-team ${w===g.t2?"brk-w":w&&w!==g.t2?"brk-l":""}${!g.t2?" brk-tbd":""}`}>
+                          <span style={{flex:1,fontSize:12}}>{t2?t2.name:"TBD"}</span>
+                          {editable&&g.t2?(
+                            <input className={`score-in ${w===g.t2?"score-w":""}`}
+                              type="number" min="0" value={g.s2??""} placeholder="—"
+                              style={{width:44,fontSize:12,padding:"3px 4px"}}
+                              onChange={e=>upd(g.id,"s2",e.target.value)}/>
+                          ):<span className={`brk-sc ${w===g.t2?"brk-sc-w":""}`}>{g.s2??""}</span>}
+                        </div>
+                      </div>
+                      <div className="brk-meta">{g.date} · {g.time} · {g.field}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+          {champ&&(
+            <div className="brk-col" style={{paddingTop:28}}>
+              <div className="brk-rnd-lbl">Winner</div>
+              <div style={{background:"linear-gradient(135deg,#fef3c7,#fde68a)",border:"2px solid #f59e0b",borderRadius:10,padding:"14px 16px",textAlign:"center",margin:"5px 8px",boxShadow:"var(--sh)"}}>
+                <div style={{fontSize:28,marginBottom:4}}>🏆</div>
+                <div style={{fontSize:12,fontWeight:800,color:"#92400e"}}>{getT(champ)?.name}</div>
+                <div style={{fontSize:10,color:"#b45309",marginTop:3}}>Champion</div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════ POOL2BRACKET ════════════════════ */
+function Pool2BracketView({poolGames,teams}){
+  const st=calcStandings(teams,poolGames);
+  const slots=["Bracket Seed 1 (Best record)","Bracket Seed 2","Bracket Seed 3","Bracket Seed 4 (Worst record)"];
+  const [assigns,setAssigns]=useState(Object.fromEntries(st.slice(0,4).map((t,i)=>[`s${i+1}`,t.id])));
+  return(
+    <div>
+      <Alrt type="info">📋 Move pool placers into bracket. Seed 1 gets the best matchup path (plays seed 4 in the opener).</Alrt>
+      <div className="g2" style={{gap:20,alignItems:"start"}}>
+        <div>
+          <div className="fw7 mb2 t-navy">Pool Final Standings</div>
+          <div className="tbl-wrap">
+            <table>
+              <thead><tr><th>Seed</th><th>Team</th><th>W</th><th>L</th><th>PF</th><th>PA</th><th>Pts</th></tr></thead>
+              <tbody>{st.map((t,i)=>(
+                <tr key={t.id}>
+                  <td><SeedRank n={i+1}/></td>
+                  <td className="fw7">{t.name}</td>
+                  <td style={{color:"var(--green)",fontWeight:700}}>{t.w}</td>
+                  <td style={{color:"var(--red)"}}>{t.l}</td>
+                  <td>{t.pf}</td><td>{t.pa}</td>
+                  <td className="fw8">{t.pts}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <div className="fw7 mb2 t-navy">Assign to Bracket Slots</div>
+          {slots.map((slot,i)=>(
+            <div key={slot} style={{marginBottom:10}}>
+              <label>{slot}</label>
+              <select className="w100"
+                value={assigns[`s${i+1}`]||""}
+                onChange={e=>setAssigns(p=>({...p,[`s${i+1}`]:e.target.value}))}>
+                <option value="">— Select Team —</option>
+                {st.map(t=><option key={t.id} value={t.id}>#{st.indexOf(t)+1} {t.name} ({t.w}-{t.l})</option>)}
+              </select>
+            </div>
+          ))}
+          <button className="btn btn-secondary mt2 w100">⚡ Auto-Assign by Seed</button>
+          <button className="btn btn-green mt2 w100">✓ Lock Bracket Seeding</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════ PARKS ════════════════════ */
+function ParksView({eventParks=[]}){
+  const [sel,setSel]=useState(eventParks);
+  const all=[...PARKS_DB,...EXTRA_PARKS];
+  const avail=all.filter(p=>!sel.includes(p.id));
+  const sched=all.filter(p=>sel.includes(p.id));
+  return(
+    <div>
+      <Alrt type="warn">⚠️ Only parks for this sport are listed. Contact your state director for park corrections.</Alrt>
+      <div className="g2" style={{gap:20}}>
+        <div>
+          <div className="fw7 mb2 t-navy">Parks to Consider</div>
+          <div style={{border:"2px solid var(--gray-m)",borderRadius:8,height:280,overflowY:"auto",padding:6}}>
+            {avail.map(p=>(
+              <div key={p.id} onClick={()=>setSel(v=>[...v,p.id])}
+                style={{padding:"7px 8px",borderRadius:4,cursor:"pointer",fontSize:12.5,display:"flex",justifyContent:"space-between"}}
+                onMouseEnter={e=>e.currentTarget.style.background="#f0f4ff"}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <span>{p.name}</span>
+                {p.fields>0&&<span className="t-gray t-xs">{p.fields}F</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <div className="fw7 mb2 t-navy">Parks to Schedule ({sched.length})</div>
+          <div style={{border:"2px solid var(--green)",background:"#f0fdf4",borderRadius:8,height:280,overflowY:"auto",padding:6}}>
+            {sched.map(p=>(
+              <div key={p.id} onClick={()=>setSel(v=>v.filter(x=>x!==p.id))}
+                style={{padding:"7px 8px",borderRadius:4,cursor:"pointer",fontSize:12.5,background:"var(--green-l)",marginBottom:4,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span className="fw7">{p.name}</span>
+                <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                  {p.fields>0&&<span className="badge b-green">{p.fields} fields</span>}
+                  <span style={{fontSize:11,color:"var(--red)"}}>✕</span>
+                </div>
+              </div>
+            ))}
+            {sched.length===0&&<div className="t-gray t-sm" style={{padding:8}}>No parks selected yet</div>}
+          </div>
+          <div className="t-xs t-gray mt2">Total fields available: <strong>{sched.reduce((a,p)=>a+p.fields,0)}</strong></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════ UMPIRES ════════════════════ */
+function UmpiresView(){
+  const [umps]=useState([
+    {id:"u1",name:"John Martinez",cert:"Blue",state:"FL",games:4,phone:"(561) 555-0101"},
+    {id:"u2",name:"Derek Smith",cert:"Blue",state:"FL",games:3,phone:"(561) 555-0182"},
+    {id:"u3",name:"Marcus Williams",cert:"Green",state:"FL",games:0,phone:"(954) 555-0247"},
+    {id:"u4",name:"Tony Fernandez",cert:"Red",state:"FL",games:2,phone:"(305) 555-0318"},
+  ]);
+  return(
+    <div>
+      <Alrt type="info">🟡 Assign certified umpires to specific games. Certification level must match division requirements.</Alrt>
+      <div className="flex-b mb4">
+        <span className="fw7 t-navy">Registered Umpires ({umps.length})</span>
+        <button className="btn btn-primary btn-sm">+ Add Umpire</button>
+      </div>
+      <div className="tbl-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>Cert</th><th>State</th><th>Phone</th><th>Games</th><th>Actions</th></tr></thead>
+          <tbody>{umps.map(u=>(
+            <tr key={u.id}>
+              <td className="fw7">{u.name}</td>
+              <td><span className={`badge ${u.cert==="Blue"?"b-blue":u.cert==="Red"?"b-red":"b-green"}`}>{u.cert}</span></td>
+              <td>{u.state}</td>
+              <td className="t-sm">{u.phone}</td>
+              <td><span className="badge b-gray">{u.games} games</span></td>
+              <td><button className="btn btn-sm btn-secondary">📋 Assign</button></td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════ PP MATRIX ════════════════════ */
+function PPMatrixView(){
+  const [np,setNp]=useState(4);
+  const [nt,setNt]=useState(16);
+  const pools=Array.from({length:np},(_,i)=>String.fromCharCode(65+i));
+  const rows=Math.ceil(nt/np);
+  function seed(r,c){const s=r%2===0?r*np+(c+1):r*np+(np-c);return s<=nt?s:null}
+  return(
+    <div>
+      <Alrt type="info">🔢 Serpentine seeding: Seed 1→Pool A, 2→B, etc., then direction reverses each row to balance pool strength.</Alrt>
+      <div className="flex gap-3 mb4" style={{alignItems:"flex-end"}}>
+        <div><label>Number of Pools</label>
+          <select value={np} onChange={e=>setNp(+e.target.value)}>
+            {[2,3,4,5,6,8].map(n=><option key={n}>{n}</option>)}
+          </select>
+        </div>
+        <div><label>Number of Teams</label>
+          <select value={nt} onChange={e=>setNt(+e.target.value)}>
+            {[8,12,16,20,24,28,32,33,40,48,54,64].map(n=><option key={n}>{n}</option>)}
+          </select>
+        </div>
+      </div>
+      <div className="card">
+        <div className="card-hd"><span className="card-title">Pool Seeding Matrix — {nt} teams ÷ {np} pools</span></div>
+        <div className="card-body">
+          <table style={{width:"auto"}}>
+            <thead><tr>
+              <th style={{width:70}}></th>
+              {pools.map(p=><th key={p} style={{textAlign:"center",width:52}}>Pool {p}</th>)}
+            </tr></thead>
+            <tbody>{Array.from({length:rows},(_,r)=>(
+              <tr key={r}>
+                <td className="t-sm fw7 t-gray">Row {r+1}</td>
+                {pools.map((_,c)=>{const s=seed(r,c);return(
+                  <td key={c} style={{textAlign:"center",padding:"4px 6px"}}>
+                    {s!=null&&<div className={`pp-cell ${r===0?"pp-cell-top":c===0?"pp-cell-2":""}`}>{s}</div>}
+                  </td>
+                )})}
+              </tr>
+            ))}</tbody>
+          </table>
+          <div className="t-xs t-gray mt3">
+            Teams per pool: {pools.map((p,pi)=>{
+              const cnt=Array.from({length:rows},(_,r)=>seed(r,pi)!=null?1:0).reduce((a,b)=>a+b,0);
+              return `${p}: ${cnt}`;
+            }).join(" · ")}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════ PITCHING ════════════════════ */
+function PitchingView({teams}){
+  const limit=85;
+  const rows=teams.flatMap(t=>(PITCH_DATA[t.id]||[]).map(p=>({...p,teamName:t.name})));
+  function bar(pct){return pct>=.9?"danger":pct>=.7?"warn":""}
+  return(
+    <div>
+      <Alrt type="warn">⚾ Pitch limit: <strong>85 pitches/game</strong> (8U age group). Rest requirements enforced automatically.</Alrt>
+      <div className="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>Team</th><th>Pitcher</th><th>Innings</th><th>Pitches / Limit</th><th>Rest</th><th>Eligible</th>
+          </tr></thead>
+          <tbody>{rows.map((p,i)=>{
+            const pct=p.pitches/limit;
+            return(
+              <tr key={i}>
+                <td className="t-sm">{p.teamName}</td>
+                <td className="fw7">{p.name}</td>
+                <td>{p.inn}</td>
+                <td>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span className="fw8">{p.pitches}</span>
+                    <div className="pitch-bar" style={{width:80}}>
+                      <div className={`pitch-fill ${bar(pct)}`} style={{width:`${Math.min(pct*100,100)}%`}}/>
+                    </div>
+                    <span className="t-xs t-gray">/{limit}</span>
+                    <span style={{fontSize:11,fontWeight:700,color:pct>=.9?"var(--red)":pct>=.7?"var(--gold)":"var(--green)"}}>
+                      {pct>=.9?"⚠️ Limit":pct>=.7?"🟡 Watch":`${limit-p.pitches} left`}
+                    </span>
+                  </div>
+                </td>
+                <td><span className={`badge ${p.rest>0?"b-red":"b-green"}`}>{p.rest}d rest</span></td>
+                <td><span className={`status ${p.rest<=0?"s-final":"s-upcoming"}`}>
+                  {p.rest<=0?"✓ Eligible":"⏳ Rest Required"}
+                </span></td>
+              </tr>
+            );
+          })}</tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════ PLACING ════════════════════ */
+function PlacingView({bGames,teams}){
+  const lastRound=Math.max(...bGames.map(g=>g.round));
+  const finalG=bGames.find(g=>g.round===lastRound);
+  const champ=finalG?winOf(finalG):null;
+  const runner=finalG?loseOf(finalG):null;
+  const sfs=bGames.filter(g=>g.round===lastRound-1&&lastRound>1);
+  const third=sfs.map(g=>loseOf(g)).find(t=>t&&t!==champ&&t!==runner);
+  function t(id){return tByIdFrom(id,teams)}
+  const places=[
+    {pos:1,ico:"🥇",id:champ,lbl:"Champion"},
+    {pos:2,ico:"🥈",id:runner,lbl:"Runner-Up"},
+    {pos:3,ico:"🥉",id:third,lbl:"3rd Place"},
+  ];
+  return(
+    <div>
+      <Alrt type="success">🏆 Final division standings based on bracket results.</Alrt>
+      <div style={{display:"flex",gap:16,flexWrap:"wrap",marginBottom:20}}>
+        {places.map(p=>(
+          <div key={p.pos} className="place-card" style={{flex:"1 1 160px",minWidth:140}}>
+            <div className="place-medal">{p.ico}</div>
+            <div className="place-team">{p.id?t(p.id)?.name:"TBD"}</div>
+            <div className="place-detail">{p.lbl}</div>
+          </div>
+        ))}
+      </div>
+      <div className="tbl-wrap">
+        <table>
+          <thead><tr><th>Place</th><th>Team</th><th>Class</th><th>Notes</th></tr></thead>
+          <tbody>{places.map(p=>(
+            <tr key={p.pos}>
+              <td>{p.ico} {p.pos}{p.pos===1?"st":p.pos===2?"nd":"rd"}</td>
+              <td className="fw7">{p.id?t(p.id)?.name:"TBD"}</td>
+              <td>{p.id?<span className="badge b-gray">{t(p.id)?.cls}</span>:"—"}</td>
+              <td className="t-sm t-gray">{p.lbl}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════ LIVE & LOCK ════════════════════ */
+function LiveLockView(){
+  const [cfg,setCfg]=useState({poolStandings:true,schedule:true,bracket:true,liveScores:true,pitching:false,rosters:false});
+  const [locked,setLocked]=useState(false);
+  const keys={poolStandings:"Pool Standings",schedule:"Schedule & Times",bracket:"Bracket View",liveScores:"Live Scores",pitching:"Pitch Count Data",rosters:"Team Rosters"};
+  return(
+    <div>
+      <Alrt type={locked?"success":"warn"}>{locked?"🔒 Event locked — no further changes without unlocking.":"🔓 Event is live. Changes are instantly visible to public."}</Alrt>
+      <div className="card mb4">
+        <div className="card-hd"><span className="card-title">Public Visibility</span></div>
+        <div className="card-body" style={{padding:"12px 18px"}}>
+          {Object.entries(keys).map(([k,label])=>(
+            <div key={k} className="tgl">
+              <div>
+                <div className="fw7 t-sm">{label}</div>
+                <div className="t-xs t-gray">Show to public fans &amp; teams</div>
+              </div>
+              <div className="tgl-sw" onClick={()=>setCfg(p=>({...p,[k]:!p[k]}))}
+                style={{background:cfg[k]?"var(--green)":"var(--gray-m)"}}>
+                <div className="tgl-dot" style={{left:cfg[k]?23:3}}/>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="flex gap-3">
+        {!locked&&<button className="btn btn-green" onClick={()=>setLocked(true)}>🔒 Lock Event (Finalize)</button>}
+        {locked&&<button className="btn btn-secondary" onClick={()=>setLocked(false)}>🔓 Unlock for Editing</button>}
+        <button className="btn btn-blue">📤 Publish Schedule</button>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════ CONTACT / NOTES ════════════════════ */
+function ContactView({ev}){
+  const [note,setNote]=useState("Pool assignments finalized. Fields confirmed with park. Bracket seeded by pool finish. All games 1h 30min.\n\n3/15: Updated field assignments for Sunday.\n3/18: Bracket locked.");
+  return(
+    <div>
+      <div className="g2 mb4" style={{alignItems:"start"}}>
+        <div className="card">
+          <div className="card-hd"><span className="card-title">Event Contact</span></div>
+          <div className="card-body">
+            {[["Director",ev?.director||"Steve Hassett"],["Phone","(561) 555-0100"],["Email","director@usssa.com"],["Location",ev?.loc||"Wellington, FL"],["State USSSA","Florida State Office"]].map(([k,v])=>(
+              <div key={k} style={{display:"flex",gap:12,padding:"7px 0",borderBottom:"1px solid var(--gray-m)"}}>
+                <div style={{width:80,fontWeight:700,fontSize:12,color:"var(--gray-d)"}}>{k}</div>
+                <div style={{fontSize:13}}>{v}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-hd"><span className="card-title">Director Notes (DevNotes)</span></div>
+          <div className="card-body">
+            <textarea value={note} onChange={e=>setNote(e.target.value)}
+              style={{width:"100%",height:140,resize:"vertical",fontSize:13,lineHeight:1.5}}/>
+            <button className="btn btn-green btn-sm mt2">💾 Save Notes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════ FLIGHT VIEW ════════════════════ */
+function FlightView({flight,divId,eventParks}){
+  const teams=teamDB(divId);
+  const [pg,setPg]=useState(poolGamesDB(divId));
+  const [bg,setBg]=useState(bracketGamesDB(divId));
+  const isPool=flight.type==="pool";
+  const poolTabs=["standings","seeds","game-manager","layout","pitching","parks","umpires","live-lock","contact","pp-matrix"];
+  const brkTabs=["bracket","game-manager","pool2bracket","placing","seeds","contact"];
+  const activeTabs=isPool?poolTabs:brkTabs;
+  const [tab,setTab]=useState(isPool?"standings":"bracket");
+  const TL={standings:"📊 Standings",seeds:"🎯 Seeds","game-manager":"🗂 Game Manager",layout:"📐 Layout",pitching:"⚾ Pitching",parks:"🏟 Parks",umpires:"🟡 Umpires","live-lock":"🔒 Live & Lock",contact:"📞 Contact","pp-matrix":"🔢 PP Matrix",bracket:"🏆 Bracket","pool2bracket":"↗ Pool → Bracket",placing:"🥇 Placing"};
+  return(
+    <div>
+      <div className="tabs">
+        {activeTabs.map(t=>(
+          <div key={t} className={`tab ${tab===t?"active":""}`} onClick={()=>setTab(t)}>{TL[t]}</div>
+        ))}
+      </div>
+      {tab==="standings"&&<StandingsView teams={teams} games={pg}/>}
+      {tab==="seeds"&&<SeedsView teams={teams}/>}
+      {tab==="game-manager"&&<GameMgrView games={isPool?pg:bg} setGames={isPool?setPg:setBg} teams={teams} readOnly={false}/>}
+      {tab==="layout"&&<LayoutView games={isPool?pg:bg} teams={teams}/>}
+      {tab==="pitching"&&<PitchingView teams={teams}/>}
+      {tab==="parks"&&<ParksView eventParks={eventParks}/>}
+      {tab==="umpires"&&<UmpiresView/>}
+      {tab==="live-lock"&&<LiveLockView/>}
+      {tab==="contact"&&<ContactView/>}
+      {tab==="pp-matrix"&&<PPMatrixView/>}
+      {tab==="bracket"&&<BracketView bGames={bg} setBGames={setBg} teams={teams} editable={true}/>}
+      {tab==="pool2bracket"&&<Pool2BracketView poolGames={pg} teams={teams}/>}
+      {tab==="placing"&&<PlacingView bGames={bg} teams={teams}/>}
+    </div>
+  );
+}
+
+/* ════════════════════ EVENT DETAIL ════════════════════ */
+function EventDetailView({ev,onBack}){
+  const lastDiv=ev.divisions[ev.divisions.length-1];
+  const [divId,setDivId]=useState(lastDiv.id);
+  const [flightId,setFlightId]=useState(null);
+  const [pubMode,setPubMode]=useState(false);
+  const [pubTab,setPubTab]=useState("standings");
+  const [pubDivId,setPubDivId]=useState(ev.divisions[0].id);
+  const div=ev.divisions.find(d=>d.id===divId)||ev.divisions[0];
+  const flight=(flightId?div.flights.find(f=>f.id===flightId):null)||div.flights[0];
+  const pubTeams=teamDB(pubDivId);
+  const pubGames=poolGamesDB(pubDivId);
+  const pubBracket=bracketGamesDB(pubDivId);
+  const [pubBg,setPubBg]=useState(pubBracket);
+
+  return(
+    <div>
+      <div className="flex-b mb4">
+        <button className="btn btn-secondary btn-sm" onClick={onBack}>← Back to Events</button>
+        <div className="flex-c gap-3">
+          <span className="t-xs t-gray">View mode:</span>
+          <div className="v-toggle">
+            <button className={`v-btn ${!pubMode?"on":""}`} onClick={()=>setPubMode(false)}>🔧 Director</button>
+            <button className={`v-btn ${pubMode?"on":""}`} onClick={()=>setPubMode(true)}>👁 Public Fan View</button>
+          </div>
+        </div>
+      </div>
+
+      {pubMode?(
+        <div style={{background:"#fff",borderRadius:12,overflow:"hidden",boxShadow:"var(--sh-lg)"}}>
+          <div className="pub-header">
+            <div className="pub-ename">{ev.name}</div>
+            <div className="pub-meta">📍 {ev.loc} · 📅 {ev.date} · {ev.stature}</div>
+            <div className="pub-divs">
+              {ev.divisions.map(d=>(
+                <div key={d.id} className={`pub-div ${pubDivId===d.id?"on":""}`}
+                  onClick={()=>{setPubDivId(d.id);setPubBg(bracketGamesDB(d.id))}}>
+                  {d.label}
+                </div>
+              ))}
+            </div>
+            <div className="pub-tabs">
+              {["standings","bracket","schedule"].map(t=>(
+                <div key={t} className={`pub-tab ${pubTab===t?"on":""}`} onClick={()=>setPubTab(t)}>
+                  {t==="standings"?"📊 Standings":t==="bracket"?"🏆 Bracket":"📅 Schedule"}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="pub-body">
+            {pubTab==="standings"&&<StandingsView teams={pubTeams} games={pubGames}/>}
+            {pubTab==="bracket"&&<BracketView bGames={pubBg} setBGames={setPubBg} teams={pubTeams} editable={false}/>}
+            {pubTab==="schedule"&&(
+              <div className="tbl-wrap">
+                <table>
+                  <thead><tr><th>#</th><th>Pool</th><th>Date</th><th>Time</th><th>Field</th><th>Home</th><th>Score</th><th>Away</th><th>Status</th></tr></thead>
+                  <tbody>{pubGames.map(g=>{
+                    const t1=tByIdFrom(g.t1,pubTeams),t2=tByIdFrom(g.t2,pubTeams),w=winOf(g);
+                    return<tr key={g.id}>
+                      <td className="fw7">{g.num}</td>
+                      <td>{g.pool&&<span className={`chip ${poolChipClass(g.pool)}`}>Pool {g.pool}</span>}</td>
+                      <td className="t-sm">{g.date}</td><td className="t-sm">{g.time}</td>
+                      <td className="t-sm t-gray">{g.field}</td>
+                      <td style={{fontWeight:w===g.t1?700:400}}>{t1?.name||"—"}</td>
+                      <td className="fw8" style={{textAlign:"center"}}>{g.s1!=null?`${g.s1} — ${g.s2}`:""}</td>
+                      <td style={{fontWeight:w===g.t2?700:400}}>{t2?.name||"—"}</td>
+                      <td><span className={`status ${g.status==="final"?"s-final":"s-scheduled"}`}>
+                        {g.status==="final"?"✓ Final":"Scheduled"}
+                      </span></td>
+                    </tr>;
+                  })}</tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      ):(
+        <>
+          <div className="card mb4">
+            <div className="card-body" style={{padding:"14px 18px"}}>
+              <div className="flex-b">
+                <div>
+                  <div style={{fontSize:19,fontWeight:900,color:"var(--navy)"}}>{ev.name}</div>
+                  <div className="t-sm t-gray mt1">📍 {ev.loc} · 📅 {ev.date} · {ev.stature} · Director: {ev.director}</div>
+                </div>
+                <Ev_StatusBadge status={ev.status}/>
+              </div>
+            </div>
+          </div>
+          <div className="div-pills">
+            {ev.divisions.map(d=>(
+              <div key={d.id} className={`div-pill ${divId===d.id?"dp-on":"dp-off"}`}
+                onClick={()=>{setDivId(d.id);setFlightId(null)}}>
+                {d.label} <span style={{fontSize:10,opacity:.65,marginLeft:3}}>({d.teams}t)</span>
+              </div>
+            ))}
+          </div>
+          {div&&(
+            <div>
+              <div className="fl-tabs">
+                {div.flights.map(f=>(
+                  <div key={f.id}
+                    className={`fl-tab ${(!flightId&&f===div.flights[0])||flightId===f.id?"on":""} ${f.live?"fl-live":""}`}
+                    onClick={()=>setFlightId(f.id)}>
+                    {f.type==="pool"?"🔵":"🏆"} {f.name}
+                    <span style={{marginLeft:6,fontSize:10,opacity:.6}}>{f.status}</span>
+                  </div>
+                ))}
+                <div className="fl-tab fl-add" style={{color:"var(--green)",borderColor:"var(--green)"}}>+ Add Pool Flight</div>
+                <div className="fl-tab fl-add" style={{color:"var(--gold)",borderColor:"var(--gold)"}}>+ Add Bracket Flight</div>
+              </div>
+              {flight&&<FlightView flight={flight} divId={divId} eventParks={ev.parks}/>}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ════════════════════ DASHBOARD ════════════════════ */
+function Dashboard({events,onSelect}){
+  const [filter,setFilter]=useState("");
+  const [stateF,setStateF]=useState("all");
+  const shown=events.filter(e=>e.name.toLowerCase().includes(filter.toLowerCase())&&(stateF==="all"||e.state===stateF));
+  const totalTeams=events.reduce((a,ev)=>a+ev.divisions.reduce((b,d)=>b+d.teams,0),0);
+  return(
+    <div>
+      <div className="g4 mb4">
+        <div className="stat-card"><div className="stat-ico" style={{background:"#fde8e8"}}>📅</div><div><div className="stat-val">{events.length}</div><div className="stat-lbl">Total Events</div></div></div>
+        <div className="stat-card"><div className="stat-ico" style={{background:"#d6eaf8"}}>⏳</div><div><div className="stat-val">{events.filter(e=>e.status==="upcoming").length}</div><div className="stat-lbl">Upcoming</div></div></div>
+        <div className="stat-card"><div className="stat-ico" style={{background:"#d5f5e3"}}>✅</div><div><div className="stat-val">{events.filter(e=>e.status==="complete").length}</div><div className="stat-lbl">Completed</div></div></div>
+        <div className="stat-card"><div className="stat-ico" style={{background:"#fef5e7"}}>👥</div><div><div className="stat-val">{totalTeams}</div><div className="stat-lbl">Total Teams</div></div></div>
+      </div>
+      <div className="card">
+        <div className="card-hd">
+          <span className="card-title">Event Information — {shown.length} of {events.length} Results</span>
+          <div className="flex-w gap-2">
+            <select><option>Season: 2026</option><option>Season: 2025</option></select>
+            <select value={stateF} onChange={e=>setStateF(e.target.value)}>
+              <option value="all">All States</option>
+              {[...new Set(events.map(e=>e.state))].map(s=><option key={s}>{s}</option>)}
+            </select>
+            <input type="text" placeholder="Quick filter…" value={filter} onChange={e=>setFilter(e.target.value)} style={{width:170}}/>
+            <button className="btn btn-primary btn-sm">+ Create New Event</button>
+          </div>
+        </div>
+        <div className="tbl-scroll">
+          <table>
+            <thead><tr>
+              <th style={{width:14}}></th><th>Event ID</th><th>State</th><th>Start Date</th>
+              <th>Event Name</th><th># Div</th><th>Teams</th><th>Stature</th><th>Director</th><th>Status</th>
+            </tr></thead>
+            <tbody>{shown.map(ev=>(
+              <tr key={ev.id}>
+                <td style={{paddingLeft:12}}><div style={{width:8,height:8,borderRadius:"50%",background:ev.status==="complete"?"var(--green)":ev.status==="live"?"var(--red)":"var(--blue)"}}/></td>
+                <td className="fw7 t-sm">{ev.evid}</td>
+                <td><span className="badge b-gray">{ev.state}</span></td>
+                <td className="t-sm">{ev.date}</td>
+                <td><span style={{color:"var(--blue)",cursor:"pointer",fontWeight:600}} onClick={()=>onSelect(ev)}>{ev.name}</span></td>
+                <td className="t-sm">{ev.divisions.length}</td>
+                <td className="t-sm">{ev.divisions.reduce((a,d)=>a+d.teams,0)}</td>
+                <td className="t-sm">{ev.stature}</td>
+                <td className="t-sm">{ev.director}</td>
+                <td><Ev_StatusBadge status={ev.status}/></td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════ CREATE EVENT ════════════════════ */
+function CreateEventView(){
+  const [f,setF]=useState({name:"",state:"FL",city:"",date:"",stature:"Double State Qualifier",director:""});
+  const set=(k,v)=>setF(p=>({...p,[k]:v}));
+  function handleCreate(){
+    const newEvent={id:Date.now().toString(),...f,divisions:[]};
+    dbSave('events',newEvent);
+  }
+  return(
+    <div>
+      <div className="card">
+        <div className="card-hd"><span className="card-title">Create New Event</span></div>
+        <div className="card-body">
+          <div className="g2" style={{gap:20}}>
+            <div><label>Event Name *</label><input type="text" className="w100" value={f.name} onChange={e=>set("name",e.target.value)} placeholder="e.g. Spring State Qualifier"/></div>
+            <div><label>Sport</label><select className="w100"><option>Baseball</option><option>Softball</option><option>Soccer</option></select></div>
+            <div><label>State</label>
+              <select className="w100" value={f.state} onChange={e=>set("state",e.target.value)}>
+                {["FL","GA","AL","NC","MS","TX","OK","KY","TN","AZ"].map(s=><option key={s}>{s}</option>)}
+              </select>
+            </div>
+            <div><label>City / Location</label><input type="text" className="w100" value={f.city} onChange={e=>set("city",e.target.value)} placeholder="City, Park Name"/></div>
+            <div><label>Start Date *</label><input type="text" className="w100" value={f.date} onChange={e=>set("date",e.target.value)} placeholder="MM/DD/YYYY"/></div>
+            <div><label>Stature</label>
+              <select className="w100" value={f.stature} onChange={e=>set("stature",e.target.value)}>
+                {["Double State Qualifier","Super NIT","Global World Series","NABC National Championship","Individual Event"].map(s=><option key={s}>{s}</option>)}
+              </select>
+            </div>
+            <div><label>Director Name</label><input type="text" className="w100" value={f.director} onChange={e=>set("director",e.target.value)} placeholder="Director full name"/></div>
+            <div><label>Sanction State</label><select className="w100"><option>FL</option><option>AZ</option><option>GA</option><option>NC</option></select></div>
+          </div>
+          <hr/>
+          <div className="fw7 mb3 t-navy">Age Divisions</div>
+          <div className="flex-w gap-2 mb4">
+            {["7U CP","8U CP","9U Open","10U Open","11U Open","12U Open","13U Open","14U Open 60/90","15U Open"].map(d=>(
+              <label key={d} style={{display:"flex",alignItems:"center",gap:5,fontSize:13,cursor:"pointer"}}>
+                <input type="checkbox" style={{width:14,height:14}}/> {d}
+              </label>
+            ))}
+          </div>
+          <div className="flex gap-3">
+            <button className="btn btn-primary" onClick={handleCreate}>✓ Create Event</button>
+            <button className="btn btn-secondary">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════ SIDEBAR NAV ════════════════════ */
+const NAV=[
+  {sec:"Management",items:[
+    {id:"events",ico:"📅",label:"Event Management"},
+    {id:"create",ico:"➕",label:"Create Event"},
+  ]},
+  {sec:"Scheduling Tools",items:[
+    {id:"s-game-mgr",ico:"🗂",label:"Game Manager"},
+    {id:"s-layout",ico:"📐",label:"Layout Builder"},
+    {id:"s-bracket",ico:"🏆",label:"Brackets"},
+    {id:"s-standings",ico:"📊",label:"Pool Standings"},
+  ]},
+  {sec:"Setup",items:[
+    {id:"s-seeds",ico:"🎯",label:"Seeding"},
+    {id:"s-parks",ico:"🏟",label:"Parks & Fields"},
+    {id:"s-umpires",ico:"🟡",label:"Umpires"},
+    {id:"s-pitching",ico:"⚾",label:"Pitching"},
+    {id:"s-ppmatrix",ico:"🔢",label:"Pool Matrix"},
+  ]},
+  {sec:"Reports & Tools",items:[
+    {id:"s-placing",ico:"🥇",label:"Final Placing"},
+    {id:"s-rosters",ico:"👥",label:"Rosters"},
+    {id:"s-livelock",ico:"🔒",label:"Live & Lock"},
+  ]},
+  {sec:"Public",items:[
+    {id:"s-public",ico:"👁",label:"Public Fan View"},
+  ]},
+];
+const SHORTCUT_IDS=new Set(NAV.flatMap(s=>s.items).map(i=>i.id).filter(i=>i.startsWith("s-")));
+
+function ShortcutHint({id}){
+  const labels={"s-game-mgr":["🗂","Game Manager","View/edit game assignments, swap teams, enter scores. Access via: Events → Event → Division → Pool Flight → Game Manager tab."],"s-layout":["📐","Layout Builder","Visual time-slot grid. Set fields, game durations, block times. Access via: Events → Event → Division → Pool Flight → Layout tab."],"s-bracket":["🏆","Brackets","Single/double elimination bracket management. Access via: Events → Event → Division → Bracket Flight → Bracket tab."],"s-standings":["📊","Pool Standings","Real-time W/L/T, PF/PA, run differential. Access via: Events → Event → Division → Pool Flight → Standings tab."],"s-seeds":["🎯","Seeding","USSSA Points + Power Rating seeding table. Access via: Events → Event → Division → Flight → Seeds tab."],"s-parks":["🏟","Parks & Fields","Select and assign tournament parks. Access via: Events → Event → Division → Flight → Parks tab."],"s-umpires":["🟡","Umpires","Assign certified umpires to games. Access via: Events → Event → Division → Flight → Umpires tab."],"s-pitching":["⚾","Pitching Tracker","Pitch counts and rest requirements by age group. Access via: Events → Event → Division → Pool Flight → Pitching tab."],"s-ppmatrix":["🔢","Pool Matrix","Serpentine seeding matrix calculator. Access via: Events → Event → Division → Flight → PP Matrix tab."],"s-placing":["🥇","Final Placing","Division champion and runner-up display. Access via: Events → Event → Division → Bracket Flight → Placing tab."],"s-rosters":["👥","Rosters","Team rosters for any division. Access via: Events → Event → Division → Flight → Contact tab."],"s-livelock":["🔒","Live & Lock Settings","Control public visibility and lock events. Access via: Events → Event → Division → Flight → Live & Lock tab."],"s-public":["👁","Public Fan View","Toggle any event to Public Fan View mode using the view toggle in the event detail page."]};
+  const info=labels[id];
+  if(!info)return null;
+  const [ico,title,desc]=info;
+  return(
+    <div className="card">
+      <div className="card-body" style={{textAlign:"center",padding:"50px 28px"}}>
+        <div style={{fontSize:48,marginBottom:10}}>{ico}</div>
+        <div style={{fontSize:17,fontWeight:800,color:"var(--navy)",marginBottom:6}}>{title}</div>
+        <div style={{fontSize:13,color:"var(--gray)",maxWidth:420,margin:"0 auto",lineHeight:1.6}}>{desc}</div>
+        <div style={{marginTop:20,padding:"12px 16px",background:"var(--blue-l)",borderRadius:8,fontSize:12,color:"var(--blue)",fontWeight:600}}>
+          💡 Tip: All scheduling tools are available inline when you open an event and navigate to a specific division and flight.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════ APP ROOT ════════════════════ */
+function App(){
+  const [view,setView]=useState("events");
+  const [selEv,setSelEv]=useState(null);
+  const [events,setEvents]=useState(EVENTS_DB);
+  const [dbStatus,setDbStatus]=useState('connecting');
+  useEffect(()=>{
+    (async()=>{
+      const rows=await dbLoad('events');
+      if(rows&&rows.length>0){
+        const merged=[...EVENTS_DB];
+        rows.forEach(r=>{
+          if(!merged.find(e=>String(e.id)===String(r.id)))
+            merged.push({...r,divisions:r.divisions||[]});
+        });
+        setEvents(merged);
+        setDbStatus('connected');
+      }else{
+        setDbStatus(rows!==null?'connected':'offline');
+      }
+    })();
+  },[]);
+  function nav(id){setView(id);if(id==="events")setSelEv(null)}
+  function selectEvent(ev){setSelEv(ev);setView("event-detail")}
+  const title=()=>{
+    if(view==="event-detail"&&selEv)return selEv.name;
+    if(view==="create")return "Create New Event";
+    return NAV.flatMap(s=>s.items).find(i=>i.id===view)?.label||"USSSA Tournament Manager";
+  };
+  const sub=()=>view==="event-detail"&&selEv?`${selEv.loc} · ${selEv.date}`:null;
+  return(
+    <div className="app">
+      <nav className="sidebar">
+        <div className="sb-logo">
+          <div className="brand">USSSA</div>
+          <div className="sub">Tournament Manager</div>
+        </div>
+        {NAV.map(s=>(
+          <div key={s.sec} className="sb-sec">
+            <div className="sb-lbl">{s.sec}</div>
+            {s.items.map(item=>(
+              <div key={item.id}
+                className={`sb-item ${view===item.id||(item.id==="events"&&view==="event-detail")?"active":""}`}
+                onClick={()=>nav(item.id)}>
+                <span className="ico">{item.ico}</span>{item.label}
+              </div>
+            ))}
+          </div>
+        ))}
+        <div className="sb-user">
+          <div style={{fontSize:10,color:"rgba(255,255,255,.35)",textTransform:"uppercase",letterSpacing:.8}}>Signed in as</div>
+          <div style={{fontSize:13,fontWeight:700,color:"#fff",marginTop:2}}>Steve Hassett</div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,.4)"}}>steve@utproducts.com</div>
+        </div>
+      </nav>
+      <main className="main">
+        <div className="topbar">
+          <div>
+            <div className="tb-title">{title()}</div>
+            {sub()&&<div className="tb-sub">{sub()}</div>}
+          </div>
+          <div className="tb-right">
+            <span className={`badge ${dbStatus==='connected'?'b-green':dbStatus==='connecting'?'b-gold':'b-red'}`} style={{fontSize:10}}>{dbStatus==='connected'?'● DB Connected':dbStatus==='connecting'?'◌ Connecting...':'○ Offline (Demo)'}</span>
+            <span className="badge b-gray" style={{fontSize:10}}>2026 Season</span>
+            {view!=="create"&&<button className="btn btn-primary btn-sm" onClick={()=>nav("create")}>+ New Event</button>}
+          </div>
+        </div>
+        <div className="content">
+          {view==="events"&&<Dashboard events={events} onSelect={selectEvent}/>}
+          {view==="event-detail"&&selEv&&<EventDetailView ev={selEv} onBack={()=>nav("events")}/>}
+          {view==="create"&&<CreateEventView/>}
+          {SHORTCUT_IDS.has(view)&&<ShortcutHint id={view}/>}
+        </div>
+      </main>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
