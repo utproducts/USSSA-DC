@@ -1231,9 +1231,20 @@ function EventDetailView({ev,onBack}){
 
 /* ════════════════════ DASHBOARD ════════════════════ */
 function Dashboard({events,onSelect}){
-  const [filter,setFilter]=useState("");
   const [stateF,setStateF]=useState("all");
-  const shown=events.filter(e=>e.name.toLowerCase().includes(filter.toLowerCase())&&(stateF==="all"||e.state===stateF));
+  const [seasonF,setSeasonF]=useState("all");
+  const [directorF,setDirectorF]=useState("all");
+  const [statureF,setStatureF]=useState("all");
+  const getYear=d=>{const m=d.match(/\d{4}/);return m?m[0]:null;};
+  const seasons=[...new Set(events.map(e=>getYear(e.date)).filter(Boolean))].sort((a,b)=>b-a);
+  const directors=[...new Set(events.map(e=>e.director).filter(Boolean))].sort();
+  const statures=[...new Set(events.map(e=>e.stature).filter(Boolean))].sort();
+  const shown=events.filter(e=>
+    (stateF==="all"||e.state===stateF)&&
+    (seasonF==="all"||getYear(e.date)===seasonF)&&
+    (directorF==="all"||e.director===directorF)&&
+    (statureF==="all"||e.stature===statureF)
+  );
   const totalTeams=shown.reduce((a,ev)=>a+ev.divisions.reduce((b,d)=>b+d.teams,0),0);
   return(
     <div>
@@ -1247,12 +1258,22 @@ function Dashboard({events,onSelect}){
         <div className="card-hd">
           <span className="card-title">Event Information — {shown.length} of {events.length} Results</span>
           <div className="flex-w gap-2">
-            <select><option>Season: 2026</option><option>Season: 2025</option></select>
+            <select value={seasonF} onChange={e=>setSeasonF(e.target.value)}>
+              <option value="all">All Seasons</option>
+              {seasons.map(s=><option key={s} value={s}>Season: {s}</option>)}
+            </select>
             <select value={stateF} onChange={e=>setStateF(e.target.value)}>
               <option value="all">All States</option>
-              {[...new Set(events.map(e=>e.state))].map(s=><option key={s}>{s}</option>)}
+              {[...new Set(events.map(e=>e.state))].sort().map(s=><option key={s}>{s}</option>)}
             </select>
-            <input type="text" placeholder="Quick filter…" value={filter} onChange={e=>setFilter(e.target.value)} style={{width:170}}/>
+            <select value={directorF} onChange={e=>setDirectorF(e.target.value)}>
+              <option value="all">All Directors</option>
+              {directors.map(d=><option key={d}>{d}</option>)}
+            </select>
+            <select value={statureF} onChange={e=>setStatureF(e.target.value)}>
+              <option value="all">All Statures</option>
+              {statures.map(s=><option key={s}>{s}</option>)}
+            </select>
             <button className="btn btn-primary btn-sm">+ Create New Event</button>
           </div>
         </div>
