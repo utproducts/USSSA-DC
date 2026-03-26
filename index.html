@@ -2146,6 +2146,7 @@ function PitchingView({teams,games=[]}){
   const [entries,setEntries]=useState({});
   const [selId,setSelId]=useState(null);
   const [activeTab,setActiveTab]=useState("entry");
+  const [activeTeam,setActiveTeam]=useState(0);
   const [savedMsg,setSavedMsg]=useState("");
   const glist=games.filter(g=>g.status!=="bye"&&g.t1&&g.t2);
   const selG=glist.find(g=>g.id===selId)||(glist[0]||null);
@@ -2180,11 +2181,10 @@ function PitchingView({teams,games=[]}){
     return Object.values(map).map(r=>({...r,gamesCount:r.gamesSet.size})).sort((a,b)=>b.totalOuts-a.totalOuts);
   }
   const summary=buildSummary();
-  const teamColStyle={flex:1,minWidth:0,border:"1px solid #e2e8f0",borderRadius:4,overflow:"hidden"};
-  const thStyle={padding:"5px 6px",fontSize:11,fontWeight:600,background:"#f1f5f9",borderBottom:"1px solid #e2e8f0",whiteSpace:"nowrap"};
-  const tdStyle={padding:"2px 4px",verticalAlign:"middle"};
-  const inpStyle={width:"100%",border:"1px solid #d1d5db",borderRadius:3,padding:"3px 5px",fontSize:11,boxSizing:"border-box"};
-  const selStyle={width:"100%",border:"1px solid #d1d5db",borderRadius:3,padding:"3px 2px",fontSize:11};
+  const INP={width:"100%",border:"1.5px solid #cbd5e1",borderRadius:5,padding:"8px 10px",fontSize:14,boxSizing:"border-box",background:"white",outline:"none"};
+  const SEL={width:"100%",border:"1.5px solid #cbd5e1",borderRadius:5,padding:"8px 8px",fontSize:14,background:"white",outline:"none"};
+  const TH={padding:"10px 14px",fontSize:12,fontWeight:700,color:"#475569",textTransform:"uppercase",letterSpacing:.5,borderBottom:"2px solid #e2e8f0",background:"#f8fafc",whiteSpace:"nowrap"};
+  const TD={padding:"6px 10px",verticalAlign:"middle",borderBottom:"1px solid #f1f5f9"};
   return(
     <div>
       <div style={{display:"flex",gap:4,marginBottom:12}}>
@@ -2196,25 +2196,25 @@ function PitchingView({teams,games=[]}){
       {activeTab==="entry"&&(
         glist.length===0
           ?<Alrt type="info">No games scheduled yet. Add games in Game Manager first.</Alrt>
-          :<div style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+          :<div style={{display:"flex",gap:14,alignItems:"flex-start"}}>
             {/* Game list */}
-            <div style={{width:188,flexShrink:0}}>
+            <div style={{width:192,flexShrink:0}}>
               <div style={{fontWeight:700,fontSize:11,color:"#64748b",textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Select Game</div>
               {glist.map(g=>{
                 const active=g.id===selG?.id;
                 const done=hasData(g.id);
                 return(
-                  <div key={g.id} onClick={()=>setSelId(g.id)}
-                    style={{padding:"7px 10px",marginBottom:4,borderRadius:5,cursor:"pointer",border:`2px solid ${active?"#1e3a5f":"#e2e8f0"}`,
+                  <div key={g.id} onClick={()=>{setSelId(g.id);setActiveTeam(0);}}
+                    style={{padding:"8px 10px",marginBottom:4,borderRadius:6,cursor:"pointer",border:`2px solid ${active?"#1e3a5f":"#e2e8f0"}`,
                       background:active?"#eff6ff":"white",position:"relative",transition:".1s"}}>
-                    <div style={{fontWeight:700,fontSize:11,color:active?"#1e3a5f":"#1e293b",lineHeight:1.4}}>{tm(g.t1).name}</div>
-                    <div style={{fontSize:10,color:"#94a3b8",lineHeight:1}}>vs.</div>
-                    <div style={{fontWeight:700,fontSize:11,color:active?"#1e3a5f":"#1e293b",lineHeight:1.4}}>{tm(g.t2).name}</div>
-                    <div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>
+                    <div style={{fontWeight:700,fontSize:12,color:active?"#1e3a5f":"#1e293b",lineHeight:1.4}}>{tm(g.t1).name}</div>
+                    <div style={{fontSize:11,color:"#94a3b8"}}>vs.</div>
+                    <div style={{fontWeight:700,fontSize:12,color:active?"#1e3a5f":"#1e293b",lineHeight:1.4}}>{tm(g.t2).name}</div>
+                    <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>
                       {g.pool?`Pool ${g.pool}`:""}
                       {g.status==="final"&&g.s1!=null?` · ${g.s1}-${g.s2}`:""}
                     </div>
-                    {done&&<span style={{position:"absolute",top:6,right:7,fontSize:11,color:"#15803d",fontWeight:800}}>✓</span>}
+                    {done&&<span style={{position:"absolute",top:7,right:8,fontSize:12,color:"#15803d",fontWeight:800}}>✓</span>}
                   </div>
                 );
               })}
@@ -2222,69 +2222,86 @@ function PitchingView({teams,games=[]}){
             {/* Entry panel */}
             {selG?(
               <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                {/* Game header + save */}
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                   <div>
-                    <span style={{fontWeight:700,fontSize:14,color:"#1e3a5f"}}>{tm(selG.t1).name} vs. {tm(selG.t2).name}</span>
+                    <span style={{fontWeight:700,fontSize:15,color:"#1e3a5f"}}>{tm(selG.t1).name} vs. {tm(selG.t2).name}</span>
                     {selG.pool&&<span style={{fontSize:12,color:"#64748b",marginLeft:8}}>Pool {selG.pool}</span>}
                     {selG.status==="final"&&selG.s1!=null&&<span style={{fontSize:12,color:"#64748b",marginLeft:6}}>Final: {selG.s1}–{selG.s2}</span>}
                   </div>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    {savedMsg&&<span style={{color:"#15803d",fontWeight:700,fontSize:12}}>{savedMsg}</span>}
+                    {savedMsg&&<span style={{color:"#15803d",fontWeight:700,fontSize:13}}>{savedMsg}</span>}
                     <button onClick={saveChanges}
-                      style={{padding:"5px 14px",background:"#1e3a5f",color:"white",border:"none",borderRadius:4,fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                      style={{padding:"7px 16px",background:"#1e3a5f",color:"white",border:"none",borderRadius:5,fontWeight:700,fontSize:13,cursor:"pointer"}}>
                       💾 Save Changes
                     </button>
                   </div>
                 </div>
-                <div style={{display:"flex",gap:8}}>
-                  {[selG.t1,selG.t2].map(tId=>(
-                    <div key={tId} style={teamColStyle}>
-                      <div style={{background:"#1e3a5f",color:"white",padding:"6px 10px",fontWeight:700,fontSize:12}}>
+                {/* Team tabs */}
+                <div style={{display:"flex",gap:0,marginBottom:0,border:"1px solid #e2e8f0",borderBottom:"none",borderRadius:"6px 6px 0 0",overflow:"hidden"}}>
+                  {[selG.t1,selG.t2].map((tId,i)=>{
+                    const on=activeTeam===i;
+                    const tHasData=Array.from({length:ROWS},(_,r)=>getE(selG.id,tId,r)).some(e=>e.player||e.outs);
+                    return(
+                      <div key={tId} onClick={()=>setActiveTeam(i)}
+                        style={{flex:1,padding:"10px 16px",cursor:"pointer",fontWeight:700,fontSize:13,textAlign:"center",
+                          background:on?"white":"#f8fafc",color:on?"#1e3a5f":"#64748b",
+                          borderBottom:on?"3px solid #1e3a5f":"3px solid transparent",
+                          borderRight:i===0?"1px solid #e2e8f0":"none",transition:".1s"}}>
                         {tm(tId).name}
+                        {tHasData&&<span style={{marginLeft:6,fontSize:11,color:"#15803d",fontWeight:800}}>✓</span>}
                       </div>
-                      <table style={{width:"100%",borderCollapse:"collapse"}}>
-                        <thead>
-                          <tr>
-                            <th style={{...thStyle,textAlign:"left"}}>Player</th>
-                            <th style={{...thStyle,textAlign:"center"}}>Innings Pitched</th>
-                            <th style={{...thStyle,textAlign:"center",width:52}}>Pitches</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {Array.from({length:ROWS},(_,r)=>{
-                            const e=getE(selG.id,tId,r);
-                            return(
-                              <tr key={r} style={{borderBottom:"1px solid #f1f5f9",background:r%2===0?"white":"#fafbfc"}}>
-                                <td style={tdStyle}>
-                                  <input type="text" value={e.player}
-                                    onChange={ev=>setE(selG.id,tId,r,"player",ev.target.value)}
-                                    placeholder={`Pitcher ${r+1}`} style={inpStyle}/>
-                                </td>
-                                <td style={tdStyle}>
-                                  <select value={e.outs} onChange={ev=>setE(selG.id,tId,r,"outs",ev.target.value)} style={selStyle}>
-                                    {INN_OPTS.map(o=><option key={o} value={o}>{o||"— Select —"}</option>)}
-                                  </select>
-                                </td>
-                                <td style={tdStyle}>
-                                  <input type="number" min="0" value={e.pitches}
-                                    onChange={ev=>setE(selG.id,tId,r,"pitches",ev.target.value)}
-                                    style={{...inpStyle,width:48,textAlign:"center"}}/>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
+                {/* Pitcher table — full width, one team at a time */}
+                {[selG.t1,selG.t2].map((tId,i)=>activeTeam!==i?null:(
+                  <div key={tId} style={{border:"1px solid #e2e8f0",borderTop:"none",borderRadius:"0 0 6px 6px",overflow:"hidden"}}>
+                    <table style={{width:"100%",borderCollapse:"collapse"}}>
+                      <thead>
+                        <tr>
+                          <th style={{...TH,width:36,textAlign:"center"}}>#</th>
+                          <th style={{...TH,textAlign:"left"}}>Player Name</th>
+                          <th style={{...TH,textAlign:"center",width:180}}>Innings Pitched</th>
+                          <th style={{...TH,textAlign:"center",width:100}}>Pitches</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Array.from({length:ROWS},(_,r)=>{
+                          const e=getE(selG.id,tId,r);
+                          const filled=!!(e.player||e.outs);
+                          return(
+                            <tr key={r} style={{background:filled?"#f0fdf4":r%2===0?"white":"#fafbfc"}}>
+                              <td style={{...TD,textAlign:"center",color:"#94a3b8",fontWeight:700,fontSize:13,width:36}}>{r+1}</td>
+                              <td style={TD}>
+                                <input type="text" value={e.player}
+                                  onChange={ev=>setE(selG.id,tId,r,"player",ev.target.value)}
+                                  placeholder="Last, First (jersey#)" style={INP}/>
+                              </td>
+                              <td style={{...TD,width:180}}>
+                                <select value={e.outs} onChange={ev=>setE(selG.id,tId,r,"outs",ev.target.value)} style={SEL}>
+                                  {INN_OPTS.map(o=><option key={o} value={o}>{o||"— Select Inn —"}</option>)}
+                                </select>
+                              </td>
+                              <td style={{...TD,width:100}}>
+                                <input type="number" min="0" value={e.pitches}
+                                  onChange={ev=>setE(selG.id,tId,r,"pitches",ev.target.value)}
+                                  placeholder="0" style={{...INP,textAlign:"center"}}/>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
                 {!hasData(selG.id)&&(
-                  <div style={{color:"#94a3b8",fontSize:11,fontStyle:"italic",marginTop:6}}>
+                  <div style={{color:"#94a3b8",fontSize:12,fontStyle:"italic",marginTop:8}}>
                     *** Innings pitched not entered for game
                   </div>
                 )}
-                <div style={{marginTop:8,padding:"6px 10px",background:"#f8fafc",borderRadius:4,fontSize:11,color:"#64748b"}}>
-                  Innings tracked in fractional format: 1/3 = 1 out, 2/3 = 2 outs, 1 Inn = 3 outs.
+                <div style={{marginTop:8,padding:"7px 12px",background:"#f8fafc",borderRadius:5,fontSize:12,color:"#64748b"}}>
+                  Innings tracked in fractional format: 1/3 = 1 out · 2/3 = 2 outs · 1 Inn = 3 outs
                 </div>
               </div>
             ):<Alrt type="info">Select a game from the list to enter pitching data.</Alrt>}
@@ -2301,7 +2318,7 @@ function PitchingView({teams,games=[]}){
                   <th>Team</th><th>Pitcher</th>
                   <th style={{textAlign:"center"}}>Games</th>
                   <th style={{textAlign:"center"}}>Total Innings</th>
-                  <th style={{textAlign:"center"}}>Outs</th>
+                  <th style={{textAlign:"center"}}>Total Outs</th>
                 </tr></thead>
                 <tbody>
                   {summary.map((s,i)=>{
@@ -2313,8 +2330,8 @@ function PitchingView({teams,games=[]}){
                         <td className="t-sm">{tm(s.tId).name}</td>
                         <td className="fw7">{s.player}</td>
                         <td style={{textAlign:"center"}}>{s.gamesCount}</td>
-                        <td style={{textAlign:"center",fontFamily:"monospace",fontWeight:700,fontSize:14}}>{dispInns}</td>
-                        <td style={{textAlign:"center",fontSize:11,color:"#64748b"}}>{s.totalOuts}</td>
+                        <td style={{textAlign:"center",fontFamily:"monospace",fontWeight:700,fontSize:15}}>{dispInns}</td>
+                        <td style={{textAlign:"center",fontSize:12,color:"#64748b"}}>{s.totalOuts}</td>
                       </tr>
                     );
                   })}
