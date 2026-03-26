@@ -2351,7 +2351,7 @@ function LiveLockView(){
               ))}
             </div>
           </div>
-          <div style={{display:"flex",gap:8"}}>
+          <div style={{display:"flex",gap:8}}>
             {!locked&&<button className="btn btn-green" style={{flex:1}} onClick={()=>setLocked(true)}>🔒 Lock Event (Finalize)</button>}
             {locked&&<button className="btn btn-secondary" style={{flex:1}} onClick={()=>setLocked(false)}>🔓 Unlock for Editing</button>}
             <button className="btn btn-blue" style={{flex:1}}>📤 Publish Schedule</button>
