@@ -1116,6 +1116,7 @@ function StandingsView({teams,games}){
 /* ════════════════════ BRACKET ════════════════════ */
 function BracketView({bGames,setBGames,teams,editable}){
   /* ── Layout constants ── */
+  const NAVY="#1e3a5f";
   const GW=214,GH=94,BASE_GAP=18,CONN=52,HDR=28;
   const rounds=[...new Set(bGames.map(g=>g.round))].sort((a,b)=>a-b);
   const maxRound=Math.max(...rounds);
