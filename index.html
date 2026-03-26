@@ -1325,8 +1325,12 @@ function genBracketGames(seeds){
     const t1=si1<N?seeds[si1].id:null;
     const t2=si2<N?seeds[si2].id:null;
     const bye=!(t1&&t2);
+    // Store which seed number each slot represents (used for badge display)
+    const realSn1=t1?si1+1:si2+1; // the team that actually plays
+    const realSn2=bye?null:si2+1;
     gs.push({id:`bg${gn}`,num:`G${gn}`,round:1,
       t1:t1||t2,t2:bye?null:(t1?t2:null),
+      sn1:realSn1,sn2:realSn2,
       s1:null,s2:null,status:bye?"bye":"scheduled",date:"",time:"",field:""});
     gn++;
   }
@@ -1352,12 +1356,12 @@ function BracketBuilderView({teams,games=[],onBuild}){
     return s.map(row=>teams.find(t=>t.id===row.id)||row).filter(Boolean);
   },[teams,games]);
 
-  const [count,setCount]=useState(()=>Math.min(rankedTeams.length||8,16)||8);
-  const [names,setNames]=useState(()=>Array(16).fill("").map((_,i)=>rankedTeams[i]?rankedTeams[i].name:""));
+  const [count,setCount]=useState(()=>Math.min(rankedTeams.length||8,32)||8);
+  const [names,setNames]=useState(()=>Array(32).fill("").map((_,i)=>rankedTeams[i]?rankedTeams[i].name:""));
 
-  /* reset seeds when count changes — keep names that were entered */
+  /* reset seeds to standings order */
   function loadFromStandings(){
-    setNames(Array(16).fill("").map((_,i)=>rankedTeams[i]?rankedTeams[i].name:""));
+    setNames(Array(32).fill("").map((_,i)=>rankedTeams[i]?rankedTeams[i].name:""));
   }
 
   function build(){
@@ -1423,10 +1427,10 @@ function BracketBuilderView({teams,games=[],onBuild}){
             <label style={{fontSize:11,fontWeight:700,color:"#475569",display:"block",marginBottom:4}}>Number of Teams</label>
             <select value={count} onChange={e=>setCount(parseInt(e.target.value))}
               style={{width:"100%",padding:"7px 10px",border:"1px solid #cbd5e1",borderRadius:6,fontSize:13,fontWeight:600}}>
-              {[4,5,6,7,8,9,10,11,12,14,16].map(n=>{
-                const p2=Math.pow(2,Math.ceil(Math.log2(n)));
+              {Array.from({length:29},(_,i)=>i+4).map(n=>{
+                const p2=Math.pow(2,Math.ceil(Math.log2(Math.max(n,2))));
                 const b=p2-n;
-                return<option key={n} value={n}>{n} Teams{b>0?` (${b} bye${b>1?"s":""})`:""}  </option>;
+                return<option key={n} value={n}>{n} Teams{b>0?` — ${b} bye${b>1?"s":""}`:"  (no byes)"}</option>;
               })}
             </select>
           </div>
@@ -1445,19 +1449,21 @@ function BracketBuilderView({teams,games=[],onBuild}){
             <div style={{fontSize:11,fontWeight:700,color:"#475569",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>
               Seeds (by standings rank):
             </div>
-            <div style={{display:"flex",flexDirection:"column",gap:5}}>
+            <div style={{display:"grid",gridTemplateColumns:count>12?"1fr 1fr":"1fr",gap:4,
+              maxHeight:count>16?320:count>8?280:240,overflowY:"auto",paddingRight:2}}>
               {Array.from({length:count}).map((_,i)=>(
-                <div key={i} style={{display:"flex",alignItems:"center",gap:6}}>
-                  <span style={{background:seedBg(i),color:"#fff",borderRadius:"50%",
-                    width:20,height:20,display:"inline-flex",alignItems:"center",
-                    justifyContent:"center",fontSize:9,fontWeight:800,flexShrink:0}}>
-                    {i+1}
+                <div key={i} style={{display:"flex",alignItems:"center",gap:5}}>
+                  <span style={{background:seedBg(i),color:"#fff",borderRadius:3,
+                    minWidth:22,height:18,display:"inline-flex",alignItems:"center",
+                    justifyContent:"center",fontSize:9,fontWeight:800,flexShrink:0,padding:"0 3px"}}>
+                    #{i+1}
                   </span>
                   <input value={names[i]||""} onChange={e=>{const a=[...names];a[i]=e.target.value;setNames(a)}}
                     placeholder={`Seed ${i+1}…`}
-                    style={{flex:1,padding:"4px 7px",border:"1px solid #cbd5e1",borderRadius:4,fontSize:11,
-                      outline:"none",background:i<byes?"#f0fdf4":"#fff"}}/>
-                  {i<byes&&<span style={{fontSize:8,color:"#16a34a",fontWeight:700,flexShrink:0,whiteSpace:"nowrap"}}>1st Rd BYE</span>}
+                    style={{flex:1,minWidth:0,padding:"3px 6px",border:"1px solid",fontSize:10,
+                      borderColor:i<byes?"#86efac":"#cbd5e1",
+                      borderRadius:4,outline:"none",background:i<byes?"#f0fdf4":"#fff"}}/>
+                  {i<byes&&<span style={{fontSize:8,color:"#16a34a",fontWeight:700,flexShrink:0,whiteSpace:"nowrap"}}>BYE</span>}
                 </div>
               ))}
             </div>
@@ -1468,7 +1474,8 @@ function BracketBuilderView({teams,games=[],onBuild}){
             <div style={{fontSize:11,fontWeight:700,color:"#475569",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>
               Round 1 Matchups:
             </div>
-            <div style={{display:"flex",flexDirection:"column",gap:4}}>
+            <div style={{display:"flex",flexDirection:"column",gap:4,
+              maxHeight:count>16?320:count>8?280:240,overflowY:"auto"}}>
               {matchups.map((m,i)=>(
                 <div key={i} style={{background:m.bye?"#f0fdf4":"#fff",border:"1px solid",
                   borderColor:m.bye?"#bbf7d0":"#e2e8f0",borderRadius:5,padding:"4px 8px",
@@ -1506,7 +1513,7 @@ function BracketBuilderView({teams,games=[],onBuild}){
         <span>🎮 <strong>{count-1}</strong> Games</span>
         {byes>0&&<span>⏭️ <strong>{byes}</strong> Bye{byes>1?"s":""} → top seed{byes>1?"s":""}</span>}
         <span>📋 Single Elimination</span>
-        <span>🏆 Seeding: {matchups.filter(m=>!m.bye).map(m=>`${m.s1}v${m.s2}`).join(', ')}</span>
+        <span>🏆 R1: {matchups.filter(m=>!m.bye).map(m=>`#${m.s1}v#${m.s2}`).join(' · ')}</span>
       </div>
     </div>
   );
@@ -1542,7 +1549,12 @@ function BracketView({bGames,setBGames,teams,games=[],editable}){
   if(N===1){rndLabel[0]="Championship"}
   else if(N===2){rndLabel[0]="Semifinal";rndLabel[1]="Championship"}
   else if(N===3){rndLabel[0]="Quarterfinal";rndLabel[1]="Semifinal";rndLabel[2]="Championship"}
-  else{rounds.forEach((_,i)=>{rndLabel[i]=i===N-1?"Championship":i===N-2?"Semifinal":i===N-3?"Quarterfinal":`Round ${i+1}`})}
+  else{rounds.forEach((_,i)=>{
+    if(i===N-1)rndLabel[i]="Championship";
+    else if(i===N-2)rndLabel[i]="Semifinal";
+    else if(i===N-3)rndLabel[i]="Quarterfinal";
+    else{const cnt=Math.round(r1Count/Math.pow(2,i)*2);rndLabel[i]="Round of "+cnt;}
+  })}
 
   function upd(id,k,v){
     if(!editable)return;
@@ -1621,13 +1633,18 @@ function BracketView({bGames,setBGames,teams,games=[],editable}){
                         padding:"0 7px",
                         background:win?"#f0fdf4":lose?"#fff8f8":"#fff",
                         borderTop:isT1?"none":"1px solid #e8ecf0"}}>
-                        {/* Seed number (round 1 only) */}
-                        {ri===0&&(
-                          <span style={{fontSize:8,fontWeight:800,color:"#94a3b8",
-                            minWidth:16,fontFamily:"monospace",marginRight:3}}>
-                            {isT1?`(${g.num.replace("G","")})`:""}
-                          </span>
-                        )}
+                        {/* Seed badge (round 1, when seed number stored) */}
+                        {ri===0&&(isT1?g.sn1:g.sn2)&&(()=>{
+                          const sn=isT1?g.sn1:g.sn2;
+                          const bg=sn===1?"#b45309":sn===2?"#1d4ed8":sn===3?"#7c3aed":sn<=4?"#0e7490":sn<=8?"#1e3a5f":"#475569";
+                          return(
+                            <span style={{background:bg,color:"#fff",borderRadius:3,
+                              fontSize:8,fontWeight:800,padding:"1px 4px",marginRight:4,
+                              flexShrink:0,fontFamily:"monospace",lineHeight:"14px"}}>
+                              #{sn}
+                            </span>
+                          );
+                        })()}
                         <span style={{flex:1,fontSize:11,fontWeight:win?700:500,
                           overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
                           color:lose?"#c0cad8":"#1e293b",
