@@ -395,22 +395,24 @@ function Alrt({type="info",children}){
 }
 
 /* ════════════════════ SEEDS ════════════════════ */
-function SeedsView({teams}){
+function SeedsView({teams,divCode=""}){
   const ageNum=cls=>{const m=(cls||"").match(/^(\d+)/);return m?parseInt(m[1]):0};
   const clsSuffix=cls=>(cls||"").replace(/^\d+/,"");
   const CLASS_ORDER=["Maj","AAA","AA","A","B","C"];
-  // Group by age + class
+  const isOpen=/Op$/i.test(divCode);
+  // Open events: group by age only. Classed events: group by age + class.
   const groupMap={};
   teams.forEach(t=>{
     const age=ageNum(t.cls);
-    const suf=clsSuffix(t.cls)||t.cls||"Other";
-    const key=`${age}||${suf}`;
+    const suf=isOpen?"Open":clsSuffix(t.cls)||t.cls||"Other";
+    const key=isOpen?`${age}`:`${age}||${suf}`;
     if(!groupMap[key])groupMap[key]={age,suf,teams:[]};
     groupMap[key].teams.push(t);
   });
   // Sort groups: age ascending, then class by rank (Maj first)
   const groups=Object.values(groupMap).sort((a,b)=>{
     if(a.age!==b.age)return a.age-b.age;
+    if(a.suf==="Open"&&b.suf==="Open")return 0;
     const ai=CLASS_ORDER.indexOf(a.suf),bi=CLASS_ORDER.indexOf(b.suf);
     return (ai<0?99:ai)-(bi<0?99:bi);
   });
@@ -418,12 +420,12 @@ function SeedsView({teams}){
   groups.forEach(g=>g.teams.sort((a,b)=>((b.pts||0)+(b.pr||0))-((a.pts||0)+(a.pr||0))));
   return(
     <div>
-      <Alrt type="info">📊 Teams seeded by USSSA Points + Power Rating, grouped by age and class. Each division seeds independently.</Alrt>
+      <Alrt type="info">📊 Teams seeded by USSSA Points + Power Rating.{isOpen?" Open event — all teams seeded together by age.":" Classed event — each age + class division seeds independently."}</Alrt>
       {groups.map(g=>(
         <div key={`${g.age}${g.suf}`} style={{marginBottom:24}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,padding:"7px 14px",
             background:"#eff6ff",borderLeft:"4px solid #1e3a5f",borderRadius:"0 5px 5px 0"}}>
-            <span style={{fontWeight:800,fontSize:15,color:"#1e3a5f"}}>{g.age>0?`${g.age}U`:""} {g.suf}</span>
+            <span style={{fontWeight:800,fontSize:15,color:"#1e3a5f"}}>{g.age>0?`${g.age}U`:""}{g.suf?" "+g.suf:""}</span>
             <span style={{fontSize:12,color:"#64748b",fontWeight:600}}>{g.teams.length} {g.teams.length===1?"team":"teams"}</span>
           </div>
           <div className="tbl-wrap">
@@ -2806,7 +2808,7 @@ function ContactView({ev}){
 }
 
 /* ════════════════════ FLIGHT VIEW ════════════════════ */
-function FlightView({flight,divId,eventParks}){
+function FlightView({flight,divId,divCode,eventParks}){
   const teams=teamDB(divId);
   const [pg,setPg]=useState(poolGamesDB(divId));
   const [bg,setBg]=useState(bracketGamesDB(divId));
@@ -2824,7 +2826,7 @@ function FlightView({flight,divId,eventParks}){
         ))}
       </div>
       {tab==="standings"&&<StandingsView teams={teams} games={pg}/>}
-      {tab==="seeds"&&<SeedsView teams={teams}/>}
+      {tab==="seeds"&&<SeedsView teams={teams} divCode={divCode}/>}
       {tab==="game-manager"&&<GameMgrView games={isPool?pg:bg} setGames={isPool?setPg:setBg} teams={teams} readOnly={false}/>}
       {tab==="layout"&&<LayoutView games={isPool?pg:bg} setGames={isPool?setPg:setBg} teams={teams}/>}
       {tab==="pitching"&&<PitchingView teams={teams} games={pg}/>}
@@ -2951,7 +2953,7 @@ function EventDetailView({ev,onBack}){
                 <div className="fl-tab fl-add" style={{color:"var(--green)",borderColor:"var(--green)"}}>+ Add Pool Flight</div>
                 <div className="fl-tab fl-add" style={{color:"var(--gold)",borderColor:"var(--gold)"}}>+ Add Bracket Flight</div>
               </div>
-              {flight&&<FlightView flight={flight} divId={divId} eventParks={ev.parks}/>}
+              {flight&&<FlightView flight={flight} divId={divId} divCode={div.code} eventParks={ev.parks}/>}
             </div>
           )}
         </>
