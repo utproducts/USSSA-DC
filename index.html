@@ -1356,7 +1356,9 @@ function BracketBuilderView({teams,games=[],onBuild}){
     return s.map(row=>teams.find(t=>t.id===row.id)||row).filter(Boolean);
   },[teams,games]);
 
-  const [count,setCount]=useState(()=>Math.min(rankedTeams.length||8,32)||8);
+  // Default to 8 — user picks the count intentionally; don't auto-set from team count
+  // which can cause confusing "everyone gets a bye" situations for odd team counts
+  const [count,setCount]=useState(8);
   const [names,setNames]=useState(()=>Array(32).fill("").map((_,i)=>rankedTeams[i]?rankedTeams[i].name:""));
 
   /* reset seeds to standings order */
@@ -1446,11 +1448,21 @@ function BracketBuilderView({teams,games=[],onBuild}){
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
           {/* Left: seed entry */}
           <div>
-            <div style={{fontSize:11,fontWeight:700,color:"#475569",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>
-              Seeds (by standings rank):
+            <div style={{fontSize:11,fontWeight:700,color:"#475569",marginBottom:6,textTransform:"uppercase",letterSpacing:.5}}>
+              Seeds (standings order):
             </div>
+            {/* Bye banner — shown only when there are byes */}
+            {byes>0&&(
+              <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:5,
+                padding:"5px 8px",marginBottom:7,fontSize:10,color:"#15803d",fontWeight:600}}>
+                ⏭️ Seeds <strong>#1–#{byes}</strong> receive a 1st round bye
+                <span style={{color:"#94a3b8",fontWeight:400,marginLeft:6}}>
+                  (seeds #{byes+1}–#{count} play Round 1)
+                </span>
+              </div>
+            )}
             <div style={{display:"grid",gridTemplateColumns:count>12?"1fr 1fr":"1fr",gap:4,
-              maxHeight:count>16?320:count>8?280:240,overflowY:"auto",paddingRight:2}}>
+              maxHeight:count>16?300:count>8?260:220,overflowY:"auto",paddingRight:2}}>
               {Array.from({length:count}).map((_,i)=>(
                 <div key={i} style={{display:"flex",alignItems:"center",gap:5}}>
                   <span style={{background:seedBg(i),color:"#fff",borderRadius:3,
@@ -1462,8 +1474,8 @@ function BracketBuilderView({teams,games=[],onBuild}){
                     placeholder={`Seed ${i+1}…`}
                     style={{flex:1,minWidth:0,padding:"3px 6px",border:"1px solid",fontSize:10,
                       borderColor:i<byes?"#86efac":"#cbd5e1",
-                      borderRadius:4,outline:"none",background:i<byes?"#f0fdf4":"#fff"}}/>
-                  {i<byes&&<span style={{fontSize:8,color:"#16a34a",fontWeight:700,flexShrink:0,whiteSpace:"nowrap"}}>BYE</span>}
+                      borderRadius:4,outline:"none",
+                      background:i<byes?"#f0fdf4":"#fff"}}/>
                 </div>
               ))}
             </div>
@@ -1481,9 +1493,10 @@ function BracketBuilderView({teams,games=[],onBuild}){
                   borderColor:m.bye?"#bbf7d0":"#e2e8f0",borderRadius:5,padding:"4px 8px",
                   fontSize:10}}>
                   {m.bye?(
-                    <span style={{color:"#16a34a",fontWeight:700}}>
-                      <span style={{background:"#dcfce7",borderRadius:3,padding:"1px 4px",marginRight:4}}>#{m.s1<m.s2?m.s1:m.s2}</span>
-                      {m.s1<m.s2?m.n1:m.n2} — 1st Round BYE ⏭️
+                    <span style={{color:"#15803d",fontWeight:600}}>
+                      <span style={{background:"#dcfce7",color:"#15803d",borderRadius:3,padding:"1px 4px",marginRight:4,fontWeight:800}}>#{m.s1<m.s2?m.s1:m.s2}</span>
+                      {m.s1<m.s2?m.n1:m.n2}
+                      <span style={{color:"#86efac",marginLeft:5}}>⏭ BYE</span>
                     </span>
                   ):(
                     <span style={{color:"#1e293b"}}>
