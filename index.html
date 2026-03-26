@@ -1307,8 +1307,15 @@ function genBracketGames(seeds){
   const P=Math.pow(2,R);
   function seedPos(sz){
     if(sz===2)return[0,1];
-    const h=seedPos(sz/2),r=[];
-    for(const x of h){r.push(x);r.push(sz-1-x)}
+    // Standard bracket seeding: seed1 top, seed2 bottom, ensures 1v2 only in final
+    // For 8 teams produces: 1v8, 4v5, 3v6, 2v7 (matches USSSA/NCAA standard)
+    const prev=seedPos(sz/2);
+    const half=sz/4;
+    const top=prev.slice(0,half);
+    const bot=prev.slice(half).reverse(); // reverse bottom half so seed2 stays at bottom
+    const r=[];
+    for(const x of top){r.push(x);r.push(sz-1-x)}
+    for(const x of bot){r.push(x);r.push(sz-1-x)}
     return r;
   }
   const pos=seedPos(P);
@@ -1333,10 +1340,26 @@ function genBracketGames(seeds){
   return gs;
 }
 
-function BracketBuilderView({teams,onBuild}){
+function BracketBuilderView({teams,games=[],onBuild}){
   const NAVY="#1e3a5f";
-  const [count,setCount]=useState(8);
-  const [names,setNames]=useState(Array(16).fill("").map((_,i)=>teams[i]?teams[i].name:""));
+  const TEAL="#0e7490";
+
+  /* ── compute standings-ranked team list ── */
+  const rankedTeams=React.useMemo(()=>{
+    if(!games.length)return teams;
+    const s=calcUSSSAStandings(teams,games);
+    // s is already sorted by winPct, wins, etc.
+    return s.map(row=>teams.find(t=>t.id===row.id)||row).filter(Boolean);
+  },[teams,games]);
+
+  const [count,setCount]=useState(()=>Math.min(rankedTeams.length||8,16)||8);
+  const [names,setNames]=useState(()=>Array(16).fill("").map((_,i)=>rankedTeams[i]?rankedTeams[i].name:""));
+
+  /* reset seeds when count changes — keep names that were entered */
+  function loadFromStandings(){
+    setNames(Array(16).fill("").map((_,i)=>rankedTeams[i]?rankedTeams[i].name:""));
+  }
+
   function build(){
     const seeds=Array.from({length:count}).map((_,i)=>{
       const nm=names[i]||`Team ${i+1}`;
@@ -1345,18 +1368,66 @@ function BracketBuilderView({teams,onBuild}){
     });
     onBuild(genBracketGames(seeds),seeds);
   }
+
   const P=Math.pow(2,Math.ceil(Math.log2(Math.max(count,2))));
   const byes=P-count;
+
+  /* seed badge color */
+  const seedBg=i=>i===0?"#b45309":i===1?"#1d4ed8":i===2?"#7c3aed":NAVY;
+
+  /* preview: what matchups will the seeding produce? */
+  function previewMatchups(){
+    const sz=P;
+    function seedPos(s){
+      if(s===2)return[0,1];
+      const prev=seedPos(s/2);
+      const h=s/4;
+      const top=prev.slice(0,h);
+      const bot=prev.slice(h).reverse();
+      const r=[];
+      for(const x of top){r.push(x);r.push(s-1-x)}
+      for(const x of bot){r.push(x);r.push(s-1-x)}
+      return r;
+    }
+    const pos=seedPos(sz);
+    const matchups=[];
+    for(let p=0;p<sz/2;p++){
+      const i1=pos[p*2],i2=pos[p*2+1];
+      const n1=i1<count?(names[i1]||`Seed ${i1+1}`):"BYE";
+      const n2=i2<count?(names[i2]||`Seed ${i2+1}`):"BYE";
+      const bye=i1>=count||i2>=count;
+      matchups.push({s1:i1+1,s2:i2+1,n1,n2,bye});
+    }
+    return matchups;
+  }
+  const matchups=previewMatchups();
+
   return(
-    <div style={{maxWidth:640}}>
+    <div style={{maxWidth:680}}>
       <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:10,padding:"18px",marginBottom:14}}>
-        <div style={{fontWeight:800,fontSize:14,color:NAVY,marginBottom:14}}>⚙️ Bracket Setup</div>
+        {/* Header row */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+          <div style={{fontWeight:800,fontSize:14,color:NAVY}}>⚙️ Bracket Setup</div>
+          {rankedTeams.length>0&&(
+            <button onClick={loadFromStandings}
+              style={{padding:"5px 11px",background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:5,
+                fontSize:11,fontWeight:700,color:TEAL,cursor:"pointer"}}>
+              ↺ Load from Standings
+            </button>
+          )}
+        </div>
+
+        {/* Count + format row */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
           <div>
             <label style={{fontSize:11,fontWeight:700,color:"#475569",display:"block",marginBottom:4}}>Number of Teams</label>
             <select value={count} onChange={e=>setCount(parseInt(e.target.value))}
               style={{width:"100%",padding:"7px 10px",border:"1px solid #cbd5e1",borderRadius:6,fontSize:13,fontWeight:600}}>
-              {[4,5,6,7,8,9,10,11,12,14,16].map(n=><option key={n} value={n}>{n} Teams{n!==Math.pow(2,Math.ceil(Math.log2(n)))?` (${Math.pow(2,Math.ceil(Math.log2(n)))-n} bye${Math.pow(2,Math.ceil(Math.log2(n)))-n>1?"s":""})`:""}</option>)}
+              {[4,5,6,7,8,9,10,11,12,14,16].map(n=>{
+                const p2=Math.pow(2,Math.ceil(Math.log2(n)));
+                const b=p2-n;
+                return<option key={n} value={n}>{n} Teams{b>0?` (${b} bye${b>1?"s":""})`:""}  </option>;
+              })}
             </select>
           </div>
           <div>
@@ -1366,23 +1437,62 @@ function BracketBuilderView({teams,onBuild}){
             </select>
           </div>
         </div>
-        <div style={{fontWeight:700,fontSize:11,color:"#475569",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>Seed Teams (drag to re-order):</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-          {Array.from({length:count}).map((_,i)=>(
-            <div key={i} style={{display:"flex",alignItems:"center",gap:6}}>
-              <span style={{background:i===0?"#b45309":i===1?"#1d4ed8":NAVY,color:"#fff",
-                borderRadius:"50%",width:22,height:22,display:"inline-flex",alignItems:"center",
-                justifyContent:"center",fontSize:10,fontWeight:800,flexShrink:0}}>
-                {i+1}
-              </span>
-              <input value={names[i]||""} onChange={e=>{const a=[...names];a[i]=e.target.value;setNames(a)}}
-                placeholder={`Seed ${i+1}…`}
-                style={{flex:1,padding:"5px 8px",border:"1px solid #cbd5e1",borderRadius:4,fontSize:11,
-                  outline:"none",background:i<byes?"#f0fdf4":"#fff"}}/>
-              {i<byes&&<span style={{fontSize:8,color:"#16a34a",fontWeight:700,flexShrink:0}}>BYE</span>}
+
+        {/* Two-column layout: seed entry + matchup preview */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+          {/* Left: seed entry */}
+          <div>
+            <div style={{fontSize:11,fontWeight:700,color:"#475569",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>
+              Seeds (by standings rank):
             </div>
-          ))}
+            <div style={{display:"flex",flexDirection:"column",gap:5}}>
+              {Array.from({length:count}).map((_,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{background:seedBg(i),color:"#fff",borderRadius:"50%",
+                    width:20,height:20,display:"inline-flex",alignItems:"center",
+                    justifyContent:"center",fontSize:9,fontWeight:800,flexShrink:0}}>
+                    {i+1}
+                  </span>
+                  <input value={names[i]||""} onChange={e=>{const a=[...names];a[i]=e.target.value;setNames(a)}}
+                    placeholder={`Seed ${i+1}…`}
+                    style={{flex:1,padding:"4px 7px",border:"1px solid #cbd5e1",borderRadius:4,fontSize:11,
+                      outline:"none",background:i<byes?"#f0fdf4":"#fff"}}/>
+                  {i<byes&&<span style={{fontSize:8,color:"#16a34a",fontWeight:700,flexShrink:0,whiteSpace:"nowrap"}}>1st Rd BYE</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Right: matchup preview */}
+          <div>
+            <div style={{fontSize:11,fontWeight:700,color:"#475569",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>
+              Round 1 Matchups:
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:4}}>
+              {matchups.map((m,i)=>(
+                <div key={i} style={{background:m.bye?"#f0fdf4":"#fff",border:"1px solid",
+                  borderColor:m.bye?"#bbf7d0":"#e2e8f0",borderRadius:5,padding:"4px 8px",
+                  fontSize:10}}>
+                  {m.bye?(
+                    <span style={{color:"#16a34a",fontWeight:700}}>
+                      <span style={{background:"#dcfce7",borderRadius:3,padding:"1px 4px",marginRight:4}}>#{m.s1<m.s2?m.s1:m.s2}</span>
+                      {m.s1<m.s2?m.n1:m.n2} — 1st Round BYE ⏭️
+                    </span>
+                  ):(
+                    <span style={{color:"#1e293b"}}>
+                      <span style={{background:"#e0f2fe",borderRadius:3,padding:"1px 4px",marginRight:3,color:NAVY,fontWeight:700}}>#{m.s1}</span>
+                      <span style={{fontWeight:600}}>{m.n1}</span>
+                      <span style={{color:"#94a3b8",margin:"0 4px",fontWeight:700}}>vs</span>
+                      <span style={{background:"#e0f2fe",borderRadius:3,padding:"1px 4px",marginRight:3,color:NAVY,fontWeight:700}}>#{m.s2}</span>
+                      <span style={{fontWeight:600}}>{m.n2}</span>
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
+
         <button onClick={build}
           style={{marginTop:16,width:"100%",padding:"11px",background:NAVY,color:"#fff",
             border:"none",borderRadius:7,fontWeight:800,fontSize:13,cursor:"pointer",
@@ -1391,18 +1501,19 @@ function BracketBuilderView({teams,onBuild}){
         </button>
       </div>
       <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:6,padding:"10px 14px",
-        fontSize:11,color:"#1d4ed8",display:"flex",gap:16}}>
+        fontSize:11,color:"#1d4ed8",display:"flex",gap:16,flexWrap:"wrap"}}>
         <span>🏟️ <strong>{count}</strong> Teams</span>
         <span>🎮 <strong>{count-1}</strong> Games</span>
-        {byes>0&&<span>⏭️ <strong>{byes}</strong> Byes (top seeds)</span>}
+        {byes>0&&<span>⏭️ <strong>{byes}</strong> Bye{byes>1?"s":""} → top seed{byes>1?"s":""}</span>}
         <span>📋 Single Elimination</span>
+        <span>🏆 Seeding: {matchups.filter(m=>!m.bye).map(m=>`${m.s1}v${m.s2}`).join(', ')}</span>
       </div>
     </div>
   );
 }
 
 /* ════════════════════ BRACKET ════════════════════ */
-function BracketView({bGames,setBGames,teams,editable}){
+function BracketView({bGames,setBGames,teams,games=[],editable}){
   const NAVY="#1e3a5f";
   const [tab,setTab]=useState("view");
   const [builtGames,setBuiltGames]=useState(null);
@@ -1460,7 +1571,7 @@ function BracketView({bGames,setBGames,teams,editable}){
       </div>
 
       {/* ── Builder tab ── */}
-      {tab==="build"&&<BracketBuilderView teams={teams} onBuild={onBuild}/>}
+      {tab==="build"&&<BracketBuilderView teams={teams} games={games} onBuild={onBuild}/>}
 
       {/* ── Bracket view tab ── */}
       {tab==="view"&&(
@@ -2561,7 +2672,7 @@ function App(){
           {view==="create"&&<CreateEventView/>}
           {view==="s-game-mgr"&&<GameMgrView games={allGames} setGames={setAllGames} teams={ALL_TEAMS}/>}
           {view==="s-layout"&&<LayoutView games={allGames} setGames={setAllGames} teams={ALL_TEAMS}/>}
-          {view==="s-bracket"&&<BracketView bGames={allBracketGames} setBGames={setAllBracketGames} teams={ALL_TEAMS} editable={true}/>}
+          {view==="s-bracket"&&<BracketView bGames={allBracketGames} setBGames={setAllBracketGames} teams={ALL_TEAMS} games={allGames} editable={true}/>}
           {view==="s-standings"&&<StandingsView teams={ALL_TEAMS} games={allGames}/>}
           {view==="s-seeds"&&<SeedsView teams={ALL_TEAMS}/>}
           {view==="s-parks"&&<ParksView eventParks={[]}/>}
