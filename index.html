@@ -2074,6 +2074,7 @@ function App(){
   const [selEv,setSelEv]=useState(null);
   const [events,setEvents]=useState(EVENTS_DB);
   const [allGames,setAllGames]=useState([...PG8,...PG9,...PG12]);
+  const [allBracketGames,setAllBracketGames]=useState([...BG8,...BG9]);
   const [dbStatus,setDbStatus]=useState('connecting');
   useEffect(()=>{
     (async()=>{
@@ -2142,7 +2143,8 @@ function App(){
           {view==="create"&&<CreateEventView/>}
           {view==="s-game-mgr"&&<GameMgrView games={allGames} setGames={setAllGames} teams={ALL_TEAMS}/>}
           {view==="s-layout"&&<LayoutView games={allGames} setGames={setAllGames} teams={ALL_TEAMS}/>}
-          {SHORTCUT_IDS.has(view)&&view!=="s-game-mgr"&&view!=="s-layout"&&<ShortcutHint id={view}/>}
+          {view==="s-bracket"&&<BracketView bGames={allBracketGames} setBGames={setAllBracketGames} teams={ALL_TEAMS} editable={true}/>}
+          {SHORTCUT_IDS.has(view)&&view!=="s-game-mgr"&&view!=="s-layout"&&view!=="s-bracket"&&<ShortcutHint id={view}/>}
         </div>
       </main>
     </div>
