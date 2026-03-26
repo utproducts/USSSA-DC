@@ -1387,7 +1387,8 @@ function BracketBuilderView({teams,games=[],onBuild}){
 
     const rounds=[...new Set(gs.map(g=>g.round))].sort((a,b)=>a-b);
     rounds.forEach(r=>{
-      const playable=gs.filter(g=>g.round===r&&g.status!=="bye"&&g.t2); // real games only
+      // include all non-bye games in this round — later rounds have t1/t2=null (TBD) but still need scheduled times
+      const playable=gs.filter(g=>g.round===r&&g.status!=="bye");
       if(!playable.length)return;
       let wave=0;
       playable.forEach((g,i)=>{
