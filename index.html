@@ -1068,47 +1068,176 @@ function LayoutView({games,setGames,teams}){
 }
 
 /* ════════════════════ POOL STANDINGS ════════════════════ */
+function calcUSSSAStandings(teams,games){
+  const s={};
+  teams.forEach(t=>{s[t.id]={...t,w:0,l:0,t_:0,pf:0,pa:0,gp:0,rdMax8Sum:0}});
+  games.forEach(g=>{
+    if(g.status!=="final"||g.s1==null||g.s2==null)return;
+    if(!s[g.t1]||!s[g.t2])return;
+    s[g.t1].pf+=g.s1;s[g.t1].pa+=g.s2;s[g.t1].gp++;
+    s[g.t2].pf+=g.s2;s[g.t2].pa+=g.s1;s[g.t2].gp++;
+    const cap=Math.min(8,Math.abs(g.s1-g.s2));
+    const rd1=g.s1>g.s2?cap:g.s1<g.s2?-cap:0;
+    s[g.t1].rdMax8Sum+=rd1;s[g.t2].rdMax8Sum-=rd1;
+    if(g.s1>g.s2){s[g.t1].w++;s[g.t2].l++}
+    else if(g.s2>g.s1){s[g.t2].w++;s[g.t1].l++}
+    else{s[g.t1].t_++;s[g.t2].t_++}
+  });
+  return Object.values(s).map(t=>{
+    const gp=t.gp||1;
+    return{
+      ...t,
+      record:`${t.w}-${t.l}-${t.t_}`,
+      winPct:t.gp>0?Math.round((t.w+t.t_*0.5)/t.gp*1000):0,
+      avgRA:t.gp>0?(t.pa/t.gp).toFixed(1):"—",
+      avgRS:t.gp>0?(t.pf/t.gp).toFixed(1):"—",
+      avgRD:t.gp>0?((t.pf-t.pa)/t.gp).toFixed(1):"—",
+      avgRDMax8:t.gp>0?(t.rdMax8Sum/t.gp).toFixed(1):"—",
+    };
+  }).sort((a,b)=>{
+    // 1) Win% desc 2) Wins desc 3) Losses asc 4) Avg PA asc 5) AvgRDMax8 desc
+    if(b.winPct!==a.winPct)return b.winPct-a.winPct;
+    if(b.w!==a.w)return b.w-a.w;
+    if(a.l!==b.l)return a.l-b.l;
+    const paA=a.gp>0?a.pa/a.gp:999,paB=b.gp>0?b.pa/b.gp:999;
+    if(Math.abs(paA-paB)>0.001)return paA-paB;
+    return b.avgRDMax8-a.avgRDMax8;
+  });
+}
 function StandingsView({teams,games}){
+  const NAVY="#1e3a5f";
   const pools=[...new Set(games.map(g=>g.pool))].filter(Boolean).sort();
-  if(pools.length===0)return <Alrt type="info">No pool play games scheduled yet for this flight.</Alrt>;
+  const [showRules,setShowRules]=useState(false);
+  if(pools.length===0)return <Alrt type="info">No pool play games scheduled yet for this division.</Alrt>;
+  const TH=({children,w,center})=>(
+    <th style={{background:NAVY,color:"#fff",padding:"5px 6px",fontSize:10,fontWeight:700,
+      textAlign:"center",verticalAlign:"middle",lineHeight:1.25,whiteSpace:"normal",
+      width:w||"auto",borderRight:"1px solid rgba(255,255,255,.12)"}}>
+      {children}
+    </th>
+  );
   return(
     <div>
       {pools.map(pool=>{
         const pgTeamIds=[...new Set(games.filter(g=>g.pool===pool).flatMap(g=>[g.t1,g.t2]))];
         const pgTeams=teams.filter(t=>pgTeamIds.includes(t.id));
-        const pgGames=games.filter(g=>g.pool===pool);
-        const st=calcStandings(pgTeams,pgGames);
+        const pgGames=games.filter(g=>g.pool===pool&&g.status==="final");
+        const st=calcUSSSAStandings(pgTeams,pgGames);
         return(
-          <div key={pool}>
-            <div className="pool-hdr">POOL {pool} — {pgTeams.length} Teams</div>
-            <div className="pool-tbl">
-              <table>
-                <thead><tr>
-                  <th style={{width:40}}>#</th><th>Team</th><th>Class</th>
-                  <th style={{width:40}}>W</th><th style={{width:40}}>L</th><th style={{width:40}}>T</th>
-                  <th>PF</th><th>PA</th><th>+/-</th><th>Pts</th>
-                </tr></thead>
-                <tbody>{st.map((t,i)=>(
-                  <tr key={t.id} style={{background:i===0?"#f0fdf4":i===1?"#f8f9fa":""}}>
-                    <td><SeedRank n={i+1}/></td>
-                    <td className="fw7">{t.name}</td>
-                    <td><span className="badge b-gray">{t.cls}</span></td>
-                    <td className="fw7" style={{color:"var(--green)"}}>{t.w}</td>
-                    <td style={{color:"var(--red)"}}>{t.l}</td>
-                    <td>{t.t_}</td>
-                    <td className="fw7">{t.pf}</td><td>{t.pa}</td>
-                    <td className="fw7" style={{color:t.pf-t.pa>=0?"var(--green)":"var(--red)"}}>
-                      {t.pf-t.pa>=0?"+":""}{t.pf-t.pa}
-                    </td>
-                    <td className="fw8">{t.pts}</td>
+          <div key={pool} style={{marginBottom:24}}>
+            {/* Pool header bar */}
+            <div style={{background:"#2d2d2d",color:"#fff",textAlign:"center",fontWeight:800,
+              fontSize:13,letterSpacing:2,padding:"7px 0",marginBottom:0,textTransform:"uppercase"}}>
+              P O O L — {pool}
+            </div>
+            <div style={{overflowX:"auto"}}>
+              <table style={{borderCollapse:"collapse",width:"100%",fontSize:11,minWidth:900}}>
+                <thead>
+                  <tr>
+                    <TH w={28}>P O O L</TH>
+                    <TH w={36}>Pool Plc</TH>
+                    <TH w={46}>Tm Cls</TH>
+                    <TH w={160}>Team Name</TH>
+                    <TH w={56}>Record</TH>
+                    <TH w={40}>Win Pct</TH>
+                    <TH w={44}>Did Tied Teams Play</TH>
+                    <TH w={54}>Record vs. Tied Teams</TH>
+                    <TH w={50}>Win Pct vs. Tied Teams</TH>
+                    <TH w={44}>Avg Runs Allow&shy;ed</TH>
+                    <TH w={44}>Avg Runs Scor&shy;ed</TH>
+                    <TH w={44}>Avg Runs Diff</TH>
+                    <TH w={50}>Avg Runs Diff with Max(8)</TH>
+                    <TH w={56}>USSSA Points Prior To Start Date</TH>
+                    <TH w={50}>Current Power Ranking</TH>
+                    <TH w={56}>Current Power + Points</TH>
+                    <TH w={50}>Forfeit Loss Assigned</TH>
                   </tr>
-                ))}</tbody>
+                </thead>
+                <tbody>
+                  {st.map((t,i)=>{
+                    const rowBg=i===0?"#f0fdf4":i%2===0?"#fff":"#f8fafc";
+                    const plcColor=i===0?"#15803d":i===1?"#1d4ed8":i===2?"#7c3aed":"#1e293b";
+                    return(
+                      <tr key={t.id} style={{background:rowBg}}>
+                        <td style={{textAlign:"center",fontWeight:700,color:NAVY,fontSize:12,
+                          borderRight:"1px solid #e2e8f0"}}>{pool}</td>
+                        <td style={{textAlign:"center"}}>
+                          <span style={{background:plcColor,color:"#fff",borderRadius:12,
+                            padding:"2px 7px",fontSize:11,fontWeight:700}}>{i+1}</span>
+                        </td>
+                        <td style={{textAlign:"center"}}>
+                          <span style={{background:"#f1f5f9",border:"1px solid #cbd5e1",
+                            borderRadius:3,padding:"2px 4px",fontSize:9,fontWeight:600,
+                            color:"#475569",whiteSpace:"nowrap"}}>{t.cls||"—"}</span>
+                        </td>
+                        <td style={{fontWeight:600,color:"#1e3a5f",padding:"6px 8px"}}>
+                          {t.state&&<span style={{fontSize:9,color:"#64748b",marginRight:4}}>[{t.state}]</span>}
+                          {t.name}
+                        </td>
+                        <td style={{textAlign:"center",fontWeight:700,fontFamily:"monospace",
+                          whiteSpace:"nowrap"}}>{t.record}</td>
+                        <td style={{textAlign:"center",fontWeight:700,
+                          color:t.winPct===1000?"#15803d":t.winPct===0?"#dc2626":"#1e293b"}}>
+                          {t.winPct}
+                        </td>
+                        <td style={{textAlign:"center",color:"#64748b"}}>N/A</td>
+                        <td style={{textAlign:"center",color:"#64748b",fontFamily:"monospace"}}>0-0-0</td>
+                        <td style={{textAlign:"center",color:"#64748b"}}>—</td>
+                        <td style={{textAlign:"center",color:"#dc2626",fontWeight:600}}>{t.avgRA}</td>
+                        <td style={{textAlign:"center",color:"#16a34a",fontWeight:600}}>{t.avgRS}</td>
+                        <td style={{textAlign:"center",fontWeight:700,
+                          color:parseFloat(t.avgRD)>0?"#16a34a":parseFloat(t.avgRD)<0?"#dc2626":"#64748b"}}>
+                          {t.avgRD!=="—"&&parseFloat(t.avgRD)>0?"+":""}{t.avgRD}
+                        </td>
+                        <td style={{textAlign:"center",fontWeight:700,
+                          color:parseFloat(t.avgRDMax8)>0?"#16a34a":parseFloat(t.avgRDMax8)<0?"#dc2626":"#64748b"}}>
+                          {t.avgRDMax8!=="—"&&parseFloat(t.avgRDMax8)>0?"+":""}{t.avgRDMax8}
+                        </td>
+                        <td style={{textAlign:"center",color:"#94a3b8"}}>—</td>
+                        <td style={{textAlign:"center",color:"#94a3b8"}}>—</td>
+                        <td style={{textAlign:"center",color:"#94a3b8"}}>—</td>
+                        <td style={{textAlign:"center",color:"#94a3b8"}}>—</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
               </table>
             </div>
           </div>
         );
       })}
-      <Alrt type="success">✅ Pool play complete. Teams advance to bracket by finishing position.</Alrt>
+      {/* Tiebreaker rules */}
+      <div style={{marginTop:8,border:"1px solid #e2e8f0",borderRadius:8,overflow:"hidden"}}>
+        <div onClick={()=>setShowRules(v=>!v)}
+          style={{background:"#f8fafc",padding:"8px 14px",cursor:"pointer",
+            display:"flex",justifyContent:"space-between",alignItems:"center",
+            fontWeight:700,fontSize:12,color:"#1e293b",userSelect:"none"}}>
+          <span>Pool Standings Sorted on the following:</span>
+          <span style={{fontSize:14}}>{showRules?"▲":"▼"}</span>
+        </div>
+        {showRules&&(
+          <div style={{padding:"12px 16px",fontSize:11,color:"#334155",lineHeight:1.8,
+            borderTop:"1px solid #e2e8f0",background:"#fff"}}>
+            <div style={{marginBottom:4,fontWeight:600}}>Pool Standings Sorted on the following:</div>
+            <div style={{borderTop:"2px solid #cbd5e1",marginBottom:8,paddingTop:8}}>
+              {[
+                "1) Winning Percentage - Descending",
+                "2) Number Wins - Descending",
+                "3) Number Loses - Ascending",
+                "4) Tied Teams (vs. each other) Winning Pct - Descending [Not valid if all tied teams have not played each other]",
+                "5) Avg Points Allowed - Ascending",
+                "6) Avg Run Differential with a maximum of (8) - Descending",
+                "7) USSSA Points - Descending",
+                "8) Date Team Entered USSSA Database",
+              ].map((r,i)=><div key={i} style={{padding:"2px 0"}}>{r}</div>)}
+            </div>
+            <div style={{marginTop:8,paddingTop:8,borderTop:"1px solid #e2e8f0",color:"#64748b"}}>
+              Once past a tie breaker do not return to previous<br/>
+              **Teams that have been assigned a forfeit loss will be placed as the lowest seed in their tied-team group.
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
