@@ -2151,10 +2151,10 @@ function PitchingView({teams,games=[]}){
   const selG=glist.find(g=>g.id===selId)||(glist[0]||null);
   function tm(id){return teams.find(t=>t.id===id)||{name:id||"TBD"}}
   function eKey(gId,tId,r){return `${gId}||${tId}||${r}`}
-  function getE(gId,tId,r){return entries[eKey(gId,tId,r)]||{player:"",outs:"",pitches:"",ov2fb:false}}
+  function getE(gId,tId,r){return entries[eKey(gId,tId,r)]||{player:"",outs:"",pitches:""}}
   function setE(gId,tId,r,field,val){
     const k=eKey(gId,tId,r);
-    setEntries(p=>({...p,[k]:{...(p[k]||{player:"",outs:"",pitches:"",ov2fb:false}),[field]:val}}));
+    setEntries(p=>({...p,[k]:{...(p[k]||{player:"",outs:"",pitches:""}),[field]:val}}));
   }
   function hasData(gId){return Object.entries(entries).some(([k,e])=>k.startsWith(`${gId}||`)&&(e.player||e.outs))}
   function saveChanges(){setSavedMsg("✓ Saved");setTimeout(()=>setSavedMsg(""),2000)}
@@ -2173,10 +2173,9 @@ function PitchingView({teams,games=[]}){
       const parts=k.split("||");
       const gId=parts[0],tId=parts[1];
       const sk=`${tId}::${e.player.trim().toLowerCase()}`;
-      if(!map[sk])map[sk]={tId,player:e.player,totalOuts:0,gamesSet:new Set(),ov2fb:false};
+      if(!map[sk])map[sk]={tId,player:e.player,totalOuts:0,gamesSet:new Set()};
       map[sk].totalOuts+=outsCount(e.outs);
       if(gId)map[sk].gamesSet.add(gId);
-      if(e.ov2fb)map[sk].ov2fb=true;
     });
     return Object.values(map).map(r=>({...r,gamesCount:r.gamesSet.size})).sort((a,b)=>b.totalOuts-a.totalOuts);
   }
@@ -2249,7 +2248,6 @@ function PitchingView({teams,games=[]}){
                             <th style={{...thStyle,textAlign:"left"}}>Player</th>
                             <th style={{...thStyle,textAlign:"center"}}>Innings Pitched</th>
                             <th style={{...thStyle,textAlign:"center",width:52}}>Pitches</th>
-                            <th style={{...thStyle,textAlign:"center",width:44}}>Ov2FB</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -2272,12 +2270,6 @@ function PitchingView({teams,games=[]}){
                                     onChange={ev=>setE(selG.id,tId,r,"pitches",ev.target.value)}
                                     style={{...inpStyle,width:48,textAlign:"center"}}/>
                                 </td>
-                                <td style={{...tdStyle,textAlign:"center"}}>
-                                  <input type="checkbox" checked={!!e.ov2fb}
-                                    onChange={ev=>setE(selG.id,tId,r,"ov2fb",ev.target.checked)}
-                                    title="Over Limit, Finish Batter"
-                                    style={{cursor:"pointer",width:14,height:14}}/>
-                                </td>
                               </tr>
                             );
                           })}
@@ -2292,8 +2284,7 @@ function PitchingView({teams,games=[]}){
                   </div>
                 )}
                 <div style={{marginTop:8,padding:"6px 10px",background:"#f8fafc",borderRadius:4,fontSize:11,color:"#64748b"}}>
-                  <strong>Ov2FB</strong> = Over Limit, Finish Batter — pitcher exceeded limit but was permitted to finish the current batter.
-                  Innings tracked in fractional format (1/3 = 1 out, 2/3 = 2 outs, 1 Inn = 3 outs).
+                  Innings tracked in fractional format: 1/3 = 1 out, 2/3 = 2 outs, 1 Inn = 3 outs.
                 </div>
               </div>
             ):<Alrt type="info">Select a game from the list to enter pitching data.</Alrt>}
@@ -2311,7 +2302,6 @@ function PitchingView({teams,games=[]}){
                   <th style={{textAlign:"center"}}>Games</th>
                   <th style={{textAlign:"center"}}>Total Innings</th>
                   <th style={{textAlign:"center"}}>Outs</th>
-                  <th style={{textAlign:"center"}}>Ov2FB</th>
                 </tr></thead>
                 <tbody>
                   {summary.map((s,i)=>{
@@ -2325,9 +2315,6 @@ function PitchingView({teams,games=[]}){
                         <td style={{textAlign:"center"}}>{s.gamesCount}</td>
                         <td style={{textAlign:"center",fontFamily:"monospace",fontWeight:700,fontSize:14}}>{dispInns}</td>
                         <td style={{textAlign:"center",fontSize:11,color:"#64748b"}}>{s.totalOuts}</td>
-                        <td style={{textAlign:"center"}}>
-                          {s.ov2fb?<span style={{color:"#d97706",fontWeight:700,fontSize:11}}>⚠ Yes</span>:<span style={{color:"#94a3b8",fontSize:11}}>—</span>}
-                        </td>
                       </tr>
                     );
                   })}
