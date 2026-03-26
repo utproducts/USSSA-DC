@@ -1668,7 +1668,7 @@ function BracketBuilderView({teams,games=[],onBuild}){
 /* ════════════════════ BRACKET ════════════════════ */
 function BracketView({bGames,setBGames,teams,games=[],editable}){
   const NAVY="#1e3a5f";
-  const [tab,setTab]=useState("view");
+  const [tab,setTab]=useState("build");  // open Builder first by default
   const [builtGames,setBuiltGames]=useState(null);
   const [builtSeeds,setBuiltSeeds]=useState(null);
 
@@ -1715,7 +1715,7 @@ function BracketView({bGames,setBGames,teams,games=[],editable}){
     <div>
       {/* ── Tab bar ── */}
       <div style={{display:"flex",gap:4,marginBottom:14,borderBottom:"2px solid #e2e8f0"}}>
-        {[["view","🏆 Bracket"],["build","⚙️ Builder"]].map(([t,label])=>(
+        {[["build","⚙️ Builder"],["view","🏆 Bracket"]].map(([t,label])=>(
           <button key={t} onClick={()=>setTab(t)}
             style={{padding:"7px 16px",border:"none",cursor:"pointer",fontWeight:700,fontSize:12,
               borderRadius:"6px 6px 0 0",marginBottom:-2,
