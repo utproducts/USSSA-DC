@@ -1356,14 +1356,57 @@ function BracketBuilderView({teams,games=[],onBuild}){
     return s.map(row=>teams.find(t=>t.id===row.id)||row).filter(Boolean);
   },[teams,games]);
 
-  // Default to 8 — user picks the count intentionally; don't auto-set from team count
-  // which can cause confusing "everyone gets a bye" situations for odd team counts
   const [count,setCount]=useState(8);
   const [names,setNames]=useState(()=>Array(32).fill("").map((_,i)=>rankedTeams[i]?rankedTeams[i].name:""));
+
+  /* ── scheduling state ── */
+  const [numFields,setNumFields]=useState(1);
+  const [gameMins,setGameMins]=useState(120);   // game duration in minutes
+  const [gapMins,setGapMins]=useState(15);      // gap between games (buffer)
+  const [startDate,setStartDate]=useState(()=>{const d=new Date();return d.toISOString().slice(0,10)});
+  const [startTime,setStartTime]=useState("08:00");
 
   /* reset seeds to standings order */
   function loadFromStandings(){
     setNames(Array(32).fill("").map((_,i)=>rankedTeams[i]?rankedTeams[i].name:""));
+  }
+
+  /* ── auto-schedule helper ────────────────────────────────────────
+     Distributes games across fields, round by round.
+     Byes are skipped (no field/time needed).
+     Within a round, games are spread across fields simultaneously;
+     each "wave" of F games occupies one timeslot.
+     The next round starts after all current-round games finish + gap.
+  ──────────────────────────────────────────────────────────────── */
+  function applySchedule(gs){
+    const slotMins=parseInt(gameMins)+parseInt(gapMins);
+    const F=parseInt(numFields)||1;
+    // parse startTime "HH:MM" → minutes since midnight
+    const [sh,sm]=startTime.split(":").map(Number);
+    let curMin=sh*60+(sm||0);
+
+    const rounds=[...new Set(gs.map(g=>g.round))].sort((a,b)=>a-b);
+    rounds.forEach(r=>{
+      const playable=gs.filter(g=>g.round===r&&g.status!=="bye"&&g.t2); // real games only
+      if(!playable.length)return;
+      let wave=0;
+      playable.forEach((g,i)=>{
+        wave=Math.floor(i/F);
+        const fieldNum=(i%F)+1;
+        const tMin=curMin+wave*slotMins;
+        const hh=Math.floor(tMin/60)%24;
+        const mm=tMin%60;
+        const ampm=hh<12?"AM":"PM";
+        const h12=hh===0?12:hh>12?hh-12:hh;
+        const timeStr=`${h12}:${mm.toString().padStart(2,"0")} ${ampm}`;
+        g.date=startDate;
+        g.time=timeStr;
+        g.field=`F${fieldNum}`;
+      });
+      // advance clock past all waves in this round + one extra gap
+      curMin+=((wave+1)*slotMins);
+    });
+    return gs;
   }
 
   function build(){
@@ -1372,7 +1415,9 @@ function BracketBuilderView({teams,games=[],onBuild}){
       const t=teams.find(t2=>t2.name.toLowerCase()===nm.toLowerCase());
       return{id:t?t.id:`seed_${i+1}`,name:nm,cls:t?t.cls:"",state:t?t.state:""};
     });
-    onBuild(genBracketGames(seeds),seeds);
+    const gs=genBracketGames(seeds);
+    applySchedule(gs);
+    onBuild(gs,seeds);
   }
 
   const P=Math.pow(2,Math.ceil(Math.log2(Math.max(count,2))));
@@ -1442,6 +1487,94 @@ function BracketBuilderView({teams,games=[],onBuild}){
               <option>Single Elimination</option>
             </select>
           </div>
+        </div>
+
+        {/* ── Schedule Configuration ── */}
+        <div style={{background:"#f1f5f9",border:"1px solid #cbd5e1",borderRadius:8,padding:"12px 14px",marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:800,color:NAVY,marginBottom:10,textTransform:"uppercase",letterSpacing:.6}}>
+            📅 Game Schedule
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:10}}>
+            {/* # Fields */}
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:"#475569",display:"block",marginBottom:3}}># Fields</label>
+              <select value={numFields} onChange={e=>setNumFields(parseInt(e.target.value))}
+                style={{width:"100%",padding:"6px 8px",border:"1px solid #cbd5e1",borderRadius:5,fontSize:12,fontWeight:600,background:"#fff"}}>
+                {[1,2,3,4,5,6,7,8].map(n=><option key={n} value={n}>{n} Field{n>1?"s":""}</option>)}
+              </select>
+            </div>
+            {/* Game Time */}
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:"#475569",display:"block",marginBottom:3}}>Game Time</label>
+              <select value={gameMins} onChange={e=>setGameMins(parseInt(e.target.value))}
+                style={{width:"100%",padding:"6px 8px",border:"1px solid #cbd5e1",borderRadius:5,fontSize:12,fontWeight:600,background:"#fff"}}>
+                {[[60,"1 hr"],[75,"1¼ hr"],[90,"1½ hr"],[105,"1¾ hr"],[120,"2 hr"],[135,"2¼ hr"],[150,"2½ hr"],[180,"3 hr"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+            {/* Gap */}
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:"#475569",display:"block",marginBottom:3}}>Between Games</label>
+              <select value={gapMins} onChange={e=>setGapMins(parseInt(e.target.value))}
+                style={{width:"100%",padding:"6px 8px",border:"1px solid #cbd5e1",borderRadius:5,fontSize:12,fontWeight:600,background:"#fff"}}>
+                {[[0,"0 min"],[5,"5 min"],[10,"10 min"],[15,"15 min"],[20,"20 min"],[30,"30 min"],[45,"45 min"],[60,"1 hr"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            {/* Start Date */}
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:"#475569",display:"block",marginBottom:3}}>Start Date</label>
+              <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}
+                style={{width:"100%",padding:"6px 8px",border:"1px solid #cbd5e1",borderRadius:5,fontSize:12,boxSizing:"border-box",background:"#fff"}}/>
+            </div>
+            {/* Start Time */}
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:"#475569",display:"block",marginBottom:3}}>Start Time</label>
+              <select value={startTime} onChange={e=>setStartTime(e.target.value)}
+                style={{width:"100%",padding:"6px 8px",border:"1px solid #cbd5e1",borderRadius:5,fontSize:12,fontWeight:600,background:"#fff"}}>
+                {Array.from({length:28},(_,i)=>{
+                  const totalMins=i*30+360; // 6:00 AM to 9:30 PM
+                  const hh=Math.floor(totalMins/60);const mm=totalMins%60;
+                  const ampm=hh<12?"AM":"PM";const h12=hh===0?12:hh>12?hh-12:hh;
+                  const val=`${hh.toString().padStart(2,"0")}:${mm.toString().padStart(2,"0")}`;
+                  const lbl=`${h12}:${mm.toString().padStart(2,"0")} ${ampm}`;
+                  return<option key={val} value={val}>{lbl}</option>;
+                })}
+              </select>
+            </div>
+          </div>
+          {/* Schedule preview */}
+          {(()=>{
+            const slotMins=parseInt(gameMins)+parseInt(gapMins);
+            const F=parseInt(numFields)||1;
+            const [sh,sm]=startTime.split(":").map(Number);
+            const rounds=Math.ceil(Math.log2(Math.max(count,2)));
+            const r1Games=Math.floor((Math.pow(2,rounds)-count)); // bye-adjusted R1 games actually played
+            const actualR1=Math.max(1,count-Math.pow(2,rounds-1)); // real games in R1
+            // estimate total time: each round has ceil(gamesInRound/F) waves
+            let estMin=sh*60+(sm||0);
+            let gamesLeft=count;
+            const roundTimes=[];
+            for(let r=1;r<=rounds;r++){
+              const rGames=Math.max(1,Math.pow(2,rounds-r));
+              const waves=Math.ceil(rGames/F);
+              const [rh,rm]=[Math.floor(estMin/60)%24,estMin%60];
+              const ampm=rh<12?"AM":"PM";const h12=rh===0?12:rh>12?rh-12:rh;
+              roundTimes.push(`R${r}: ${h12}:${rm.toString().padStart(2,"0")} ${ampm}`);
+              estMin+=waves*slotMins;
+            }
+            const endH=Math.floor(estMin/60)%24,endM=estMin%60;
+            const endAmpm=endH<12?"AM":"PM";const endH12=endH===0?12:endH>12?endH-12:endH;
+            return(
+              <div style={{marginTop:10,padding:"6px 10px",background:"#e0f2fe",borderRadius:5,fontSize:10,color:"#0369a1"}}>
+                <span style={{fontWeight:700}}>Est. Schedule: </span>
+                {roundTimes.join("  →  ")}
+                <span style={{marginLeft:6,color:"#7c3aed",fontWeight:700}}>
+                  Done ≈ {endH12}:{endM.toString().padStart(2,"0")} {endAmpm}
+                </span>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Two-column layout: seed entry + matchup preview */}
