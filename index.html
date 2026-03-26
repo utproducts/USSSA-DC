@@ -2144,7 +2144,15 @@ function App(){
           {view==="s-game-mgr"&&<GameMgrView games={allGames} setGames={setAllGames} teams={ALL_TEAMS}/>}
           {view==="s-layout"&&<LayoutView games={allGames} setGames={setAllGames} teams={ALL_TEAMS}/>}
           {view==="s-bracket"&&<BracketView bGames={allBracketGames} setBGames={setAllBracketGames} teams={ALL_TEAMS} editable={true}/>}
-          {SHORTCUT_IDS.has(view)&&view!=="s-game-mgr"&&view!=="s-layout"&&view!=="s-bracket"&&<ShortcutHint id={view}/>}
+          {view==="s-standings"&&<StandingsView teams={ALL_TEAMS} games={allGames}/>}
+          {view==="s-seeds"&&<SeedsView teams={ALL_TEAMS}/>}
+          {view==="s-parks"&&<ParksView eventParks={[]}/>}
+          {view==="s-umpires"&&<UmpiresView/>}
+          {view==="s-pitching"&&<PitchingView teams={ALL_TEAMS}/>}
+          {view==="s-ppmatrix"&&<PPMatrixView/>}
+          {view==="s-placing"&&<PlacingView bGames={allBracketGames} teams={ALL_TEAMS}/>}
+          {view==="s-livelock"&&<LiveLockView/>}
+          {SHORTCUT_IDS.has(view)&&!["s-game-mgr","s-layout","s-bracket","s-standings","s-seeds","s-parks","s-umpires","s-pitching","s-ppmatrix","s-placing","s-livelock"].includes(view)&&<ShortcutHint id={view}/>}
         </div>
       </main>
     </div>
