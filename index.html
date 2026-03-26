@@ -1115,14 +1115,29 @@ function StandingsView({teams,games}){
 
 /* ════════════════════ BRACKET ════════════════════ */
 function BracketView({bGames,setBGames,teams,editable}){
+  /* ── Layout constants ── */
+  const GW=214,GH=94,BASE_GAP=18,CONN=52,HDR=28;
   const rounds=[...new Set(bGames.map(g=>g.round))].sort((a,b)=>a-b);
   const maxRound=Math.max(...rounds);
-  const totalRounds=rounds.length;
-  const rndLabel={};
-  if(totalRounds===1){rndLabel[1]="Championship"}
-  else if(totalRounds===2){rndLabel[1]="Semifinal";rndLabel[2]="Championship"}
-  else if(totalRounds===3){rndLabel[1]="Quarterfinal";rndLabel[2]="Semifinal";rndLabel[3]="Championship"}
-  else{rounds.forEach((r,i)=>{rndLabel[r]=i===totalRounds-1?"Championship":i===totalRounds-2?"Semifinal":`Round ${r}`})}
+  const N=rounds.length;
+  /* slot height for round-index ri (0-based): doubles each round */
+  const SH=ri=>(GH+BASE_GAP)*Math.pow(2,ri);
+  /* top-left y of game p in round ri (games are centered in their slot) */
+  const GT=(ri,p)=>(SH(ri)-GH)/2+p*SH(ri);
+  /* vertical center of game p in round ri */
+  const GC=(ri,p)=>GT(ri,p)+GH/2;
+  const r1Count=bGames.filter(g=>g.round===rounds[0]).length;
+  const totalH=Math.max(r1Count*SH(0),GH+BASE_GAP*2);
+  /* x-left of round ri column */
+  const RX=ri=>ri*(GW+CONN);
+  const totalW=N*(GW+CONN)+80;
+
+  const rndLabel=[];
+  if(N===1){rndLabel[0]="Championship"}
+  else if(N===2){rndLabel[0]="Semifinal";rndLabel[1]="Championship"}
+  else if(N===3){rndLabel[0]="Quarterfinal";rndLabel[1]="Semifinal";rndLabel[2]="Championship"}
+  else{rounds.forEach((_,i)=>{rndLabel[i]=i===N-1?"Championship":i===N-2?"Semifinal":`Round ${i+1}`})}
+
   function upd(id,k,v){
     if(!editable)return;
     const n=v===""?null:parseInt(v);
@@ -1131,138 +1146,167 @@ function BracketView({bGames,setBGames,teams,editable}){
   function getT(id){return tByIdFrom(id,teams)}
   const finalGame=bGames.find(g=>g.round===maxRound);
   const champ=finalGame?winOf(finalGame):null;
-  /* seed badge — teal pill matching USSSA's {Ax} style */
+
   const SeedBadge=({label})=>label?(
-    <span style={{display:"inline-block",background:"#0e7490",color:"#fff",borderRadius:3,
-      fontSize:10,fontWeight:700,padding:"1px 5px",marginRight:6,letterSpacing:.3,
-      fontFamily:"monospace",whiteSpace:"nowrap"}}>{"{"+label+"}"}</span>
-  ):null;
-  /* score pill */
-  const ScorePill=({val,win})=>(
-    <span style={{minWidth:28,textAlign:"center",fontWeight:800,fontSize:13,
-      color:win?"#fff":"#475569",background:win?"#16a34a":"#f1f5f9",
-      borderRadius:4,padding:"2px 6px",marginLeft:6}}>{val??""}</span>
-  );
-  /* spacer between rounds grows as rounds progress */
-  const gapForRound=(ri)=>Math.pow(2,ri)*36;
+    <span style={{display:"inline-flex",alignItems:"center",background:"#0e7490",color:"#fff",
+      borderRadius:3,fontSize:9,fontWeight:700,padding:"1px 4px",marginRight:5,
+      letterSpacing:.3,fontFamily:"monospace",flexShrink:0}}>
+      {"{"+label+"}"}
+    </span>
+  ):(<span style={{width:6,flexShrink:0}}/>);
+
+  function GameBox({g,ri,pi}){
+    const t1=getT(g.t1),t2=g.t2?getT(g.t2):null;
+    const w=winOf(g);
+    const top=GT(ri,pi), left=RX(ri);
+    const teamRow=(side)=>{
+      const isT1=side===1;
+      const tId=isT1?g.t1:g.t2;
+      const t=isT1?t1:t2;
+      const s=isT1?g.s1:g.s2;
+      const sKey=isT1?"s1":"s2";
+      const win=w===tId, lose=w&&w!==tId;
+      return(
+        <div style={{display:"flex",alignItems:"center",padding:"5px 8px",
+          background:win?"#f0fdf4":lose?"#fef2f2":"#fff",
+          borderBottom:isT1?"1px solid #e2e8f0":"none",minHeight:30}}>
+          <SeedBadge label={ri===0?g.num:null}/>
+          <span style={{flex:1,fontSize:11,fontWeight:win?700:500,overflow:"hidden",
+            textOverflow:"ellipsis",whiteSpace:"nowrap",
+            color:lose?"#a1afc4":"#1e293b",
+            textDecoration:lose?"line-through":"none"}}>
+            {t?t.name:<em style={{color:"#a1afc4",fontStyle:"italic"}}>TBD</em>}
+          </span>
+          {editable&&tId?(
+            <input type="number" min="0" value={s??""} placeholder="—"
+              style={{width:36,textAlign:"center",fontSize:11,fontWeight:700,flexShrink:0,
+                border:"1px solid "+(win?"#86efac":lose?"#fca5a5":"#cbd5e1"),borderRadius:3,
+                padding:"1px 3px",background:win?"#dcfce7":lose?"#fee2e2":"#f8fafc",
+                color:win?"#15803d":lose?"#dc2626":"#1e293b",outline:"none"}}
+              onChange={e=>upd(g.id,sKey,e.target.value)}/>
+          ):(
+            <span style={{minWidth:24,textAlign:"center",fontWeight:800,fontSize:12,flexShrink:0,
+              color:win?"#fff":lose?"#cbd5e1":"#64748b",
+              background:win?"#16a34a":lose?"transparent":"#f1f5f9",
+              borderRadius:3,padding:"1px 5px",marginLeft:4}}>
+              {s!=null?s:""}
+            </span>
+          )}
+        </div>
+      );
+    };
+    return(
+      <div style={{position:"absolute",top,left,width:GW,zIndex:2}}>
+        <div style={{background:"#fff",border:"1px solid #cbd5e1",borderRadius:7,
+          overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,.09)"}}>
+          {/* Header */}
+          <div style={{background:"#1e3a5f",color:"#fff",fontSize:9,fontWeight:700,
+            padding:"3px 8px",display:"flex",justifyContent:"space-between",alignItems:"center",
+            letterSpacing:.4}}>
+            <span style={{background:"#0e7490",borderRadius:2,padding:"1px 5px"}}>{g.num}</span>
+            <span style={{opacity:.8,fontWeight:400,fontSize:9}}>{g.field}</span>
+          </div>
+          {teamRow(1)}
+          {teamRow(2)}
+          {/* Footer */}
+          <div style={{background:"#f8fafc",borderTop:"1px solid #f1f5f9",
+            padding:"2px 8px",fontSize:9,color:"#94a3b8",display:"flex",gap:8}}>
+            <span>📅 {g.date}</span><span>⏰ {g.time}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* SVG connector between round ri and ri+1 */
+  function Connector({ri}){
+    const rGames=bGames.filter(g=>g.round===rounds[ri]);
+    const nxtGames=bGames.filter(g=>g.round===rounds[ri+1]);
+    const pairs=Math.ceil(rGames.length/2);
+    const svgX=RX(ri)+GW, svgW=CONN, CX=CONN/2;
+    const paths=[];
+    for(let p=0;p<pairs;p++){
+      const g1=rGames[p*2], g2=rGames[p*2+1];
+      const y1=GC(ri,p*2);
+      const y2=g2?GC(ri,p*2+1):y1;
+      const yMid=GC(ri+1,p); // center of the next-round game this pair feeds
+      const c=g2?"#94a3b8":"#94a3b8";
+      // top arm
+      paths.push(<line key={"t"+p} x1={0} y1={y1} x2={CX} y2={y1} stroke={c} strokeWidth={2}/>);
+      // bottom arm
+      if(g2) paths.push(<line key={"b"+p} x1={0} y1={y2} x2={CX} y2={y2} stroke={c} strokeWidth={2}/>);
+      // vertical bar
+      paths.push(<line key={"v"+p} x1={CX} y1={y1} x2={CX} y2={g2?y2:y1} stroke={c} strokeWidth={2}/>);
+      // horizontal out to next round
+      paths.push(<line key={"h"+p} x1={CX} y1={yMid} x2={CONN} y2={yMid} stroke={c} strokeWidth={2}/>);
+      // winner label on connector mid
+      const nxG=nxtGames[p];
+      const wId=g1?winOf(g1):null;
+      if(wId&&nxG&&!nxG.t1){/* advancing label — shown inline in next box */}
+    }
+    return(
+      <svg style={{position:"absolute",left:svgX,top:0,overflow:"visible"}}
+        width={svgW} height={totalH}>
+        {paths}
+      </svg>
+    );
+  }
+
+  /* champion trophy column */
+  function ChampCol(){
+    if(!champ)return null;
+    const ri=N-1, pi=0;
+    const cy=GC(ri,pi);
+    const x=RX(N-1)+GW+CONN;
+    return(
+      <div style={{position:"absolute",left:x,top:cy-36,textAlign:"center",width:72}}>
+        <div style={{fontSize:30,lineHeight:1}}>🏆</div>
+        <div style={{fontSize:10,fontWeight:800,color:"#b45309",marginTop:4,lineHeight:1.3}}>
+          {getT(champ)?.name}
+        </div>
+        <div style={{fontSize:9,color:"#d97706",marginTop:2,fontWeight:600}}>CHAMPION</div>
+      </div>
+    );
+  }
+
   return(
     <div style={{padding:"4px 0"}}>
       {champ&&(
         <div style={{background:"linear-gradient(135deg,#b45309,#f59e0b)",color:"#fff",
-          padding:"12px 20px",borderRadius:10,marginBottom:16,display:"flex",
-          alignItems:"center",gap:14,boxShadow:"0 4px 14px rgba(0,0,0,.18)"}}>
-          <span style={{fontSize:32}}>🏆</span>
+          padding:"10px 18px",borderRadius:10,marginBottom:14,display:"flex",
+          alignItems:"center",gap:12,boxShadow:"0 4px 14px rgba(0,0,0,.18)"}}>
+          <span style={{fontSize:28}}>🏆</span>
           <div>
-            <div style={{fontSize:10,fontWeight:700,opacity:.85,textTransform:"uppercase",letterSpacing:1.2}}>Division Champion</div>
-            <div style={{fontSize:18,fontWeight:900,marginTop:2}}>{getT(champ)?.name}</div>
+            <div style={{fontSize:9,fontWeight:700,opacity:.85,textTransform:"uppercase",letterSpacing:1.2}}>Division Champion</div>
+            <div style={{fontSize:16,fontWeight:900,marginTop:1}}>{getT(champ)?.name}</div>
           </div>
         </div>
       )}
-      {editable&&<Alrt type="info">✏️ Enter scores to advance teams through the bracket.</Alrt>}
-      <div style={{overflowX:"auto",paddingBottom:12}}>
-        <div style={{display:"flex",alignItems:"flex-start",gap:0,minWidth:"max-content"}}>
-          {rounds.map((round,ri)=>{
-            const rGames=bGames.filter(g=>g.round===round);
-            const gap=gapForRound(ri);
-            /* vertical offset so games align with their connector midpoints */
-            const topPad=ri===0?0:gapForRound(ri-1)/2+36;
-            return(
-              <div key={round} style={{display:"flex",flexDirection:"column",alignItems:"stretch"}}>
-                {/* Round header */}
-                <div style={{textAlign:"center",fontSize:11,fontWeight:800,color:"#fff",
-                  background:NAVY,padding:"5px 16px",borderRadius:6,margin:"0 8px 10px",
-                  textTransform:"uppercase",letterSpacing:.8,whiteSpace:"nowrap"}}>
-                  {rndLabel[round]||`Round ${round}`}
-                </div>
-                <div style={{paddingTop:topPad}}>
-                  {rGames.map((g,gi)=>{
-                    const t1=getT(g.t1),t2=g.t2?getT(g.t2):null;
-                    const w=winOf(g);
-                    const isLast=round===maxRound;
-                    return(
-                      <div key={g.id} style={{display:"flex",alignItems:"center",marginBottom:gap}}>
-                        {/* Game box */}
-                        <div style={{width:210,background:"#fff",border:"1px solid #cbd5e1",
-                          borderRadius:8,overflow:"hidden",boxShadow:"0 2px 6px rgba(0,0,0,.08)"}}>
-                          {/* Game number label */}
-                          <div style={{background:"#1e3a5f",color:"#fff",fontSize:10,fontWeight:700,
-                            padding:"3px 10px",display:"flex",justifyContent:"space-between",
-                            alignItems:"center",letterSpacing:.5}}>
-                            <span>Game {g.num}</span>
-                            <span style={{opacity:.7,fontWeight:400}}>{g.field}</span>
-                          </div>
-                          {/* Team 1 */}
-                          <div style={{display:"flex",alignItems:"center",padding:"6px 10px",
-                            background:w===g.t1?"#f0fdf4":w&&w!==g.t1?"#fef2f2":"#fff",
-                            borderBottom:"1px solid #e2e8f0"}}>
-                            <SeedBadge label={g.num&&ri===0?g.num:null}/>
-                            <span style={{flex:1,fontSize:12,fontWeight:w===g.t1?700:500,
-                              color:w&&w!==g.t1?"#94a3b8":"#1e293b",
-                              textDecoration:w&&w!==g.t1?"line-through":"none"}}>
-                              {t1?t1.name:<em style={{color:"#94a3b8"}}>TBD</em>}
-                            </span>
-                            {editable&&g.t1?(
-                              <input type="number" min="0" value={g.s1??""} placeholder="—"
-                                style={{width:40,textAlign:"center",fontSize:12,fontWeight:700,
-                                  border:"1px solid #cbd5e1",borderRadius:4,padding:"2px 4px",
-                                  background:w===g.t1?"#bbf7d0":"#f8fafc",color:w===g.t1?"#15803d":"#1e293b"}}
-                                onChange={e=>upd(g.id,"s1",e.target.value)}/>
-                            ):<ScorePill val={g.s1} win={w===g.t1}/>}
-                          </div>
-                          {/* Team 2 */}
-                          <div style={{display:"flex",alignItems:"center",padding:"6px 10px",
-                            background:w===g.t2?"#f0fdf4":w&&w!==g.t2?"#fef2f2":"#fff"}}>
-                            <SeedBadge label={null}/>
-                            <span style={{flex:1,fontSize:12,fontWeight:w===g.t2?700:500,
-                              color:w&&w!==g.t2?"#94a3b8":"#1e293b",
-                              textDecoration:w&&w!==g.t2?"line-through":"none"}}>
-                              {t2?t2.name:<em style={{color:"#94a3b8"}}>TBD</em>}
-                            </span>
-                            {editable&&g.t2?(
-                              <input type="number" min="0" value={g.s2??""} placeholder="—"
-                                style={{width:40,textAlign:"center",fontSize:12,fontWeight:700,
-                                  border:"1px solid #cbd5e1",borderRadius:4,padding:"2px 4px",
-                                  background:w===g.t2?"#bbf7d0":"#f8fafc",color:w===g.t2?"#15803d":"#1e293b"}}
-                                onChange={e=>upd(g.id,"s2",e.target.value)}/>
-                            ):<ScorePill val={g.s2} win={w===g.t2}/>}
-                          </div>
-                          {/* Game info footer */}
-                          <div style={{background:"#f8fafc",borderTop:"1px solid #e2e8f0",
-                            padding:"3px 10px",fontSize:10,color:"#64748b",fontWeight:500}}>
-                            📅 {g.date} &nbsp;⏰ {g.time}
-                          </div>
-                        </div>
-                        {/* Connector line to next round */}
-                        {!isLast&&(
-                          <div style={{display:"flex",alignItems:"center",width:48,flexShrink:0}}>
-                            <div style={{flex:1,height:2,background:"#94a3b8"}}/>
-                            {w&&(
-                              <div style={{position:"absolute",marginLeft:4,marginTop:-26,
-                                background:"#dbeafe",border:"1px solid #93c5fd",
-                                borderRadius:4,padding:"2px 6px",fontSize:10,fontWeight:700,
-                                color:"#1d4ed8",whiteSpace:"nowrap",pointerEvents:"none",
-                                transform:"translateY(-110%)"}}>
-                                {getT(w)?.name}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {/* Champion trophy on final game */}
-                        {isLast&&w&&(
-                          <div style={{marginLeft:16,display:"flex",flexDirection:"column",
-                            alignItems:"center",gap:4}}>
-                            <span style={{fontSize:28}}>🏆</span>
-                            <div style={{fontSize:11,fontWeight:800,color:"#b45309",
-                              textAlign:"center",maxWidth:100}}>{getT(w)?.name}</div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
+      {editable&&<Alrt type="info">✏️ Enter scores on each game to advance teams through the bracket.</Alrt>}
+      {/* Round header labels */}
+      <div style={{display:"flex",marginBottom:8,paddingLeft:0}}>
+        {rounds.map((_,ri)=>(
+          <div key={ri} style={{width:GW+CONN,flexShrink:0,paddingRight:CONN}}>
+            <div style={{textAlign:"center",fontSize:10,fontWeight:800,color:"#fff",
+              background:NAVY,padding:"4px 0",borderRadius:5,
+              textTransform:"uppercase",letterSpacing:.8}}>
+              {rndLabel[ri]||`Round ${ri+1}`}
+            </div>
+          </div>
+        ))}
+      </div>
+      {/* Bracket canvas */}
+      <div style={{overflowX:"auto",overflowY:"visible",paddingBottom:16}}>
+        <div style={{position:"relative",width:totalW,height:totalH+8}}>
+          {rounds.map((round,ri)=>
+            bGames.filter(g=>g.round===round).map((g,pi)=>
+              <GameBox key={g.id} g={g} ri={ri} pi={pi}/>
+            )
+          )}
+          {rounds.slice(0,-1).map((_,ri)=>
+            <Connector key={ri} ri={ri}/>
+          )}
+          <ChampCol/>
         </div>
       </div>
     </div>
