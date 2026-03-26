@@ -1299,203 +1299,320 @@ function StandingsView({teams,games}){
   );
 }
 
+/* ════════════════════ BRACKET GENERATOR ════════════════════ */
+function genBracketGames(seeds){
+  const N=seeds.length;
+  if(N<2)return[];
+  const R=Math.ceil(Math.log2(Math.max(N,2)));
+  const P=Math.pow(2,R);
+  function seedPos(sz){
+    if(sz===2)return[0,1];
+    const h=seedPos(sz/2),r=[];
+    for(const x of h){r.push(x);r.push(sz-1-x)}
+    return r;
+  }
+  const pos=seedPos(P);
+  const gs=[];let gn=1;
+  for(let p=0;p<P/2;p++){
+    const si1=pos[p*2],si2=pos[p*2+1];
+    const t1=si1<N?seeds[si1].id:null;
+    const t2=si2<N?seeds[si2].id:null;
+    const bye=!(t1&&t2);
+    gs.push({id:`bg${gn}`,num:`G${gn}`,round:1,
+      t1:t1||t2,t2:bye?null:(t1?t2:null),
+      s1:null,s2:null,status:bye?"bye":"scheduled",date:"",time:"",field:""});
+    gn++;
+  }
+  for(let r=2;r<=R;r++){
+    const cnt=P/Math.pow(2,r);
+    for(let p=0;p<cnt;p++){
+      gs.push({id:`bg${gn}`,num:`G${gn}`,round:r,t1:null,t2:null,s1:null,s2:null,status:"scheduled",date:"",time:"",field:""});
+      gn++;
+    }
+  }
+  return gs;
+}
+
+function BracketBuilderView({teams,onBuild}){
+  const NAVY="#1e3a5f";
+  const [count,setCount]=useState(8);
+  const [names,setNames]=useState(Array(16).fill("").map((_,i)=>teams[i]?teams[i].name:""));
+  function build(){
+    const seeds=Array.from({length:count}).map((_,i)=>{
+      const nm=names[i]||`Team ${i+1}`;
+      const t=teams.find(t2=>t2.name.toLowerCase()===nm.toLowerCase());
+      return{id:t?t.id:`seed_${i+1}`,name:nm,cls:t?t.cls:"",state:t?t.state:""};
+    });
+    onBuild(genBracketGames(seeds),seeds);
+  }
+  const P=Math.pow(2,Math.ceil(Math.log2(Math.max(count,2))));
+  const byes=P-count;
+  return(
+    <div style={{maxWidth:640}}>
+      <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:10,padding:"18px",marginBottom:14}}>
+        <div style={{fontWeight:800,fontSize:14,color:NAVY,marginBottom:14}}>⚙️ Bracket Setup</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+          <div>
+            <label style={{fontSize:11,fontWeight:700,color:"#475569",display:"block",marginBottom:4}}>Number of Teams</label>
+            <select value={count} onChange={e=>setCount(parseInt(e.target.value))}
+              style={{width:"100%",padding:"7px 10px",border:"1px solid #cbd5e1",borderRadius:6,fontSize:13,fontWeight:600}}>
+              {[4,5,6,7,8,9,10,11,12,14,16].map(n=><option key={n} value={n}>{n} Teams{n!==Math.pow(2,Math.ceil(Math.log2(n)))?` (${Math.pow(2,Math.ceil(Math.log2(n)))-n} bye${Math.pow(2,Math.ceil(Math.log2(n)))-n>1?"s":""})`:""}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{fontSize:11,fontWeight:700,color:"#475569",display:"block",marginBottom:4}}>Format</label>
+            <select style={{width:"100%",padding:"7px 10px",border:"1px solid #cbd5e1",borderRadius:6,fontSize:13,fontWeight:600}}>
+              <option>Single Elimination</option>
+            </select>
+          </div>
+        </div>
+        <div style={{fontWeight:700,fontSize:11,color:"#475569",marginBottom:8,textTransform:"uppercase",letterSpacing:.5}}>Seed Teams (drag to re-order):</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+          {Array.from({length:count}).map((_,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:6}}>
+              <span style={{background:i===0?"#b45309":i===1?"#1d4ed8":NAVY,color:"#fff",
+                borderRadius:"50%",width:22,height:22,display:"inline-flex",alignItems:"center",
+                justifyContent:"center",fontSize:10,fontWeight:800,flexShrink:0}}>
+                {i+1}
+              </span>
+              <input value={names[i]||""} onChange={e=>{const a=[...names];a[i]=e.target.value;setNames(a)}}
+                placeholder={`Seed ${i+1}…`}
+                style={{flex:1,padding:"5px 8px",border:"1px solid #cbd5e1",borderRadius:4,fontSize:11,
+                  outline:"none",background:i<byes?"#f0fdf4":"#fff"}}/>
+              {i<byes&&<span style={{fontSize:8,color:"#16a34a",fontWeight:700,flexShrink:0}}>BYE</span>}
+            </div>
+          ))}
+        </div>
+        <button onClick={build}
+          style={{marginTop:16,width:"100%",padding:"11px",background:NAVY,color:"#fff",
+            border:"none",borderRadius:7,fontWeight:800,fontSize:13,cursor:"pointer",
+            boxShadow:"0 2px 8px rgba(30,58,95,.3)"}}>
+          ⚡ Generate Bracket →
+        </button>
+      </div>
+      <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:6,padding:"10px 14px",
+        fontSize:11,color:"#1d4ed8",display:"flex",gap:16}}>
+        <span>🏟️ <strong>{count}</strong> Teams</span>
+        <span>🎮 <strong>{count-1}</strong> Games</span>
+        {byes>0&&<span>⏭️ <strong>{byes}</strong> Byes (top seeds)</span>}
+        <span>📋 Single Elimination</span>
+      </div>
+    </div>
+  );
+}
+
 /* ════════════════════ BRACKET ════════════════════ */
 function BracketView({bGames,setBGames,teams,editable}){
-  /* ── Layout constants ── */
   const NAVY="#1e3a5f";
-  const GW=214,GH=94,BASE_GAP=18,CONN=52,HDR=28;
-  const rounds=[...new Set(bGames.map(g=>g.round))].sort((a,b)=>a-b);
-  const maxRound=Math.max(...rounds);
-  const N=rounds.length;
-  /* slot height for round-index ri (0-based): doubles each round */
+  const [tab,setTab]=useState("view");
+  const [builtGames,setBuiltGames]=useState(null);
+  const [builtSeeds,setBuiltSeeds]=useState(null);
+
+  function onBuild(games,seeds){setBuiltGames(games);setBuiltSeeds(seeds);setTab("view")}
+
+  const dGames=builtGames||bGames;
+  const dTeams=builtSeeds?[...teams,...builtSeeds.filter(s=>!teams.find(t=>t.id===s.id))]:teams;
+  const setDGames=builtGames?setBuiltGames:setBGames;
+
+  /* ── Layout constants (compact USSSA style) ── */
+  const GW=205,GH=62,TEAM_H=26,HDR_H=18,BASE_GAP=16,CONN=56;
+  const rounds=[...new Set(dGames.map(g=>g.round))].sort((a,b)=>a-b);
+  const maxRound=rounds.length?Math.max(...rounds):1;
+  const N=rounds.length||1;
   const SH=ri=>(GH+BASE_GAP)*Math.pow(2,ri);
-  /* top-left y of game p in round ri (games are centered in their slot) */
   const GT=(ri,p)=>(SH(ri)-GH)/2+p*SH(ri);
-  /* vertical center of game p in round ri */
   const GC=(ri,p)=>GT(ri,p)+GH/2;
-  const r1Count=bGames.filter(g=>g.round===rounds[0]).length;
-  const totalH=Math.max(r1Count*SH(0),GH+BASE_GAP*2);
-  /* x-left of round ri column */
+  const r1Count=dGames.filter(g=>g.round===rounds[0]).length||1;
+  const totalH=Math.max(r1Count*SH(0),GH+BASE_GAP*2)+8;
   const RX=ri=>ri*(GW+CONN);
-  const totalW=N*(GW+CONN)+80;
+  const totalW=N*(GW+CONN)+100;
 
   const rndLabel=[];
   if(N===1){rndLabel[0]="Championship"}
   else if(N===2){rndLabel[0]="Semifinal";rndLabel[1]="Championship"}
   else if(N===3){rndLabel[0]="Quarterfinal";rndLabel[1]="Semifinal";rndLabel[2]="Championship"}
-  else{rounds.forEach((_,i)=>{rndLabel[i]=i===N-1?"Championship":i===N-2?"Semifinal":`Round ${i+1}`})}
+  else{rounds.forEach((_,i)=>{rndLabel[i]=i===N-1?"Championship":i===N-2?"Semifinal":i===N-3?"Quarterfinal":`Round ${i+1}`})}
 
   function upd(id,k,v){
     if(!editable)return;
     const n=v===""?null:parseInt(v);
-    setBGames(prev=>prev.map(g=>g.id===id?{...g,[k]:isNaN(n)?null:n,status:n!==null?"final":"scheduled"}:g));
+    setDGames(prev=>prev.map(g=>g.id===id?{...g,[k]:isNaN(n)?null:n,status:n!==null?"final":"scheduled"}:g));
   }
-  function getT(id){return tByIdFrom(id,teams)}
-  const finalGame=bGames.find(g=>g.round===maxRound);
+  function getT(id){return tByIdFrom(id,dTeams)}
+  const finalGame=dGames.find(g=>g.round===maxRound);
   const champ=finalGame?winOf(finalGame):null;
 
-  const SeedBadge=({label})=>label?(
-    <span style={{display:"inline-flex",alignItems:"center",background:"#0e7490",color:"#fff",
-      borderRadius:3,fontSize:9,fontWeight:700,padding:"1px 4px",marginRight:5,
-      letterSpacing:.3,fontFamily:"monospace",flexShrink:0}}>
-      {"{"+label+"}"}
-    </span>
-  ):(<span style={{width:6,flexShrink:0}}/>);
-
-  function GameBox({g,ri,pi}){
-    const t1=getT(g.t1),t2=g.t2?getT(g.t2):null;
-    const w=winOf(g);
-    const top=GT(ri,pi), left=RX(ri);
-    const teamRow=(side)=>{
-      const isT1=side===1;
-      const tId=isT1?g.t1:g.t2;
-      const t=isT1?t1:t2;
-      const s=isT1?g.s1:g.s2;
-      const sKey=isT1?"s1":"s2";
-      const win=w===tId, lose=w&&w!==tId;
-      return(
-        <div style={{display:"flex",alignItems:"center",padding:"5px 8px",
-          background:win?"#f0fdf4":lose?"#fef2f2":"#fff",
-          borderBottom:isT1?"1px solid #e2e8f0":"none",minHeight:30}}>
-          <SeedBadge label={ri===0?g.num:null}/>
-          <span style={{flex:1,fontSize:11,fontWeight:win?700:500,overflow:"hidden",
-            textOverflow:"ellipsis",whiteSpace:"nowrap",
-            color:lose?"#a1afc4":"#1e293b",
-            textDecoration:lose?"line-through":"none"}}>
-            {t?t.name:<em style={{color:"#a1afc4",fontStyle:"italic"}}>TBD</em>}
-          </span>
-          {editable&&tId?(
-            <input type="number" min="0" value={s??""} placeholder="—"
-              style={{width:36,textAlign:"center",fontSize:11,fontWeight:700,flexShrink:0,
-                border:"1px solid "+(win?"#86efac":lose?"#fca5a5":"#cbd5e1"),borderRadius:3,
-                padding:"1px 3px",background:win?"#dcfce7":lose?"#fee2e2":"#f8fafc",
-                color:win?"#15803d":lose?"#dc2626":"#1e293b",outline:"none"}}
-              onChange={e=>upd(g.id,sKey,e.target.value)}/>
-          ):(
-            <span style={{minWidth:24,textAlign:"center",fontWeight:800,fontSize:12,flexShrink:0,
-              color:win?"#fff":lose?"#cbd5e1":"#64748b",
-              background:win?"#16a34a":lose?"transparent":"#f1f5f9",
-              borderRadius:3,padding:"1px 5px",marginLeft:4}}>
-              {s!=null?s:""}
-            </span>
-          )}
-        </div>
-      );
-    };
-    return(
-      <div style={{position:"absolute",top,left,width:GW,zIndex:2}}>
-        <div style={{background:"#fff",border:"1px solid #cbd5e1",borderRadius:7,
-          overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,.09)"}}>
-          {/* Header */}
-          <div style={{background:"#1e3a5f",color:"#fff",fontSize:9,fontWeight:700,
-            padding:"3px 8px",display:"flex",justifyContent:"space-between",alignItems:"center",
-            letterSpacing:.4}}>
-            <span style={{background:"#0e7490",borderRadius:2,padding:"1px 5px"}}>{g.num}</span>
-            <span style={{opacity:.8,fontWeight:400,fontSize:9}}>{g.field}</span>
-          </div>
-          {teamRow(1)}
-          {teamRow(2)}
-          {/* Footer */}
-          <div style={{background:"#f8fafc",borderTop:"1px solid #f1f5f9",
-            padding:"2px 8px",fontSize:9,color:"#94a3b8",display:"flex",gap:8}}>
-            <span>📅 {g.date}</span><span>⏰ {g.time}</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  /* SVG connector between round ri and ri+1 */
-  function Connector({ri}){
-    const rGames=bGames.filter(g=>g.round===rounds[ri]);
-    const nxtGames=bGames.filter(g=>g.round===rounds[ri+1]);
-    const pairs=Math.ceil(rGames.length/2);
-    const svgX=RX(ri)+GW, svgW=CONN, CX=CONN/2;
-    const paths=[];
-    for(let p=0;p<pairs;p++){
-      const g1=rGames[p*2], g2=rGames[p*2+1];
-      const y1=GC(ri,p*2);
-      const y2=g2?GC(ri,p*2+1):y1;
-      const yMid=GC(ri+1,p); // center of the next-round game this pair feeds
-      const c=g2?"#94a3b8":"#94a3b8";
-      // top arm
-      paths.push(<line key={"t"+p} x1={0} y1={y1} x2={CX} y2={y1} stroke={c} strokeWidth={2}/>);
-      // bottom arm
-      if(g2) paths.push(<line key={"b"+p} x1={0} y1={y2} x2={CX} y2={y2} stroke={c} strokeWidth={2}/>);
-      // vertical bar
-      paths.push(<line key={"v"+p} x1={CX} y1={y1} x2={CX} y2={g2?y2:y1} stroke={c} strokeWidth={2}/>);
-      // horizontal out to next round
-      paths.push(<line key={"h"+p} x1={CX} y1={yMid} x2={CONN} y2={yMid} stroke={c} strokeWidth={2}/>);
-      // winner label on connector mid
-      const nxG=nxtGames[p];
-      const wId=g1?winOf(g1):null;
-      if(wId&&nxG&&!nxG.t1){/* advancing label — shown inline in next box */}
-    }
-    return(
-      <svg style={{position:"absolute",left:svgX,top:0,overflow:"visible"}}
-        width={svgW} height={totalH}>
-        {paths}
-      </svg>
-    );
-  }
-
-  /* champion trophy column */
-  function ChampCol(){
-    if(!champ)return null;
-    const ri=N-1, pi=0;
-    const cy=GC(ri,pi);
-    const x=RX(N-1)+GW+CONN;
-    return(
-      <div style={{position:"absolute",left:x,top:cy-36,textAlign:"center",width:72}}>
-        <div style={{fontSize:30,lineHeight:1}}>🏆</div>
-        <div style={{fontSize:10,fontWeight:800,color:"#b45309",marginTop:4,lineHeight:1.3}}>
-          {getT(champ)?.name}
-        </div>
-        <div style={{fontSize:9,color:"#d97706",marginTop:2,fontWeight:600}}>CHAMPION</div>
-      </div>
-    );
-  }
-
   return(
-    <div style={{padding:"4px 0"}}>
-      {champ&&(
-        <div style={{background:"linear-gradient(135deg,#b45309,#f59e0b)",color:"#fff",
-          padding:"10px 18px",borderRadius:10,marginBottom:14,display:"flex",
-          alignItems:"center",gap:12,boxShadow:"0 4px 14px rgba(0,0,0,.18)"}}>
-          <span style={{fontSize:28}}>🏆</span>
-          <div>
-            <div style={{fontSize:9,fontWeight:700,opacity:.85,textTransform:"uppercase",letterSpacing:1.2}}>Division Champion</div>
-            <div style={{fontSize:16,fontWeight:900,marginTop:1}}>{getT(champ)?.name}</div>
+    <div>
+      {/* ── Tab bar ── */}
+      <div style={{display:"flex",gap:4,marginBottom:14,borderBottom:"2px solid #e2e8f0"}}>
+        {[["view","🏆 Bracket"],["build","⚙️ Builder"]].map(([t,label])=>(
+          <button key={t} onClick={()=>setTab(t)}
+            style={{padding:"7px 16px",border:"none",cursor:"pointer",fontWeight:700,fontSize:12,
+              borderRadius:"6px 6px 0 0",marginBottom:-2,
+              background:tab===t?NAVY:"#f8fafc",
+              color:tab===t?"#fff":"#64748b",
+              borderBottom:tab===t?`2px solid ${NAVY}`:"2px solid transparent"}}>
+            {label}
+          </button>
+        ))}
+        {builtGames&&<span style={{marginLeft:"auto",alignSelf:"center",fontSize:10,color:"#16a34a",fontWeight:600}}>✓ Custom bracket</span>}
+      </div>
+
+      {/* ── Builder tab ── */}
+      {tab==="build"&&<BracketBuilderView teams={teams} onBuild={onBuild}/>}
+
+      {/* ── Bracket view tab ── */}
+      {tab==="view"&&(
+        <div>
+          {champ&&(
+            <div style={{background:"linear-gradient(135deg,#b45309,#f59e0b)",color:"#fff",
+              padding:"10px 18px",borderRadius:10,marginBottom:14,display:"flex",
+              alignItems:"center",gap:12,boxShadow:"0 4px 14px rgba(0,0,0,.18)"}}>
+              <span style={{fontSize:26}}>🏆</span>
+              <div>
+                <div style={{fontSize:9,fontWeight:700,opacity:.85,textTransform:"uppercase",letterSpacing:1.2}}>Division Champion</div>
+                <div style={{fontSize:15,fontWeight:900,marginTop:1}}>{getT(champ)?.name}</div>
+              </div>
+            </div>
+          )}
+          {editable&&<Alrt type="info">✏️ Enter scores on each game to advance teams. Use the Builder tab to set up a new bracket.</Alrt>}
+          {/* Round headers */}
+          <div style={{display:"flex",marginBottom:6}}>
+            {rounds.map((_,ri)=>(
+              <div key={ri} style={{width:GW+CONN,flexShrink:0,paddingRight:CONN}}>
+                <div style={{textAlign:"center",fontSize:10,fontWeight:800,color:"#fff",
+                  background:NAVY,padding:"5px 0",borderRadius:4,textTransform:"uppercase",letterSpacing:.8}}>
+                  {rndLabel[ri]||`Round ${ri+1}`}
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Bracket canvas */}
+          <div style={{overflowX:"auto",paddingBottom:20}}>
+            <div style={{position:"relative",width:totalW,height:totalH}}>
+              {/* Game slots */}
+              {rounds.map((round,ri)=>
+                dGames.filter(g=>g.round===round).map((g,pi)=>{
+                  const t1=getT(g.t1),t2=g.t2?getT(g.t2):null;
+                  const w=winOf(g);
+                  const isBye=g.status==="bye"||(!g.t2&&!!g.t1);
+                  const top=GT(ri,pi),left=RX(ri);
+                  const teamRow=(side)=>{
+                    const isT1=side===1;
+                    const tId=isT1?g.t1:g.t2;
+                    const t=isT1?t1:t2;
+                    const s=isT1?g.s1:g.s2;
+                    const sKey=isT1?"s1":"s2";
+                    const win=w===tId,lose=!!w&&w!==tId;
+                    return(
+                      <div style={{display:"flex",alignItems:"center",height:TEAM_H,
+                        padding:"0 7px",
+                        background:win?"#f0fdf4":lose?"#fff8f8":"#fff",
+                        borderTop:isT1?"none":"1px solid #e8ecf0"}}>
+                        {/* Seed number (round 1 only) */}
+                        {ri===0&&(
+                          <span style={{fontSize:8,fontWeight:800,color:"#94a3b8",
+                            minWidth:16,fontFamily:"monospace",marginRight:3}}>
+                            {isT1?`(${g.num.replace("G","")})`:""}
+                          </span>
+                        )}
+                        <span style={{flex:1,fontSize:11,fontWeight:win?700:500,
+                          overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",
+                          color:lose?"#c0cad8":"#1e293b",
+                          textDecoration:lose?"line-through":"none"}}>
+                          {t?t.name:(<em style={{color:"#c0cad8",fontSize:10,fontWeight:400}}>TBD</em>)}
+                        </span>
+                        {editable&&tId&&!isBye?(
+                          <input type="number" min="0" value={s??""} placeholder=""
+                            style={{width:30,textAlign:"center",fontSize:11,fontWeight:700,
+                              border:"1px solid "+(win?"#86efac":"#e2e8f0"),borderRadius:3,
+                              padding:"1px 2px",background:win?"#dcfce7":"#f8fafc",
+                              color:win?"#15803d":"#334155",outline:"none",flexShrink:0}}
+                            onChange={e=>upd(g.id,sKey,e.target.value)}/>
+                        ):s!=null?(
+                          <span style={{minWidth:22,textAlign:"center",fontWeight:800,fontSize:11,flexShrink:0,
+                            background:win?"#16a34a":"transparent",color:win?"#fff":lose?"#d1d5db":"#475569",
+                            borderRadius:3,padding:"1px 4px"}}>{s}</span>
+                        ):null}
+                      </div>
+                    );
+                  };
+                  return(
+                    <div key={g.id} style={{position:"absolute",top,left,width:GW,zIndex:2}}>
+                      {/* Compact header: game num + date/time/field */}
+                      <div style={{height:HDR_H,display:"flex",alignItems:"center",justifyContent:"space-between",
+                        padding:"0 7px",background:NAVY,borderRadius:"5px 5px 0 0"}}>
+                        <span style={{background:"#0e7490",color:"#fff",borderRadius:3,
+                          fontSize:8,fontWeight:800,padding:"1px 5px",fontFamily:"monospace"}}>
+                          {g.num}
+                        </span>
+                        <span style={{fontSize:8,color:"rgba(255,255,255,.55)",fontWeight:400}}>
+                          {[g.date,g.time,g.field].filter(Boolean).join(" · ")||""}
+                        </span>
+                      </div>
+                      {/* Team rows */}
+                      <div style={{border:"1px solid #d1d5db",borderTop:"none",borderRadius:"0 0 5px 5px",
+                        overflow:"hidden",background:"#fff",boxShadow:"0 2px 6px rgba(0,0,0,.07)"}}>
+                        {teamRow(1)}
+                        {isBye?(
+                          <div style={{height:TEAM_H,display:"flex",alignItems:"center",
+                            padding:"0 7px",borderTop:"1px solid #e8ecf0",background:"#fafafa"}}>
+                            <span style={{fontSize:9,color:"#b0bbd0",fontStyle:"italic",letterSpacing:.3}}>— BYE —</span>
+                          </div>
+                        ):teamRow(2)}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              {/* SVG connector lines */}
+              <svg style={{position:"absolute",top:0,left:0,pointerEvents:"none",overflow:"visible"}}
+                width={totalW} height={totalH}>
+                {rounds.slice(0,-1).map((_,ri)=>{
+                  const rGames=dGames.filter(g=>g.round===rounds[ri]);
+                  const pairs=Math.ceil(rGames.length/2);
+                  return Array.from({length:pairs}).map((__,pi)=>{
+                    const g1=rGames[pi*2],g2=rGames[pi*2+1];
+                    const y1=GC(ri,pi*2);
+                    const y2=g2?GC(ri,pi*2+1):y1;
+                    const yMid=GC(ri+1,pi);
+                    const x1=RX(ri)+GW;
+                    const xC=x1+CONN/2;
+                    const x2=RX(ri+1);
+                    return(
+                      <g key={`c${ri}-${pi}`}>
+                        <line x1={x1} y1={y1} x2={xC} y2={y1} stroke="#94a3b8" strokeWidth={1.5}/>
+                        {g2&&<line x1={x1} y1={y2} x2={xC} y2={y2} stroke="#94a3b8" strokeWidth={1.5}/>}
+                        <line x1={xC} y1={y1} x2={xC} y2={g2?y2:y1} stroke="#94a3b8" strokeWidth={1.5}/>
+                        <line x1={xC} y1={yMid} x2={x2} y2={yMid} stroke="#94a3b8" strokeWidth={1.5}/>
+                        {/* winner name on connector */}
+                        {g2&&winOf(g1||{})&&(
+                          <text x={(xC+x2)/2} y={yMid-3} textAnchor="middle"
+                            style={{fontSize:8,fill:"#475569",fontFamily:"sans-serif"}}>
+                            {getT(winOf(g1))?.name?.split(" ").slice(-1)[0]||""}
+                          </text>
+                        )}
+                      </g>
+                    );
+                  });
+                })}
+              </svg>
+              {/* Champion trophy */}
+              {champ&&(
+                <div style={{position:"absolute",top:GC(N-1,0)-34,left:RX(N-1)+GW+CONN+6,
+                  textAlign:"center",width:80}}>
+                  <div style={{fontSize:24}}>🏆</div>
+                  <div style={{fontSize:10,fontWeight:800,color:"#b45309",lineHeight:1.3,marginTop:2}}>
+                    {getT(champ)?.name}
+                  </div>
+                  <div style={{fontSize:8,color:"#d97706",fontWeight:700,letterSpacing:.5}}>CHAMPION</div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
-      {editable&&<Alrt type="info">✏️ Enter scores on each game to advance teams through the bracket.</Alrt>}
-      {/* Round header labels */}
-      <div style={{display:"flex",marginBottom:8,paddingLeft:0}}>
-        {rounds.map((_,ri)=>(
-          <div key={ri} style={{width:GW+CONN,flexShrink:0,paddingRight:CONN}}>
-            <div style={{textAlign:"center",fontSize:10,fontWeight:800,color:"#fff",
-              background:NAVY,padding:"4px 0",borderRadius:5,
-              textTransform:"uppercase",letterSpacing:.8}}>
-              {rndLabel[ri]||`Round ${ri+1}`}
-            </div>
-          </div>
-        ))}
-      </div>
-      {/* Bracket canvas */}
-      <div style={{overflowX:"auto",overflowY:"visible",paddingBottom:16}}>
-        <div style={{position:"relative",width:totalW,height:totalH+8}}>
-          {rounds.map((round,ri)=>
-            bGames.filter(g=>g.round===round).map((g,pi)=>
-              <GameBox key={g.id} g={g} ri={ri} pi={pi}/>
-            )
-          )}
-          {rounds.slice(0,-1).map((_,ri)=>
-            <Connector key={ri} ri={ri}/>
-          )}
-          <ChampCol/>
-        </div>
-      </div>
     </div>
   );
 }
