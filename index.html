@@ -2058,7 +2058,8 @@ function App(){
           {view==="event-detail"&&selEv&&<EventDetailView ev={selEv} onBack={()=>nav("events")}/>}
           {view==="create"&&<CreateEventView/>}
           {view==="s-game-mgr"&&<GameMgrView games={allGames} setGames={setAllGames} teams={ALL_TEAMS}/>}
-          {SHORTCUT_IDS.has(view)&&view!=="s-game-mgr"&&<ShortcutHint id={view}/>}
+          {view==="s-layout"&&<LayoutView games={allGames} setGames={setAllGames} teams={ALL_TEAMS}/>}
+          {SHORTCUT_IDS.has(view)&&view!=="s-game-mgr"&&view!=="s-layout"&&<ShortcutHint id={view}/>}
         </div>
       </main>
     </div>
