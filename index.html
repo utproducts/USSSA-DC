@@ -1083,7 +1083,8 @@ function calcUSSSAStandings(teams,games){
     else if(g.s2>g.s1){s[g.t2].w++;s[g.t1].l++}
     else{s[g.t1].t_++;s[g.t2].t_++}
   });
-  return Object.values(s).map(t=>({
+  // Build base stats array
+  const arr=Object.values(s).map(t=>({
     ...t,
     record:`${t.w}-${t.l}-${t.t_}`,
     winPct:t.gp>0?Math.round((t.w+t.t_*0.5)/t.gp*1000):0,
@@ -1091,13 +1092,48 @@ function calcUSSSAStandings(teams,games){
     avgRS:t.gp>0?(t.pf/t.gp).toFixed(1):"—",
     avgRD:t.gp>0?((t.pf-t.pa)/t.gp).toFixed(1):"—",
     avgRDMax8:t.gp>0?(t.rdMax8Sum/t.gp).toFixed(1):"—",
-  })).sort((a,b)=>{
-    if(b.winPct!==a.winPct)return b.winPct-a.winPct;
-    if(b.w!==a.w)return b.w-a.w;
-    if(a.l!==b.l)return a.l-b.l;
+    h2hW:0,h2hL:0,h2hT:0,h2hGP:0,h2hWinPct:0,h2hAllPlayed:false,h2hRecord:"—",
+  }));
+  // Step 4: Compute H2H among tied groups (same winPct)
+  // Only valid if ALL tied teams have played each other
+  const byWP={};
+  arr.forEach(t=>{if(!byWP[t.winPct])byWP[t.winPct]=[];byWP[t.winPct].push(t);});
+  Object.values(byWP).forEach(grp=>{
+    if(grp.length<2)return;
+    const ids=new Set(grp.map(t=>t.id));
+    const h2h=games.filter(g=>g.status==="final"&&g.s1!=null&&g.s2!=null&&ids.has(g.t1)&&ids.has(g.t2));
+    // Check all n*(n-1)/2 unique pairs played
+    const pairs=new Set(h2h.map(g=>[g.t1,g.t2].sort().join("|")));
+    const n=grp.length;
+    const allPlayed=pairs.size>=n*(n-1)/2;
+    h2h.forEach(g=>{
+      const a=arr.find(t=>t.id===g.t1),b=arr.find(t=>t.id===g.t2);
+      if(!a||!b)return;
+      a.h2hGP++;b.h2hGP++;
+      if(g.s1>g.s2){a.h2hW++;b.h2hL++;}
+      else if(g.s2>g.s1){b.h2hW++;a.h2hL++;}
+      else{a.h2hT++;b.h2hT++;}
+    });
+    grp.forEach(t=>{
+      t.h2hAllPlayed=allPlayed;
+      t.h2hWinPct=t.h2hGP>0?Math.round((t.h2hW+t.h2hT*0.5)/t.h2hGP*1000):0;
+      t.h2hRecord=t.h2hGP>0?`${t.h2hW}-${t.h2hL}-${t.h2hT}`:"—";
+    });
+  });
+  // Full 8-step USSSA sort
+  return arr.sort((a,b)=>{
+    if(b.winPct!==a.winPct)return b.winPct-a.winPct;           // 1. Win%
+    if(b.w!==a.w)return b.w-a.w;                               // 2. Wins
+    if(a.l!==b.l)return a.l-b.l;                               // 3. Losses
+    // 4. H2H Win% — only if all tied teams played each other
+    if(a.h2hAllPlayed&&b.h2hAllPlayed&&(a.h2hGP>0||b.h2hGP>0)){
+      if(b.h2hWinPct!==a.h2hWinPct)return b.h2hWinPct-a.h2hWinPct;
+    }
     const paA=a.gp>0?a.pa/a.gp:999,paB=b.gp>0?b.pa/b.gp:999;
-    if(Math.abs(paA-paB)>0.001)return paA-paB;
-    return parseFloat(b.avgRDMax8||0)-parseFloat(a.avgRDMax8||0);
+    if(Math.abs(paA-paB)>0.001)return paA-paB;                 // 5. Avg PA asc
+    const rdA=parseFloat(a.avgRDMax8||0),rdB=parseFloat(b.avgRDMax8||0);
+    if(Math.abs(rdA-rdB)>0.001)return rdB-rdA;                 // 6. Avg RD Max8 desc
+    return (b.pts||0)-(a.pts||0);                               // 7. USSSA Points desc
   });
 }
 function StandingsView({teams,games}){
@@ -1243,9 +1279,18 @@ function StandingsView({teams,games}){
                           color:t.winPct===1000?"#15803d":t.winPct===0?"#dc2626":"#1e293b"}}>
                           {t.winPct}
                         </td>
-                        <td style={{textAlign:"center",color:"#94a3b8",fontSize:10}}>N/A</td>
-                        <td style={{textAlign:"center",color:"#94a3b8",fontFamily:"monospace",fontSize:10}}>0-0-0</td>
-                        <td style={{textAlign:"center",color:"#94a3b8",fontSize:10}}>—</td>
+                        <td style={{textAlign:"center",fontSize:10,fontWeight:t.h2hAllPlayed?700:400,
+                          color:t.h2hAllPlayed?"#15803d":"#94a3b8"}}>
+                          {t.h2hAllPlayed?"Yes":"N/A"}
+                        </td>
+                        <td style={{textAlign:"center",fontFamily:"monospace",fontSize:10,
+                          color:t.h2hGP>0?"#1e293b":"#94a3b8"}}>
+                          {t.h2hRecord}
+                        </td>
+                        <td style={{textAlign:"center",fontSize:10,fontWeight:t.h2hGP>0?700:400,
+                          color:t.h2hGP>0?(t.h2hWinPct===1000?"#15803d":t.h2hWinPct===0?"#dc2626":"#1e293b"):"#94a3b8"}}>
+                          {t.h2hGP>0?t.h2hWinPct:"—"}
+                        </td>
                         <td style={{textAlign:"center",fontWeight:600,color:"#dc2626",padding:"4px 6px"}}>{t.avgRA}</td>
                         <td style={{textAlign:"center",fontWeight:600,color:"#16a34a",padding:"4px 6px"}}>{t.avgRS}</td>
                         <td style={{textAlign:"center",fontWeight:700,padding:"4px 6px",color:rdColor(t.avgRD)}}>{signFmt(t.avgRD)}</td>
@@ -1894,45 +1939,66 @@ function BracketView({bGames,setBGames,teams,games=[],editable}){
 
 /* ════════════════════ POOL2BRACKET ════════════════════ */
 function Pool2BracketView({poolGames,teams}){
-  const st=calcStandings(teams,poolGames);
-  const slots=["Bracket Seed 1 (Best record)","Bracket Seed 2","Bracket Seed 3","Bracket Seed 4 (Worst record)"];
-  const [assigns,setAssigns]=useState(Object.fromEntries(st.slice(0,4).map((t,i)=>[`s${i+1}`,t.id])));
+  const finalGames=poolGames.filter(g=>g.status==="final");
+  const st=calcUSSSAStandings(teams,finalGames);
+  const maxSeeds=st.length;
+  const [assigns,setAssigns]=useState(()=>Object.fromEntries(st.map((t,i)=>[`s${i+1}`,t.id])));
+  function autoAssign(){setAssigns(Object.fromEntries(st.map((t,i)=>[`s${i+1}`,t.id])));}
+  const NAVY="#1e3a5f";
   return(
     <div>
-      <Alrt type="info">📋 Move pool placers into bracket. Seed 1 gets the best matchup path (plays seed 4 in the opener).</Alrt>
+      <Alrt type="info">📋 Pool standings → bracket seeding. Seed 1 (best record) plays Seed {maxSeeds} in Round 1. Uses full USSSA tiebreaker order.</Alrt>
       <div className="g2" style={{gap:20,alignItems:"start"}}>
-        <div>
-          <div className="fw7 mb2 t-navy">Pool Final Standings</div>
-          <div className="tbl-wrap">
-            <table>
-              <thead><tr><th>Seed</th><th>Team</th><th>W</th><th>L</th><th>PF</th><th>PA</th><th>Pts</th></tr></thead>
+        <div style={{flex:"1 1 340px"}}>
+          <div style={{fontWeight:800,fontSize:13,color:NAVY,marginBottom:8}}>📊 Pool Final Standings</div>
+          <div style={{border:"1px solid #e2e8f0",borderRadius:8,overflow:"hidden"}}>
+            <table style={{borderCollapse:"collapse",width:"100%",fontSize:12}}>
+              <thead>
+                <tr style={{background:NAVY,color:"#fff"}}>
+                  <th style={{padding:"7px 8px",fontWeight:700,width:40}}>Seed</th>
+                  <th style={{padding:"7px 10px",fontWeight:700,textAlign:"left"}}>Team</th>
+                  <th style={{padding:"7px 8px",fontWeight:700}}>Record</th>
+                  <th style={{padding:"7px 8px",fontWeight:700}}>Win%</th>
+                  <th style={{padding:"7px 8px",fontWeight:700}}>RD</th>
+                  <th style={{padding:"7px 8px",fontWeight:700}}>PA</th>
+                </tr>
+              </thead>
               <tbody>{st.map((t,i)=>(
-                <tr key={t.id}>
-                  <td><SeedRank n={i+1}/></td>
-                  <td className="fw7">{t.name}</td>
-                  <td style={{color:"var(--green)",fontWeight:700}}>{t.w}</td>
-                  <td style={{color:"var(--red)"}}>{t.l}</td>
-                  <td>{t.pf}</td><td>{t.pa}</td>
-                  <td className="fw8">{t.pts}</td>
+                <tr key={t.id} style={{background:i%2===0?"#fff":"#f8fafc",borderTop:"1px solid #f1f5f9"}}>
+                  <td style={{textAlign:"center",padding:"6px 4px"}}><SeedRank n={i+1}/></td>
+                  <td style={{padding:"6px 10px",fontWeight:600,color:NAVY}}>{t.name}</td>
+                  <td style={{textAlign:"center",fontFamily:"monospace",fontWeight:700}}>{t.record}</td>
+                  <td style={{textAlign:"center",fontWeight:800,
+                    color:t.winPct===1000?"#15803d":t.winPct===0?"#dc2626":"#1e293b"}}>{t.winPct}</td>
+                  <td style={{textAlign:"center",fontWeight:600,
+                    color:parseFloat(t.avgRDMax8)>0?"#15803d":parseFloat(t.avgRDMax8)<0?"#dc2626":"#64748b"}}>
+                    {parseFloat(t.avgRDMax8)>0?"+":""}{t.avgRDMax8}
+                  </td>
+                  <td style={{textAlign:"center",color:"#dc2626",fontWeight:600}}>{t.avgRA}</td>
                 </tr>
               ))}</tbody>
             </table>
           </div>
         </div>
-        <div>
-          <div className="fw7 mb2 t-navy">Assign to Bracket Slots</div>
-          {slots.map((slot,i)=>(
-            <div key={slot} style={{marginBottom:10}}>
-              <label>{slot}</label>
-              <select className="w100"
-                value={assigns[`s${i+1}`]||""}
-                onChange={e=>setAssigns(p=>({...p,[`s${i+1}`]:e.target.value}))}>
-                <option value="">— Select Team —</option>
-                {st.map(t=><option key={t.id} value={t.id}>#{st.indexOf(t)+1} {t.name} ({t.w}-{t.l})</option>)}
-              </select>
-            </div>
-          ))}
-          <button className="btn btn-secondary mt2 w100">⚡ Auto-Assign by Seed</button>
+        <div style={{flex:"1 1 260px"}}>
+          <div style={{fontWeight:800,fontSize:13,color:NAVY,marginBottom:8}}>🏆 Assign to Bracket Slots</div>
+          {st.map((_,i)=>{
+            const sKey=`s${i+1}`;
+            return(
+              <div key={sKey} style={{marginBottom:8,display:"flex",alignItems:"center",gap:8}}>
+                <SeedRank n={i+1}/>
+                <select style={{flex:1,fontSize:12,padding:"6px 8px",border:"1px solid #cbd5e1",borderRadius:6}}
+                  value={assigns[sKey]||""}
+                  onChange={e=>setAssigns(p=>({...p,[sKey]:e.target.value}))}>
+                  <option value="">— Select Team —</option>
+                  {st.map((t,j)=><option key={t.id} value={t.id}>#{j+1} {t.name} ({t.record})</option>)}
+                </select>
+              </div>
+            );
+          })}
+          <div style={{display:"flex",gap:8,marginTop:12}}>
+            <button className="btn btn-secondary" style={{flex:1}} onClick={autoAssign}>⚡ Auto-Assign by Seed</button>
+          </div>
           <button className="btn btn-green mt2 w100">✓ Lock Bracket Seeding</button>
         </div>
       </div>
@@ -2120,42 +2186,128 @@ function PitchingView({teams}){
 
 /* ════════════════════ PLACING ════════════════════ */
 function PlacingView({bGames,teams}){
-  const lastRound=Math.max(...bGames.map(g=>g.round));
-  const finalG=bGames.find(g=>g.round===lastRound);
-  const champ=finalG?winOf(finalG):null;
-  const runner=finalG?loseOf(finalG):null;
-  const sfs=bGames.filter(g=>g.round===lastRound-1&&lastRound>1);
-  const third=sfs.map(g=>loseOf(g)).find(t=>t&&t!==champ&&t!==runner);
-  function t(id){return tByIdFrom(id,teams)}
-  const places=[
-    {pos:1,ico:"🥇",id:champ,lbl:"Champion"},
-    {pos:2,ico:"🥈",id:runner,lbl:"Runner-Up"},
-    {pos:3,ico:"🥉",id:third,lbl:"3rd Place"},
-  ];
+  const NAVY="#1e3a5f";
+  function tm(id){return tByIdFrom(id,teams)}
+  const ordSfx=n=>n===1?"st":n===2?"nd":n===3?"rd":"th";
+  // Build all placings by traversing every round's losers (bottom-up)
+  // Determine total rounds
+  const rounds=[...new Set(bGames.filter(g=>g.status!=="bye").map(g=>g.round))].sort((a,b)=>b-a);
+  if(!rounds.length)return <Alrt type="info">🏆 No bracket games recorded yet.</Alrt>;
+  const lastRound=rounds[0];
+  // Walk rounds from last → first to assign places
+  // Championship winner = 1st, loser = 2nd
+  // Semi-final losers = 3rd/4th, Quarter-final losers = 5th–8th, etc.
+  const places=[];
+  let nextPlace=1;
+  const placed=new Set();
+  rounds.forEach(r=>{
+    const roundGames=bGames.filter(g=>g.round===r&&g.status!=="bye");
+    if(r===lastRound){
+      // Championship
+      roundGames.forEach(g=>{
+        const w=winOf(g),l=loseOf(g);
+        if(w&&!placed.has(w)){places.push({pos:nextPlace,id:w,lbl:"Champion",ico:"🥇"});placed.add(w);nextPlace++;}
+        if(l&&!placed.has(l)){places.push({pos:nextPlace,id:l,lbl:"Runner-Up",ico:"🥈"});placed.add(l);nextPlace++;}
+      });
+    } else {
+      // All losers from this round tie for nextPlace
+      const losers=roundGames.map(g=>loseOf(g)).filter(id=>id&&!placed.has(id));
+      const numLosers=losers.length;
+      if(numLosers===0)return;
+      const startPos=nextPlace;
+      const endPos=nextPlace+numLosers-1;
+      const posLabel=startPos===endPos?`${startPos}${ordSfx(startPos)}`:
+        `${startPos}${ordSfx(startPos)}–${endPos}${ordSfx(endPos)}`;
+      const ico=startPos===3?"🥉":startPos<=4?"4️⃣":startPos<=8?"🎖":"📋";
+      losers.forEach(id=>{
+        if(!placed.has(id)){
+          places.push({pos:startPos,id,lbl:posLabel+" Place",ico});
+          placed.add(id);
+          nextPlace++;
+        }
+      });
+    }
+  });
+  // Any team in the bracket but not placed = TBD
+  const allBracketTeams=new Set(bGames.filter(g=>g.status!=="bye").flatMap(g=>[g.t1,g.t2]).filter(Boolean));
+  allBracketTeams.forEach(id=>{
+    if(!placed.has(id)){
+      places.push({pos:nextPlace,id,lbl:"TBD",ico:"⏳"});
+      nextPlace++;
+    }
+  });
+  const top3=places.filter(p=>p.pos<=3);
   return(
     <div>
-      <Alrt type="success">🏆 Final division standings based on bracket results.</Alrt>
-      <div style={{display:"flex",gap:16,flexWrap:"wrap",marginBottom:20}}>
-        {places.map(p=>(
-          <div key={p.pos} className="place-card" style={{flex:"1 1 160px",minWidth:140}}>
-            <div className="place-medal">{p.ico}</div>
-            <div className="place-team">{p.id?t(p.id)?.name:"TBD"}</div>
-            <div className="place-detail">{p.lbl}</div>
-          </div>
-        ))}
-      </div>
-      <div className="tbl-wrap">
-        <table>
-          <thead><tr><th>Place</th><th>Team</th><th>Class</th><th>Notes</th></tr></thead>
-          <tbody>{places.map(p=>(
-            <tr key={p.pos}>
-              <td>{p.ico} {p.pos}{p.pos===1?"st":p.pos===2?"nd":"rd"}</td>
-              <td className="fw7">{p.id?t(p.id)?.name:"TBD"}</td>
-              <td>{p.id?<span className="badge b-gray">{t(p.id)?.cls}</span>:"—"}</td>
-              <td className="t-sm t-gray">{p.lbl}</td>
+      <Alrt type="success">🏆 Final division standings based on bracket results. Positions auto-calculated from game outcomes.</Alrt>
+      {/* Podium cards */}
+      {top3.length>0&&(
+        <div style={{display:"flex",gap:16,flexWrap:"wrap",marginBottom:20}}>
+          {[1,2,3].map(pos=>{
+            const p=top3.find(x=>x.pos===pos);
+            const medBg=pos===1?"linear-gradient(135deg,#fbbf24,#f59e0b)":pos===2?"linear-gradient(135deg,#94a3b8,#64748b)":"linear-gradient(135deg,#f97316,#ea580c)";
+            return(
+              <div key={pos} style={{flex:"1 1 150px",minWidth:140,textAlign:"center",
+                borderRadius:12,overflow:"hidden",boxShadow:"0 4px 16px rgba(0,0,0,.1)"}}>
+                <div style={{background:medBg,padding:"16px 8px 12px"}}>
+                  <div style={{fontSize:32}}>{p?.ico||"❓"}</div>
+                  <div style={{color:"#fff",fontWeight:900,fontSize:11,marginTop:4,letterSpacing:1}}>{p?.lbl||`${pos}${ordSfx(pos)} Place`}</div>
+                </div>
+                <div style={{background:"#fff",padding:"12px 8px",borderTop:"3px solid rgba(0,0,0,.05)"}}>
+                  <div style={{fontWeight:800,fontSize:13,color:NAVY,lineHeight:1.3}}>
+                    {p?.id?tm(p.id)?.name:<span style={{color:"#94a3b8",fontStyle:"italic"}}>TBD</span>}
+                  </div>
+                  {p?.id&&<div style={{fontSize:10,color:"#94a3b8",marginTop:2}}>{tm(p.id)?.cls}</div>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {/* Full placing table */}
+      <div style={{border:"1px solid #e2e8f0",borderRadius:8,overflow:"hidden"}}>
+        <table style={{borderCollapse:"collapse",width:"100%",fontSize:13}}>
+          <thead>
+            <tr style={{background:NAVY,color:"#fff"}}>
+              <th style={{padding:"9px 12px",fontWeight:700,width:80}}>Place</th>
+              <th style={{padding:"9px 12px",fontWeight:700,textAlign:"left"}}>Team</th>
+              <th style={{padding:"9px 12px",fontWeight:700,width:80,textAlign:"center"}}>Class</th>
+              <th style={{padding:"9px 12px",fontWeight:700,textAlign:"left",width:160}}>Notes</th>
+              <th style={{padding:"9px 12px",fontWeight:700,textAlign:"center",width:100}}>Set Place</th>
             </tr>
-          ))}</tbody>
+          </thead>
+          <tbody>
+            {places.sort((a,b)=>a.pos-b.pos).map((p,i)=>{
+              const team=tm(p.id);
+              const rowBg=i%2===0?"#fff":"#f8fafc";
+              const plcColor=p.pos===1?"#b45309":p.pos===2?"#64748b":p.pos===3?"#c2410c":"#1e293b";
+              return(
+                <tr key={p.id||i} style={{background:rowBg,borderTop:"1px solid #f1f5f9"}}>
+                  <td style={{padding:"8px 12px",textAlign:"center",fontWeight:900,fontSize:14,color:plcColor}}>
+                    {p.ico} {p.pos}{ordSfx(p.pos)}
+                  </td>
+                  <td style={{padding:"8px 12px",fontWeight:700,color:NAVY}}>
+                    {team?<>
+                      {team.state&&<span style={{fontSize:10,color:"#94a3b8",marginRight:4}}>[{team.state}]</span>}
+                      {team.name}
+                    </>:<span style={{color:"#94a3b8",fontStyle:"italic"}}>TBD</span>}
+                  </td>
+                  <td style={{padding:"8px 12px",textAlign:"center"}}>
+                    {team&&<span style={{background:"#f1f5f9",border:"1px solid #cbd5e1",borderRadius:4,padding:"2px 7px",fontSize:10,fontWeight:700,color:"#475569"}}>{team.cls}</span>}
+                  </td>
+                  <td style={{padding:"8px 12px",color:"#64748b",fontSize:12}}>{p.lbl}</td>
+                  <td style={{padding:"8px 12px",textAlign:"center"}}>
+                    <input type="number" min="0" placeholder="Override"
+                      style={{width:64,padding:"4px 6px",border:"1px solid #cbd5e1",borderRadius:4,fontSize:11,textAlign:"center"}}/>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
         </table>
+      </div>
+      <div style={{marginTop:10,fontSize:11,color:"#94a3b8"}}>
+        * Set Place to 0 to hide a team from standings display. Overrides are used for tiebreak situations not resolvable by bracket position alone.
       </div>
     </div>
   );
@@ -2163,33 +2315,116 @@ function PlacingView({bGames,teams}){
 
 /* ════════════════════ LIVE & LOCK ════════════════════ */
 function LiveLockView(){
+  const NAVY="#1e3a5f";
   const [cfg,setCfg]=useState({poolStandings:true,schedule:true,bracket:true,liveScores:true,pitching:false,rosters:false});
   const [locked,setLocked]=useState(false);
+  const [bonusPool,setBonusPool]=useState("10"); // bonus pts for winning pool
+  const [bonusWin,setBonusWin]=useState("10");  // bonus pts per pool win
+  const [format,setFormat]=useState("Standard");
   const keys={poolStandings:"Pool Standings",schedule:"Schedule & Times",bracket:"Bracket View",liveScores:"Live Scores",pitching:"Pitch Count Data",rosters:"Team Rosters"};
+  const visLabels={poolStandings:"Show standings to public fans & teams",schedule:"Show game schedule & field assignments",bracket:"Show bracket draw & results",liveScores:"Show live score updates",pitching:"Show pitch count tracking",rosters:"Show team rosters"};
   return(
     <div>
-      <Alrt type={locked?"success":"warn"}>{locked?"🔒 Event locked — no further changes without unlocking.":"🔓 Event is live. Changes are instantly visible to public."}</Alrt>
-      <div className="card mb4">
-        <div className="card-hd"><span className="card-title">Public Visibility</span></div>
-        <div className="card-body" style={{padding:"12px 18px"}}>
-          {Object.entries(keys).map(([k,label])=>(
-            <div key={k} className="tgl">
-              <div>
-                <div className="fw7 t-sm">{label}</div>
-                <div className="t-xs t-gray">Show to public fans &amp; teams</div>
+      <Alrt type={locked?"success":"warn"}>
+        {locked?"🔒 Event locked — no further score/schedule changes without unlocking.":"🔓 Event is live. Changes are instantly visible to public."}
+      </Alrt>
+
+      <div className="g2" style={{gap:20,alignItems:"start",marginTop:4}}>
+        {/* Left: visibility + lock */}
+        <div style={{flex:"1 1 260px"}}>
+          <div className="card mb4">
+            <div className="card-hd">
+              <span className="card-title">👁 Public Visibility</span>
+            </div>
+            <div className="card-body" style={{padding:"10px 16px"}}>
+              {Object.entries(keys).map(([k,label])=>(
+                <div key={k} className="tgl" style={{padding:"8px 0",borderBottom:"1px solid #f1f5f9"}}>
+                  <div>
+                    <div className="fw7 t-sm">{label}</div>
+                    <div className="t-xs t-gray">{visLabels[k]||"Show to public"}</div>
+                  </div>
+                  <div className="tgl-sw" onClick={()=>!locked&&setCfg(p=>({...p,[k]:!p[k]}))}
+                    style={{background:cfg[k]?"var(--green)":"var(--gray-m)",cursor:locked?"not-allowed":"pointer"}}>
+                    <div className="tgl-dot" style={{left:cfg[k]?23:3}}/>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div style={{display:"flex",gap:8"}}>
+            {!locked&&<button className="btn btn-green" style={{flex:1}} onClick={()=>setLocked(true)}>🔒 Lock Event (Finalize)</button>}
+            {locked&&<button className="btn btn-secondary" style={{flex:1}} onClick={()=>setLocked(false)}>🔓 Unlock for Editing</button>}
+            <button className="btn btn-blue" style={{flex:1}}>📤 Publish Schedule</button>
+          </div>
+        </div>
+
+        {/* Right: bonus points + format */}
+        <div style={{flex:"1 1 260px"}}>
+          <div className="card mb4">
+            <div className="card-hd"><span className="card-title">🏅 Bonus Point Structure</span></div>
+            <div className="card-body" style={{padding:"14px 16px"}}>
+              <div style={{fontSize:11,color:"#64748b",marginBottom:12,lineHeight:1.5}}>
+                Bonus points are awarded in addition to standard win/loss points and affect USSSA national ranking calculations.
               </div>
-              <div className="tgl-sw" onClick={()=>setCfg(p=>({...p,[k]:!p[k]}))}
-                style={{background:cfg[k]?"var(--green)":"var(--gray-m)"}}>
-                <div className="tgl-dot" style={{left:cfg[k]?23:3}}/>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+                <div>
+                  <label style={{fontSize:12,fontWeight:700,color:"#374151",display:"block",marginBottom:4}}>Pool Winner Bonus</label>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <input type="number" min="0" max="50" value={bonusPool} onChange={e=>setBonusPool(e.target.value)}
+                      style={{width:60,padding:"6px 8px",border:"2px solid #cbd5e1",borderRadius:6,fontSize:14,fontWeight:800,textAlign:"center"}}/>
+                    <span style={{fontSize:11,color:"#64748b"}}>pts</span>
+                  </div>
+                  <div style={{fontSize:10,color:"#94a3b8",marginTop:3}}>Awarded to 1st place finisher in pool</div>
+                </div>
+                <div>
+                  <label style={{fontSize:12,fontWeight:700,color:"#374151",display:"block",marginBottom:4}}>Per Pool Win Bonus</label>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <input type="number" min="0" max="50" value={bonusWin} onChange={e=>setBonusWin(e.target.value)}
+                      style={{width:60,padding:"6px 8px",border:"2px solid #cbd5e1",borderRadius:6,fontSize:14,fontWeight:800,textAlign:"center"}}/>
+                    <span style={{fontSize:11,color:"#64748b"}}>pts</span>
+                  </div>
+                  <div style={{fontSize:10,color:"#94a3b8",marginTop:3}}>Awarded per pool game win</div>
+                </div>
+              </div>
+              <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:6,padding:"8px 12px",fontSize:11,color:"#166534"}}>
+                Current: <strong>{bonusPool}/{bonusWin}</strong> — Pool Winner / Pool Win
               </div>
             </div>
-          ))}
+          </div>
+
+          <div className="card">
+            <div className="card-hd"><span className="card-title">⚙️ Flight Settings</span></div>
+            <div className="card-body" style={{padding:"14px 16px"}}>
+              <div style={{marginBottom:10}}>
+                <label style={{fontSize:12,fontWeight:700,color:"#374151",display:"block",marginBottom:4}}>Pool Standings Display</label>
+                <select value={format} onChange={e=>setFormat(e.target.value)}
+                  style={{width:"100%",padding:"7px 10px",border:"1px solid #cbd5e1",borderRadius:6,fontSize:13}}>
+                  <option value="Standard">Standard</option>
+                  <option value="Simplified">Simplified (W-L only)</option>
+                  <option value="Full">Full (all tiebreakers shown)</option>
+                </select>
+              </div>
+              <div>
+                <label style={{fontSize:12,fontWeight:700,color:"#374151",display:"block",marginBottom:6}}>Bracket Print Variables</label>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  {[["Team Chars","35"],["Line Width","140"],["Font Height","10"]].map(([lbl,def])=>(
+                    <div key={lbl}>
+                      <div style={{fontSize:10,color:"#64748b",marginBottom:2}}>{lbl}</div>
+                      <input type="number" defaultValue={def}
+                        style={{width:"100%",padding:"5px 7px",border:"1px solid #e2e8f0",borderRadius:4,fontSize:12}}/>
+                    </div>
+                  ))}
+                  <div>
+                    <div style={{fontSize:10,color:"#64748b",marginBottom:2}}>Seed Display</div>
+                    <select style={{width:"100%",padding:"5px 7px",border:"1px solid #e2e8f0",borderRadius:4,fontSize:12}}>
+                      <option>Show Seeds</option><option>Hide Seeds</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-      <div className="flex gap-3">
-        {!locked&&<button className="btn btn-green" onClick={()=>setLocked(true)}>🔒 Lock Event (Finalize)</button>}
-        {locked&&<button className="btn btn-secondary" onClick={()=>setLocked(false)}>🔓 Unlock for Editing</button>}
-        <button className="btn btn-blue">📤 Publish Schedule</button>
       </div>
     </div>
   );
@@ -2197,30 +2432,182 @@ function LiveLockView(){
 
 /* ════════════════════ CONTACT / NOTES ════════════════════ */
 function ContactView({ev}){
+  const NAVY="#1e3a5f";
   const [note,setNote]=useState("Pool assignments finalized. Fields confirmed with park. Bracket seeded by pool finish. All games 1h 30min.\n\n3/15: Updated field assignments for Sunday.\n3/18: Bracket locked.");
+  const [msgSubject,setMsgSubject]=useState("");
+  const [msgBody,setMsgBody]=useState("");
+  const [selDivs,setSelDivs]=useState(new Set());
+  const [msgSent,setMsgSent]=useState(false);
+  const divOptions=(ev?.divisions||[]).map(d=>d.name||d.id);
+  const charCount=(msgSubject+msgBody).length;
+  const smsOver=charCount>80;
+  function toggleDiv(d){setSelDivs(p=>{const n=new Set(p);n.has(d)?n.delete(d):n.add(d);return n;});}
+  function selectAll(){setSelDivs(new Set(divOptions));}
+  function clearAll(){setSelDivs(new Set());}
+  function sendMsg(){
+    if(!msgSubject.trim()||!msgBody.trim()||selDivs.size===0)return;
+    setMsgSent(true);
+    setTimeout(()=>setMsgSent(false),3000);
+  }
+  const [logTab,setLogTab]=useState("msg");
+  const sampleLog=[
+    {ts:"3/18/2026 2:15 PM",dir:"Steve Hassett",action:"Scores - scores entered",flight:"Pool"},
+    {ts:"3/18/2026 10:32 AM",dir:"Steve Hassett",action:"Placing2 - red button clicked",flight:"Bracket"},
+    {ts:"3/17/2026 6:44 PM",dir:"Steve Hassett",action:"ResultsUpdate",flight:"Pool"},
+    {ts:"3/17/2026 3:20 PM",dir:"Steve Hassett",action:"LayoutSubmit - field data saved",flight:"Pool"},
+  ];
   return(
     <div>
-      <div className="g2 mb4" style={{alignItems:"start"}}>
-        <div className="card">
-          <div className="card-hd"><span className="card-title">Event Contact</span></div>
-          <div className="card-body">
-            {[["Director",ev?.director||"Steve Hassett"],["Phone","(561) 555-0100"],["Email","director@usssa.com"],["Location",ev?.loc||"Wellington, FL"],["State USSSA","Florida State Office"]].map(([k,v])=>(
-              <div key={k} style={{display:"flex",gap:12,padding:"7px 0",borderBottom:"1px solid var(--gray-m)"}}>
-                <div style={{width:80,fontWeight:700,fontSize:12,color:"var(--gray-d)"}}>{k}</div>
-                <div style={{fontSize:13}}>{v}</div>
+      {/* Tab bar */}
+      <div style={{display:"flex",gap:4,marginBottom:16,borderBottom:"2px solid #e2e8f0",paddingBottom:0}}>
+        {[["msg","📨 Message Teams"],["info","📋 Event Info"],["notes","📝 Director Notes"],["logs","📄 Audit Log"]].map(([k,lbl])=>(
+          <div key={k} onClick={()=>setLogTab(k)}
+            style={{padding:"8px 16px",fontWeight:700,fontSize:12,cursor:"pointer",borderBottom:"3px solid "+
+              (logTab===k?NAVY:"transparent"),color:logTab===k?NAVY:"#64748b",marginBottom:"-2px",transition:"all .15s"}}>
+            {lbl}
+          </div>
+        ))}
+      </div>
+
+      {/* MESSAGE TEAMS */}
+      {logTab==="msg"&&(
+        <div>
+          <div style={{background:"#fffbeb",border:"1px solid #fde047",borderRadius:8,padding:"10px 14px",fontSize:12,color:"#713f12",marginBottom:14,lineHeight:1.6}}>
+            ⚠️ <strong>Texting is active 6 days prior to tournament through end of event.</strong><br/>
+            Text messages (Subject + Body) are limited to <strong style={{color:smsOver?"#dc2626":"inherit"}}>80 characters max</strong> to work with all carriers.
+            This page automatically includes team managers when sending messages.
+          </div>
+          <div className="g2" style={{gap:20,alignItems:"start"}}>
+            {/* Division selector */}
+            <div style={{flex:"0 0 220px"}}>
+              <div style={{fontWeight:800,fontSize:13,color:NAVY,marginBottom:8}}>Select Divisions</div>
+              <div style={{border:"1px solid #cbd5e1",borderRadius:8,overflow:"hidden"}}>
+                <div style={{background:NAVY,padding:"6px 10px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{color:"#fff",fontWeight:700,fontSize:11}}>Divisions ({selDivs.size}/{divOptions.length})</span>
+                  <div style={{display:"flex",gap:8}}>
+                    <span onClick={selectAll} style={{color:"#93c5fd",fontSize:11,cursor:"pointer",fontWeight:600}}>All</span>
+                    <span onClick={clearAll} style={{color:"#fca5a5",fontSize:11,cursor:"pointer",fontWeight:600}}>None</span>
+                  </div>
+                </div>
+                <div style={{maxHeight:220,overflowY:"auto"}}>
+                  {divOptions.length===0
+                    ?<div style={{padding:"10px 12px",fontSize:12,color:"#94a3b8"}}>No divisions available</div>
+                    :divOptions.map(d=>(
+                      <div key={d} onClick={()=>toggleDiv(d)}
+                        style={{padding:"8px 12px",fontSize:12,cursor:"pointer",
+                          background:selDivs.has(d)?"#eff6ff":"#fff",
+                          borderBottom:"1px solid #f1f5f9",display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{width:14,height:14,borderRadius:3,border:"2px solid "+(selDivs.has(d)?"#2563eb":"#cbd5e1"),
+                          background:selDivs.has(d)?"#2563eb":"#fff",display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                          {selDivs.has(d)&&<span style={{color:"#fff",fontSize:9,fontWeight:900}}>✓</span>}
+                        </span>
+                        <span style={{fontWeight:selDivs.has(d)?700:400,color:selDivs.has(d)?"#1d4ed8":"#374151"}}>{d}</span>
+                      </div>
+                    ))
+                  }
+                </div>
               </div>
-            ))}
+            </div>
+            {/* Message compose */}
+            <div style={{flex:1}}>
+              <div style={{fontWeight:800,fontSize:13,color:NAVY,marginBottom:8}}>Compose Message</div>
+              <div style={{marginBottom:10}}>
+                <label style={{fontSize:12,fontWeight:700,color:"#374151",display:"block",marginBottom:4}}>Subject:</label>
+                <input value={msgSubject} onChange={e=>setMsgSubject(e.target.value)} maxLength={40}
+                  placeholder="e.g. Field update for Sunday"
+                  style={{width:"100%",padding:"8px 10px",border:"1px solid #cbd5e1",borderRadius:6,fontSize:13}}/>
+              </div>
+              <div style={{marginBottom:10}}>
+                <label style={{fontSize:12,fontWeight:700,color:"#374151",display:"block",marginBottom:4}}>Body:</label>
+                <textarea value={msgBody} onChange={e=>setMsgBody(e.target.value)} rows={5}
+                  placeholder="Your message to team managers..."
+                  style={{width:"100%",padding:"8px 10px",border:"1px solid #cbd5e1",borderRadius:6,fontSize:13,resize:"vertical"}}/>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                <span style={{fontSize:12,fontWeight:700,color:smsOver?"#dc2626":"#64748b"}}>
+                  {charCount}/80 SMS chars {smsOver&&"⚠️ Over limit — SMS may be split"}
+                </span>
+                <span style={{fontSize:11,color:"#94a3b8"}}>{selDivs.size} division(s) selected</span>
+              </div>
+              {msgSent&&<Alrt type="success">✅ Message sent to {selDivs.size} division(s) team managers!</Alrt>}
+              <button onClick={sendMsg} disabled={!msgSubject.trim()||!msgBody.trim()||selDivs.size===0}
+                style={{padding:"10px 24px",background:(!msgSubject.trim()||!msgBody.trim()||selDivs.size===0)?"#cbd5e1":"#16a34a",
+                  color:"#fff",border:"none",borderRadius:8,fontWeight:700,fontSize:14,cursor:(!msgSubject.trim()||!msgBody.trim()||selDivs.size===0)?"not-allowed":"pointer"}}>
+                📤 Send to Team Managers
+              </button>
+            </div>
           </div>
         </div>
+      )}
+
+      {/* EVENT INFO */}
+      {logTab==="info"&&(
+        <div className="g2" style={{alignItems:"start"}}>
+          <div className="card" style={{flex:1}}>
+            <div className="card-hd"><span className="card-title">Event Contact</span></div>
+            <div className="card-body">
+              {[["Director",ev?.director||"Steve Hassett"],["Phone","(561) 555-0100"],["Email","director@usssa.com"],
+                ["Location",ev?.loc||"Wellington, FL"],["State USSSA","Florida State Office"]].map(([k,v])=>(
+                <div key={k} style={{display:"flex",gap:12,padding:"7px 0",borderBottom:"1px solid var(--gray-m)"}}>
+                  <div style={{width:80,fontWeight:700,fontSize:12,color:"var(--gray-d)"}}>{k}</div>
+                  <div style={{fontSize:13}}>{v}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DIRECTOR NOTES */}
+      {logTab==="notes"&&(
         <div className="card">
-          <div className="card-hd"><span className="card-title">Director Notes (DevNotes)</span></div>
+          <div className="card-hd"><span className="card-title">📝 Director Notes</span></div>
           <div className="card-body">
+            <div style={{fontSize:11,color:"#64748b",marginBottom:8}}>
+              Internal notes for event coordination. Not visible to teams.
+            </div>
             <textarea value={note} onChange={e=>setNote(e.target.value)}
-              style={{width:"100%",height:140,resize:"vertical",fontSize:13,lineHeight:1.5}}/>
+              style={{width:"100%",height:200,resize:"vertical",fontSize:13,lineHeight:1.6,
+                padding:"10px",border:"1px solid #e2e8f0",borderRadius:6}}/>
             <button className="btn btn-green btn-sm mt2">💾 Save Notes</button>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* AUDIT LOG */}
+      {logTab==="logs"&&(
+        <div>
+          <div style={{fontWeight:800,fontSize:13,color:NAVY,marginBottom:12}}>📄 Logs Per Division</div>
+          <div style={{border:"1px solid #e2e8f0",borderRadius:8,overflow:"hidden"}}>
+            <table style={{borderCollapse:"collapse",width:"100%",fontSize:12}}>
+              <thead>
+                <tr style={{background:NAVY,color:"#fff"}}>
+                  <th style={{padding:"8px 10px",fontWeight:700,textAlign:"left"}}>Timestamp</th>
+                  <th style={{padding:"8px 10px",fontWeight:700,textAlign:"left"}}>Director</th>
+                  <th style={{padding:"8px 10px",fontWeight:700}}>Flight</th>
+                  <th style={{padding:"8px 10px",fontWeight:700,textAlign:"left"}}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sampleLog.map((row,i)=>(
+                  <tr key={i} style={{background:i%2===0?"#fff":"#f8fafc",borderTop:"1px solid #f1f5f9"}}>
+                    <td style={{padding:"7px 10px",color:"#64748b",whiteSpace:"nowrap"}}>{row.ts}</td>
+                    <td style={{padding:"7px 10px",fontWeight:600}}>{row.dir}</td>
+                    <td style={{padding:"7px 10px",textAlign:"center"}}>
+                      <span style={{background:row.flight==="Bracket"?"#eff6ff":"#f0fdf4",
+                        color:row.flight==="Bracket"?"#1d4ed8":"#15803d",
+                        borderRadius:12,padding:"2px 10px",fontWeight:700,fontSize:11}}>
+                        {row.flight}
+                      </span>
+                    </td>
+                    <td style={{padding:"7px 10px",color:"#374151"}}>{row.action}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
