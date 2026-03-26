@@ -697,162 +697,197 @@ function GameMgrView({games,setGames,teams,readOnly}){
 
 /* ════════════════════ LAYOUT BUILDER ════════════════════ */
 function LayoutView({games,setGames,teams}){
-  const [nf,setNf]=useState(3);
-  const [gl,setGl]=useState("90");
-  const [startT,setStartT]=useState("08:00");
-  const [endT,setEndT]=useState("19:00");
-  const [day,setDay]=useState(1);
-  const [fieldNames,setFieldNames]=useState(["Field 1","Field 2","Field 3","Field 4","Field 5","Field 6","Field 7","Field 8"]);
-  const [editFi,setEditFi]=useState(null);
-  const [layout,setLayout]=useState({}); // key:"D|time|fi" => gameId|"blocked"
-  const [picked,setPicked]=useState(null); // gameId selected to place
-  const [showNames,setShowNames]=useState(true);
-
-  function genTimes(s,e,len){
-    const r=[];
-    const toM=t=>{const[h,m]=t.split(":").map(Number);return h*60+m;};
-    const toL=m=>{const h=Math.floor(m/60),mn=m%60,ap=h>=12?"PM":"AM",h12=h>12?h-12:h===0?12:h;return`${h12}:${mn.toString().padStart(2,"0")} ${ap}`;};
-    let c=toM(s),max=toM(e);
-    while(c<=max){r.push(toL(c));c+=parseInt(len);}
+  const fmtISO=d=>{const y=d.getFullYear(),m=(d.getMonth()+1).toString().padStart(2,'0'),dd=d.getDate().toString().padStart(2,'0');return`${y}-${m}-${dd}`;};
+  const toMins=t=>{const[h,mn]=t.split(":").map(Number);return h*60+mn;};
+  const toLabel=m=>{const h=Math.floor(m/60),mn=m%60,ap=h>=12?"PM":"AM",h12=h>12?h-12:h===0?12:h;return`${h12}:${mn.toString().padStart(2,"0")} ${ap}`;};
+  const TIME_OPTS=["6:00 AM","6:30 AM","7:00 AM","7:30 AM","8:00 AM","8:30 AM","9:00 AM","9:30 AM","10:00 AM","10:30 AM","11:00 AM","11:30 AM","12:00 PM","12:30 PM","1:00 PM","1:30 PM","2:00 PM","2:30 PM","3:00 PM","3:30 PM","4:00 PM","4:30 PM","5:00 PM","5:30 PM","6:00 PM","6:30 PM","7:00 PM","7:30 PM","8:00 PM","8:30 PM","9:00 PM"];
+  const FIELD_OPTS=["LWR B1","LWR B2","LWR B3","LWR B4","LWR B5","LWR B6","Frank Brown F1","Frank Brown F2","Frank Brown F3","Field 1","Field 2","Field 3","Field 4","Field 5","Field 6","Diamond 1","Diamond 2","Diamond 3","Turf 1","Turf 2"];
+  function makeRows(){
+    const base=new Date();let n=1;const r=[];
+    [{t:"2:30 PM",off:0},{t:"4:30 PM",off:0},{t:"6:30 PM",off:0}].forEach(({t,off})=>{const d=new Date(base);d.setDate(d.getDate()+off);r.push({id:`r${n}`,num:n++,date:fmtISO(d),time:t,cells:{}});});
+    for(let i=1;i<=5;i++){const d=new Date(base);d.setDate(d.getDate()+i);r.push({id:`r${n}`,num:n++,date:fmtISO(d),time:"7:00 AM",cells:{}});}
     return r;
   }
-  const times=genTimes(startT,endT,gl);
-  const fields=fieldNames.slice(0,nf);
-  const sk=(t,fi)=>`${day}|${t}|${fi}`;
-  const assignedIds=new Set(Object.values(layout).filter(v=>v!=="blocked"));
-  const unscheduled=games.filter(g=>!assignedIds.has(g.id));
+  const [nf,setNf]=useState(2);
+  const [gl,setGl]=useState("60");
+  const [d1Start,setD1Start]=useState("08:00");
+  const [d1End,setD1End]=useState("19:00");
+  const [remStart,setRemStart]=useState("07:00");
+  const [remEnd,setRemEnd]=useState("19:00");
+  const [startRow,setStartRow]=useState("1");
+  const [timeVar,setTimeVar]=useState("5");
+  const [timeAct,setTimeAct]=useState("increase");
+  const [coverage,setCoverage]=useState("day_chosen");
+  const [fieldNames,setFieldNames]=useState(["LWR B6","LWR B5","Field 3","Field 4","Field 5","Field 6","Field 7","Field 8"]);
+  const [rows,setRows]=useState(makeRows);
+  const [picked,setPicked]=useState(null);
+  const [showNames,setShowNames]=useState(false);
 
-  function clickSlot(t,fi){
-    const k=sk(t,fi);const cur=layout[k];
+  const fields=fieldNames.slice(0,nf);
+  const assignedIds=new Set(rows.flatMap(r=>Object.values(r.cells)).filter(v=>v!=="blocked"));
+  const unscheduled=games.filter(g=>!assignedIds.has(g.id));
+  const pickedGame=picked?games.find(g=>g.id===picked):null;
+  const dayGroups=[...new Set(rows.map(r=>r.date))].sort();
+
+  function submitFieldData(){
+    const len=parseInt(gl);const base=new Date();const r=[];let n=1;
+    let cur=toMins(d1Start),end=toMins(d1End);
+    while(cur<=end){r.push({id:`r_${Date.now()}_${n}`,num:n++,date:fmtISO(base),time:toLabel(cur),cells:{}});cur+=len;}
+    setRows(r);
+  }
+
+  function setResetTimes(){
+    const len=parseInt(gl);
+    const byDate={};rows.forEach(r=>{if(!byDate[r.date])byDate[r.date]=[];byDate[r.date].push(r.id);});
+    const dates=Object.keys(byDate).sort();
+    const nr=[...rows];
+    dates.forEach((date,di)=>{
+      let cur=toMins(di===0?d1Start:remStart),end=toMins(di===0?d1End:remEnd);
+      byDate[date].forEach(id=>{const idx=nr.findIndex(r=>r.id===id);if(idx>=0){nr[idx]={...nr[idx],time:toLabel(cur)};cur+=len;}});
+    });
+    setRows(nr);
+  }
+
+  function blockDay(date){setRows(prev=>prev.map(r=>{if(r.date!==date)return r;const c={};fields.forEach((_,fi)=>c[fi]="blocked");return{...r,cells:c};}));}
+  function clearAllBlocked(){setRows(prev=>prev.map(r=>{const c={...r.cells};Object.keys(c).forEach(k=>{if(c[k]==="blocked")delete c[k];});return{...r,cells:c};}));}
+  function clearGameCells(){setRows(prev=>prev.map(r=>{const c={...r.cells};Object.keys(c).forEach(k=>{if(c[k]!=="blocked")delete c[k];});return{...r,cells:c};}));}
+
+  function autoSchedule(){
+    let i=0;const toPlace=[...unscheduled];
+    setRows(prev=>{
+      const nr=[...prev];
+      outer:for(let ri=0;ri<nr.length;ri++){for(let fi=0;fi<nf;fi++){if(!nr[ri].cells[fi]&&i<toPlace.length){nr[ri]={...nr[ri],cells:{...nr[ri].cells,[fi]:toPlace[i].id}};i++;}if(i>=toPlace.length)break outer;}}
+      return nr;
+    });
+  }
+
+  function addRow(){
+    const last=rows[rows.length-1];
+    setRows(prev=>[...prev,{id:`r_${Date.now()}`,num:prev.length+1,date:last?.date||fmtISO(new Date()),time:"07:00 AM",cells:{}}]);
+  }
+  function delRow(id){setRows(prev=>prev.filter(r=>r.id!==id).map((r,i)=>({...r,num:i+1})));}
+  function updRow(id,k,v){setRows(prev=>prev.map(r=>r.id===id?{...r,[k]:v}:r));}
+
+  function clickCell(rowId,fi){
+    const row=rows.find(r=>r.id===rowId);const cur=row?.cells[fi];
     if(picked){
       if(!cur||cur==="blocked"){
-        setLayout(p=>({...p,[k]:picked}));
-        setGames(prev=>prev.map(g=>g.id===picked?{...g,time:t,field:fields[fi]}:g));
+        setRows(prev=>prev.map(r=>r.id===rowId?{...r,cells:{...r.cells,[fi]:picked}}:r));
+        setGames(prev=>prev.map(g=>g.id===picked?{...g,time:row?.time,field:fields[fi],date:row?.date}:g));
         setPicked(null);
-      }else if(cur&&cur!=="blocked"){
-        // swap: move current game back to unscheduled, place picked
-        setLayout(p=>({...p,[k]:picked}));
-        setGames(prev=>prev.map(g=>g.id===picked?{...g,time:t,field:fields[fi]}:g));
+      }else if(cur!=="blocked"){
+        setRows(prev=>prev.map(r=>r.id===rowId?{...r,cells:{...r.cells,[fi]:picked}}:r));
+        setGames(prev=>prev.map(g=>g.id===picked?{...g,time:row?.time,field:fields[fi],date:row?.date}:g));
         setPicked(cur);
       }
       return;
     }
-    if(!cur){setLayout(p=>({...p,[k]:"blocked"}));}
-    else if(cur==="blocked"){setLayout(p=>{const n={...p};delete n[k];return n;});}
-    else{setLayout(p=>{const n={...p};delete n[k];return n;});}
+    if(!cur){setRows(prev=>prev.map(r=>r.id===rowId?{...r,cells:{...r.cells,[fi]:"blocked"}}:r));}
+    else if(cur==="blocked"){setRows(prev=>prev.map(r=>{if(r.id!==rowId)return r;const c={...r.cells};delete c[fi];return{...r,cells:c};}));}
+    else{setRows(prev=>prev.map(r=>{if(r.id!==rowId)return r;const c={...r.cells};delete c[fi];return{...r,cells:c};}));}
   }
 
-  function autoSchedule(){
-    const nl={...layout};
-    const toPlace=[...unscheduled];let i=0;
-    outer:for(const t of times){for(let f=0;f<nf;f++){const k=sk(t,f);if(!nl[k]&&i<toPlace.length){nl[k]=toPlace[i].id;i++;}if(i>=toPlace.length)break outer;}}
-    setLayout(nl);
-    setGames(prev=>{
-      const placed={};
-      Object.entries(nl).forEach(([k,id])=>{if(id!=="blocked"){const[,t,fi]=k.split("|");placed[id]={time:t,field:fieldNames[parseInt(fi)]};}});
-      return prev.map(g=>placed[g.id]?{...g,...placed[g.id]}:g);
-    });
-  }
-
-  function clearDay(){
-    const nl={};
-    Object.entries(layout).forEach(([k,v])=>{if(!k.startsWith(`${day}|`))nl[k]=v;});
-    setLayout(nl);setPicked(null);
-  }
-
-  const poolPal=["#dbeafe|#1d4ed8","#dcfce7|#15803d","#fae8ff|#7e22ce","#ffedd5|#c2410c","#e0f2fe|#0369a1","#fef9c3|#a16207"];
-  function poolCol(pool,i){const[bg,c]=(poolPal[i%poolPal.length]||"#f1f5f9|#475569").split("|");return{bg,c};}
-  const pools=[...new Set(games.map(g=>g.pool))].filter(Boolean).sort();
-  const poolIdx={};pools.forEach((p,i)=>poolIdx[p]=i);
-
-  const pickedGame=picked?games.find(g=>g.id===picked):null;
+  const inp={fontSize:11,padding:"3px 5px",border:"1px solid #cdd5df",borderRadius:3};
+  const btn=(bg,c,extra)=>({padding:"5px 11px",background:bg,color:c,border:"none",borderRadius:4,fontSize:11,fontWeight:700,cursor:"pointer",...extra});
 
   return(
     <div>
-      {/* Settings */}
+      {/* ── Settings Panel ── */}
       <div className="card mb4">
-        <div className="card-hd"><span className="card-title">Layout Settings</span></div>
-        <div className="card-body">
-          <div className="flex-w gap-3" style={{alignItems:"flex-end"}}>
-            <div><label>Fields</label>
-              <select value={nf} onChange={e=>{setNf(+e.target.value);setEditFi(null);}}>
-                {[1,2,3,4,5,6,7,8].map(n=><option key={n}>{n}</option>)}
-              </select>
-            </div>
-            <div><label>Game Length</label>
-              <select value={gl} onChange={e=>setGl(e.target.value)}>
-                <option value="60">60 min (1 hr)</option>
-                <option value="75">75 min (1h 15m)</option>
-                <option value="90">90 min (1h 30m)</option>
-                <option value="105">105 min (1h 45m)</option>
-                <option value="120">120 min (2 hr)</option>
-              </select>
-            </div>
-            <div><label>Start Time</label>
-              <input type="time" value={startT} onChange={e=>setStartT(e.target.value)}
-                style={{padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}}/>
-            </div>
-            <div><label>End Time</label>
-              <input type="time" value={endT} onChange={e=>setEndT(e.target.value)}
-                style={{padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}}/>
-            </div>
-            <div><label>Day</label>
-              <div style={{display:"flex",gap:4}}>
-                {[1,2,3,4].map(d=>(
-                  <button key={d} onClick={()=>setDay(d)}
-                    style={{padding:"5px 14px",borderRadius:6,fontWeight:700,fontSize:12,cursor:"pointer",
-                      border:"none",background:day===d?"#1e3a5f":"#f1f5f9",color:day===d?"#fff":"#475569",
-                      boxShadow:day===d?"0 2px 6px rgba(0,0,0,.15)":"none"}}>
-                    Day {d}
-                  </button>
-                ))}
+        <div className="card-body" style={{padding:"14px 16px"}}>
+          <div style={{display:"flex",gap:20,flexWrap:"wrap",alignItems:"flex-start"}}>
+
+            {/* Left block */}
+            <table style={{borderCollapse:"collapse",fontSize:12,flex:"0 0 auto"}}>
+              <tbody>
+                <tr><td style={{padding:"4px 10px 4px 0",fontWeight:600,color:"#475569",whiteSpace:"nowrap"}}># Fields:</td>
+                  <td><select value={nf} onChange={e=>setNf(+e.target.value)} style={inp}>
+                    {[1,2,3,4,5,6,7,8].map(n=><option key={n}>{n}</option>)}</select></td></tr>
+                <tr><td style={{padding:"4px 10px 4px 0",fontWeight:600,color:"#475569",whiteSpace:"nowrap"}}>Game Time Length:</td>
+                  <td><select value={gl} onChange={e=>setGl(e.target.value)} style={inp}>
+                    <option value="60">1 hour.</option><option value="75">1 hour 15 min.</option>
+                    <option value="90">1 hour 30 min.</option><option value="105">1 hour 45 min.</option>
+                    <option value="120">2 hours.</option></select></td></tr>
+                <tr><td style={{padding:"4px 10px 4px 0",fontWeight:600,color:"#475569",whiteSpace:"nowrap"}}>Time Range (Day 1):</td>
+                  <td><div style={{display:"flex",gap:4}}>
+                    <input type="time" value={d1Start} onChange={e=>setD1Start(e.target.value)} style={{...inp,width:90}}/>
+                    <input type="time" value={d1End} onChange={e=>setD1End(e.target.value)} style={{...inp,width:90}}/>
+                  </div></td></tr>
+                <tr><td style={{padding:"4px 10px 4px 0",fontWeight:600,color:"#475569",whiteSpace:"nowrap"}}>Remaining Days:</td>
+                  <td><div style={{display:"flex",gap:4}}>
+                    <input type="time" value={remStart} onChange={e=>setRemStart(e.target.value)} style={{...inp,width:90}}/>
+                    <input type="time" value={remEnd} onChange={e=>setRemEnd(e.target.value)} style={{...inp,width:90}}/>
+                  </div></td></tr>
+                <tr><td/><td style={{paddingTop:8}}>
+                  <button onClick={submitFieldData} style={btn("#1e3a5f","#fff")}>Submit Field Data</button>
+                </td></tr>
+              </tbody>
+            </table>
+
+            {/* Right block */}
+            <table style={{borderCollapse:"collapse",fontSize:12,flex:"0 0 auto"}}>
+              <tbody>
+                <tr><td style={{padding:"4px 10px 4px 0",fontWeight:600,color:"#475569",whiteSpace:"nowrap"}}>Start Row:</td>
+                  <td><select value={startRow} onChange={e=>setStartRow(e.target.value)} style={inp}>
+                    {Array.from({length:20},(_,i)=><option key={i+1}>{i+1}</option>)}</select></td></tr>
+                <tr><td style={{padding:"4px 10px 4px 0",fontWeight:600,color:"#475569",whiteSpace:"nowrap"}}>Time Variable:</td>
+                  <td><select value={timeVar} onChange={e=>setTimeVar(e.target.value)} style={inp}>
+                    {["5","10","15","20","30"].map(v=><option key={v} value={v}>{v} mins</option>)}</select></td></tr>
+                <tr><td style={{padding:"4px 10px 4px 0",fontWeight:600,color:"#475569",whiteSpace:"nowrap"}}>Action:</td>
+                  <td><select value={timeAct} onChange={e=>setTimeAct(e.target.value)} style={inp}>
+                    <option value="increase">+ increase</option><option value="decrease">- decrease</option></select></td></tr>
+                <tr><td style={{padding:"4px 10px 4px 0",fontWeight:600,color:"#475569",whiteSpace:"nowrap"}}>Coverage:</td>
+                  <td><select value={coverage} onChange={e=>setCoverage(e.target.value)} style={inp}>
+                    <option value="day_chosen">day chosen</option><option value="all_days">all days</option></select></td></tr>
+                <tr><td/><td style={{paddingTop:8}}>
+                  <button onClick={setResetTimes} style={btn("#e53e3e","#fff")}>Submit</button>
+                </td></tr>
+              </tbody>
+            </table>
+
+            {/* Action buttons */}
+            <div style={{display:"flex",flexDirection:"column",gap:6,flex:"0 0 auto"}}>
+              <button onClick={setResetTimes} style={btn("#c53030","#fff",{fontSize:12,padding:"7px 14px"})}>Set/Reset Game Times</button>
+              <div style={{display:"flex",gap:5}}>
+                <button style={btn("#f1f5f9","#1e293b",{border:"1px solid #cdd5df"})}>Start Games - Next Day</button>
+                <button style={btn("#f1f5f9","#1e293b",{border:"1px solid #cdd5df"})}>Start Games - Prev Day</button>
               </div>
-            </div>
-            <button className="btn btn-secondary btn-sm" onClick={()=>setShowNames(v=>!v)} style={{marginLeft:8}}>
-              {showNames?"Hide":"Show"} Team Names
-            </button>
-          </div>
-          <div style={{display:"flex",gap:8,marginTop:14,alignItems:"center",flexWrap:"wrap"}}>
-            <button className="btn btn-primary btn-sm" onClick={autoSchedule} disabled={unscheduled.length===0}
-              style={{opacity:unscheduled.length===0?.5:1}}>
-              ⚡ Auto-Schedule {unscheduled.length>0?`(${unscheduled.length} left)`:""}
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={clearDay}>🗑 Clear Day {day}</button>
-            <div style={{marginLeft:"auto",fontSize:12,color:"#94a3b8"}}>
-              {times.length} slots · {nf} field{nf!==1?"s":""} · {times.length*nf} total · {assignedIds.size} assigned
+              <div style={{display:"flex",gap:5}}>
+                <button onClick={()=>setShowNames(v=>!v)} style={btn(showNames?"#1e3a5f":"#f1f5f9",showNames?"#fff":"#1e293b",{border:"1px solid #cdd5df"})}>Show Team Names</button>
+                <button style={btn("#f1f5f9","#1e293b",{border:"1px solid #cdd5df"})}>* Show Pool Seed Values *</button>
+              </div>
+              <div style={{display:"flex",gap:5}}>
+                <button style={btn("#1d4ed8","#fff")}>Block Selected Cells</button>
+                <button onClick={clearAllBlocked} style={btn("#1d4ed8","#fff")}>Clear All Blocked Cells</button>
+              </div>
+              <div style={{display:"flex",gap:5}}>
+                <button onClick={clearGameCells} style={btn("#d97706","#fff")}>Clear Game Cells</button>
+                <button onClick={autoSchedule} disabled={unscheduled.length===0} style={btn("#16a34a","#fff",{opacity:unscheduled.length===0?.4:1})}>⚡ Auto-Schedule ({unscheduled.length})</button>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Unscheduled games */}
+      {/* Unscheduled picker */}
       {unscheduled.length>0&&(
         <div className="card mb4">
           <div className="card-hd">
-            <span className="card-title">Unscheduled Games</span>
-            <span style={{fontSize:12,color:"#94a3b8",marginLeft:8}}>{unscheduled.length} game{unscheduled.length!==1?"s":""} need scheduling</span>
-            {picked&&<button onClick={()=>setPicked(null)}
-              style={{marginLeft:"auto",padding:"4px 12px",borderRadius:6,fontSize:12,fontWeight:600,cursor:"pointer",border:"1px solid #fca5a5",background:"#fff",color:"#dc2626"}}>
-              ✕ Cancel
-            </button>}
+            <span className="card-title">Unscheduled — {unscheduled.length} game{unscheduled.length!==1?"s":""}</span>
+            {picked&&<button onClick={()=>setPicked(null)} style={{marginLeft:"auto",...btn("#fff","#dc2626",{border:"1px solid #fca5a5"})}}>✕ Cancel</button>}
           </div>
-          <div className="card-body" style={{display:"flex",flexWrap:"wrap",gap:8,paddingBottom:12}}>
+          <div className="card-body" style={{display:"flex",flexWrap:"wrap",gap:6}}>
             {unscheduled.map(g=>{
-              const t1=tByIdFrom(g.t1,teams),t2=tByIdFrom(g.t2,teams);
-              const pal=g.pool?poolCol(g.pool,poolIdx[g.pool]||0):{bg:"#f1f5f9",c:"#475569"};
               const isSel=picked===g.id;
+              const t1=tByIdFrom(g.t1,teams),t2=tByIdFrom(g.t2,teams);
               return(
                 <div key={g.id} onClick={()=>setPicked(isSel?null:g.id)}
-                  style={{padding:"9px 13px",borderRadius:8,cursor:"pointer",userSelect:"none",minWidth:130,
-                    border:isSel?"2px solid #2563eb":"1px solid #e2e8f0",
-                    background:isSel?"#eff6ff":"#f8fafc",
-                    boxShadow:isSel?"0 0 0 3px rgba(37,99,235,.15)":"none",
-                    transform:isSel?"translateY(-1px)":"none",transition:"all .1s"}}>
-                  <div style={{fontWeight:800,fontSize:13,color:"#1e293b"}}>{g.num}</div>
-                  <div style={{fontSize:11,color:"#64748b",marginTop:2,lineHeight:1.4}}>
-                    {showNames?(t1?.name?.split(" ").slice(-1)[0]||"TBD")+" vs "+(t2?.name?.split(" ").slice(-1)[0]||"TBD"):"—"}
-                  </div>
-                  {g.pool&&<span style={{fontSize:10,background:pal.bg,color:pal.c,borderRadius:4,padding:"1px 6px",fontWeight:700,marginTop:3,display:"inline-block"}}>Pool {g.pool}</span>}
+                  style={{padding:"7px 10px",borderRadius:6,cursor:"pointer",userSelect:"none",minWidth:100,
+                    border:isSel?"2px solid #2563eb":"1px solid #e2e8f0",background:isSel?"#eff6ff":"#f8fafc",
+                    boxShadow:isSel?"0 0 0 3px rgba(37,99,235,.15)":"none",transition:"all .1s"}}>
+                  <div style={{fontWeight:800,fontSize:12,color:"#1e293b"}}>{g.num}</div>
+                  {showNames&&<div style={{fontSize:10,color:"#64748b",marginTop:1}}>{t1?.name?.split(" ").slice(-1)[0]||"TBD"} vs {t2?.name?.split(" ").slice(-1)[0]||"TBD"}</div>}
+                  {g.pool&&<span style={{fontSize:9,color:"#2563eb",fontWeight:700}}>Pool {g.pool}</span>}
                 </div>
               );
             })}
@@ -861,124 +896,116 @@ function LayoutView({games,setGames,teams}){
       )}
 
       {picked&&pickedGame&&(
-        <div style={{background:"#eff6ff",border:"2px solid #93c5fd",borderRadius:8,padding:"10px 16px",marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
-          <span style={{fontSize:20}}>✋</span>
-          <div>
-            <strong style={{color:"#1d4ed8"}}>Game {pickedGame.num} selected</strong>
-            <span style={{fontSize:12,color:"#475569",marginLeft:10}}>Click any available slot to place it · Click it again or Cancel to deselect</span>
-          </div>
+        <div style={{background:"#eff6ff",border:"2px solid #93c5fd",borderRadius:6,padding:"8px 14px",marginBottom:10,fontSize:12,fontWeight:600,color:"#1d4ed8"}}>
+          ✋ <strong>Game {pickedGame.num}</strong> selected — click any cell to place it
         </div>
       )}
 
-      {unscheduled.length===0&&assignedIds.size>0&&(
-        <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"10px 16px",marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
-          <span style={{fontSize:18}}>✅</span>
-          <span style={{fontSize:13,fontWeight:600,color:"#15803d"}}>All {assignedIds.size} games scheduled for Day {day}!</span>
-        </div>
-      )}
+      {/* Save */}
+      <button style={{...btn("#16a34a","#fff",{fontSize:13,padding:"8px 20px",marginBottom:12,display:"block"})}}>💾 Save Changes Below</button>
 
-      {/* Grid */}
-      <div className="card">
-        <div className="card-hd">
-          <span className="card-title">Day {day} — Schedule Grid</span>
-          <span style={{fontSize:11,color:"#94a3b8",marginLeft:8}}>{times[0]} – {times[times.length-1]}</span>
-        </div>
-        <div style={{overflowX:"auto"}}>
-          <table style={{borderCollapse:"collapse",width:"100%",minWidth:400}}>
-            <thead>
-              <tr>
-                <th style={{background:"#f8fafc",padding:"10px 14px",borderBottom:"2px solid #e2e8f0",
-                  fontSize:11,color:"#94a3b8",textAlign:"left",fontWeight:700,width:90,whiteSpace:"nowrap"}}>TIME</th>
-                {fields.map((f,fi)=>(
-                  <th key={fi} style={{background:"#f8fafc",padding:"8px 12px",borderBottom:"2px solid #e2e8f0",
-                    borderLeft:"1px solid #e8edf2",minWidth:140,textAlign:"center",fontWeight:700,color:"#1e293b",fontSize:13}}>
-                    {editFi===fi
-                      ?<input autoFocus value={fieldNames[fi]}
-                          onChange={e=>{const n=[...fieldNames];n[fi]=e.target.value;setFieldNames(n);}}
-                          onBlur={()=>setEditFi(null)}
-                          onKeyDown={e=>{if(e.key==="Enter")setEditFi(null);}}
-                          style={{width:"100%",fontSize:13,fontWeight:700,border:"1px solid #93c5fd",borderRadius:4,padding:"3px 6px",textAlign:"center"}}/>
-                      :<span onClick={()=>setEditFi(fi)} title="Click to rename"
-                          style={{cursor:"pointer",borderBottom:"1.5px dotted #cbd5e1",paddingBottom:1}}>{f}</span>
-                    }
-                    <div style={{fontSize:9,fontWeight:400,color:"#94a3b8",marginTop:2}}>click to rename</div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {times.map((t,ti)=>(
-                <tr key={t} style={{background:ti%2===0?"#fff":"#fafbfc"}}>
-                  <td style={{padding:"7px 14px",fontSize:12,fontWeight:700,color:"#475569",
-                    borderBottom:"1px solid #f1f5f9",whiteSpace:"nowrap",borderRight:"2px solid #e2e8f0"}}>
-                    {t}
-                  </td>
-                  {fields.map((_,fi)=>{
-                    const k=sk(t,fi);const val=layout[k];
-                    const game=val&&val!=="blocked"?games.find(g=>g.id===val):null;
-                    const isBlocked=val==="blocked";
-                    const canPlace=!!picked&&!isBlocked;
-                    const t1n=game&&showNames?(tByIdFrom(game.t1,teams)?.name?.split(" ").slice(-1)[0]||"?"):null;
-                    const t2n=game&&showNames?(tByIdFrom(game.t2,teams)?.name?.split(" ").slice(-1)[0]||"?"):null;
-                    const pal=game?.pool?poolCol(game.pool,poolIdx[game.pool]||0):{bg:"#dbeafe",c:"#1d4ed8"};
-                    return(
-                      <td key={fi} onClick={()=>clickSlot(t,fi)}
-                        title={isBlocked?"Click to unblock":game?`${game.num} — click to unassign`:picked?"Click to place game":"Click to block"}
-                        style={{borderLeft:"1px solid #e8edf2",borderBottom:"1px solid #f1f5f9",
-                          padding:5,verticalAlign:"middle",cursor:"pointer",
-                          background:isBlocked?"#fff5f5":canPlace&&!game?"#eff6ff":"transparent",
-                          transition:"background .1s"}}>
-                        {game?(
-                          <div style={{background:pal.bg,border:`1px solid ${pal.c}33`,borderRadius:7,padding:"7px 9px"}}>
-                            <div style={{fontWeight:800,fontSize:12,color:pal.c}}>{game.num}</div>
-                            {showNames&&t1n&&<div style={{fontSize:11,color:"#334155",fontWeight:500,marginTop:2,lineHeight:1.3}}>
-                              {t1n} <span style={{opacity:.5}}>vs</span> {t2n}
-                            </div>}
-                            {game.pool&&<span style={{fontSize:9,background:pal.bg,color:pal.c,fontWeight:700,
-                              borderRadius:3,padding:"1px 5px",marginTop:2,display:"inline-block",border:`1px solid ${pal.c}44`}}>
-                              Pool {game.pool}
-                            </span>}
-                          </div>
-                        ):isBlocked?(
-                          <div style={{background:"#fee2e2",border:"1px dashed #fca5a5",borderRadius:7,
-                            padding:"8px",textAlign:"center"}}>
-                            <span style={{fontSize:10,fontWeight:700,color:"#dc2626"}}>BLOCKED</span>
-                          </div>
-                        ):(
-                          <div style={{borderRadius:7,padding:"8px",textAlign:"center",
-                            border:`1px dashed ${canPlace?"#93c5fd":"#e2e8f0"}`,
-                            background:canPlace?"#eff6ff":"transparent"}}>
-                            <span style={{fontSize:10,fontWeight:canPlace?700:400,
-                              color:canPlace?"#2563eb":"#d1d5db"}}>
-                              {canPlace?"→ Place here":"+ Assign"}
-                            </span>
-                          </div>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
+      {/* ── Grid ── */}
+      <div style={{overflowX:"auto"}}>
+        <table style={{borderCollapse:"collapse",width:"100%",fontSize:12,border:"1px solid #cbd5e1"}}>
+          <thead>
+            <tr style={{background:"#e8edf2"}}>
+              <th style={{padding:"8px 10px",border:"1px solid #cbd5e1",width:36,textAlign:"center",fontWeight:700,color:"#475569"}}>Row</th>
+              <th style={{padding:"8px 10px",border:"1px solid #cbd5e1",width:105,textAlign:"center",fontWeight:700,color:"#475569"}}>Date</th>
+              <th style={{padding:"8px 10px",border:"1px solid #cbd5e1",width:115,textAlign:"center",fontWeight:700,color:"#475569"}}>Time</th>
+              {fields.map((f,fi)=>(
+                <th key={fi} style={{padding:"6px 8px",border:"1px solid #cbd5e1",minWidth:140,textAlign:"center",fontWeight:700,color:"#1e293b"}}>
+                  <div style={{fontWeight:700,fontSize:12,marginBottom:3}}>F{fi+1}</div>
+                  <select value={fieldNames[fi]} onChange={e=>{const n=[...fieldNames];n[fi]=e.target.value;setFieldNames(n);}}
+                    style={{...inp,width:"100%",fontWeight:600}}>
+                    {FIELD_OPTS.map(o=><option key={o}>{o}</option>)}
+                    <option value={fieldNames[fi]}>{fieldNames[fi]}</option>
+                  </select>
+                </th>
               ))}
-            </tbody>
-          </table>
-        </div>
+              <th style={{padding:"8px 6px",border:"1px solid #cbd5e1",width:56,textAlign:"center"}}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {dayGroups.map(date=>{
+              const dayRows=rows.filter(r=>r.date===date);
+              const d=new Date(date+"T12:00:00");
+              const dayName=d.toLocaleDateString('en-US',{weekday:'long'});
+              const disp=`${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}`;
+              return(
+                <React.Fragment key={date}>
+                  <tr>
+                    <td colSpan={3+nf+1} style={{padding:"4px 8px",background:"#f0f4f8",border:"1px solid #e2e8f0"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:10}}>
+                        <button onClick={()=>blockDay(date)} style={btn("#16a34a","#fff",{fontSize:11})}>Block This Day</button>
+                        <span style={{fontWeight:700,color:"#374151",fontSize:12}}>{dayName}</span>
+                        <span style={{fontSize:11,color:"#9ca3af"}}>{disp} · {dayRows.length} slot{dayRows.length!==1?"s":""}</span>
+                      </div>
+                    </td>
+                  </tr>
+                  {dayRows.map((row,ri)=>(
+                    <tr key={row.id} style={{background:ri%2===0?"#fff":"#fafbfc"}}>
+                      <td style={{padding:"5px 8px",border:"1px solid #e2e8f0",textAlign:"center",fontWeight:800,fontSize:13,color:"#1e3a5f"}}>{row.num}</td>
+                      <td style={{padding:"4px 5px",border:"1px solid #e2e8f0",textAlign:"center"}}>
+                        <input type="date" value={row.date} onChange={e=>updRow(row.id,"date",e.target.value)} style={{...inp,width:108}}/>
+                      </td>
+                      <td style={{padding:"4px 5px",border:"1px solid #e2e8f0",textAlign:"center"}}>
+                        <select value={row.time} onChange={e=>updRow(row.id,"time",e.target.value)} style={{...inp,width:108}}>
+                          {TIME_OPTS.map(t=><option key={t}>{t}</option>)}
+                        </select>
+                      </td>
+                      {fields.map((_,fi)=>{
+                        const val=row.cells[fi];
+                        const game=val&&val!=="blocked"?games.find(g=>g.id===val):null;
+                        const isBlocked=val==="blocked";
+                        const canPlace=!!picked&&!isBlocked;
+                        const t1n=game&&showNames?tByIdFrom(game.t1,teams)?.name?.split(" ").slice(-1)[0]||"?":null;
+                        const t2n=game&&showNames?tByIdFrom(game.t2,teams)?.name?.split(" ").slice(-1)[0]||"?":null;
+                        return(
+                          <td key={fi} style={{border:"1px solid #e2e8f0",padding:4,textAlign:"center",verticalAlign:"middle",
+                            minWidth:140,background:isBlocked?"#fee2e2":canPlace&&!game?"#eff6ff":"transparent",cursor:"pointer"}}>
+                            {game?(
+                              <div style={{padding:"5px 6px"}}>
+                                <div style={{fontWeight:800,fontSize:13,color:"#1e3a5f"}}>{game.num}</div>
+                                {showNames&&t1n&&<div style={{fontSize:10,color:"#475569",marginTop:1}}>{t1n} vs {t2n}</div>}
+                                {game.pool&&<span style={{fontSize:9,color:"#2563eb",fontWeight:700}}>Pool {game.pool}</span>}
+                                <div style={{display:"flex",justifyContent:"center",gap:10,marginTop:5}}>
+                                  <span title="Assigned" style={{color:"#16a34a",fontSize:14}}>✓</span>
+                                  <span title="Swap / Reassign" onClick={()=>clickCell(row.id,fi)} style={{color:"#2563eb",fontSize:13,cursor:"pointer"}}>↔</span>
+                                  <span title="Remove" onClick={e=>{e.stopPropagation();clickCell(row.id,fi);}} style={{color:"#94a3b8",fontSize:14,cursor:"pointer"}}>⊘</span>
+                                </div>
+                              </div>
+                            ):isBlocked?(
+                              <div onClick={()=>clickCell(row.id,fi)} style={{padding:"10px 4px",background:"#fee2e2"}}>
+                                <div style={{fontSize:10,fontWeight:700,color:"#dc2626"}}>BLOCKED</div>
+                                <span style={{fontSize:12,color:"#fca5a5",cursor:"pointer"}}>⊘</span>
+                              </div>
+                            ):(
+                              <div onClick={()=>clickCell(row.id,fi)} style={{padding:"10px 4px"}}>
+                                <div style={{display:"flex",justifyContent:"center",gap:10}}>
+                                  <span title={canPlace?"Place here":"Assign"} style={{color:canPlace?"#2563eb":"#94a3b8",fontSize:14,fontWeight:canPlace?700:400}}>{canPlace?"→":"☑"}</span>
+                                  <span title="Block" style={{color:"#cbd5e1",fontSize:14}}>⊘</span>
+                                </div>
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td style={{border:"1px solid #e2e8f0",padding:"4px 6px",textAlign:"center",whiteSpace:"nowrap"}}>
+                        <span title="Confirm" style={{color:"#16a34a",fontSize:15,cursor:"pointer",marginRight:4}}>✓</span>
+                        <span title="Delete row" onClick={()=>delRow(row.id)} style={{color:"#dc2626",fontSize:15,cursor:"pointer",marginRight:4}}>⊘</span>
+                        <span title="Add row" onClick={addRow} style={{color:"#2563eb",fontSize:17,cursor:"pointer",fontWeight:800}}>+</span>
+                      </td>
+                    </tr>
+                  ))}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
-
-      {/* Legend */}
-      <div style={{display:"flex",gap:16,marginTop:14,fontSize:11,color:"#64748b",alignItems:"center",flexWrap:"wrap"}}>
-        <div style={{display:"flex",gap:5,alignItems:"center"}}>
-          <div style={{width:14,height:14,background:"#dbeafe",border:"1px solid #93c5fd44",borderRadius:3}}/>
-          <span>Assigned game</span>
-        </div>
-        <div style={{display:"flex",gap:5,alignItems:"center"}}>
-          <div style={{width:14,height:14,background:"#fee2e2",border:"1px dashed #fca5a5",borderRadius:3}}/>
-          <span>Blocked slot</span>
-        </div>
-        <div style={{display:"flex",gap:5,alignItems:"center"}}>
-          <div style={{width:14,height:14,background:"#fff",border:"1px dashed #e2e8f0",borderRadius:3}}/>
-          <span>Empty (click to block · click blocked to clear)</span>
-        </div>
-        <span style={{marginLeft:"auto",color:"#94a3b8"}}>💡 Select a game above → click a slot to place · Click field header to rename</span>
+      <div style={{display:"flex",gap:8,marginTop:10,alignItems:"center"}}>
+        <button onClick={addRow} style={btn("#f1f5f9","#1e293b",{border:"1px solid #cbd5e1",fontSize:12})}>+ Add Row</button>
+        <span style={{fontSize:11,color:"#94a3b8",marginLeft:8}}>{rows.length} rows · {assignedIds.size} assigned · {unscheduled.length} unscheduled</span>
       </div>
     </div>
   );
