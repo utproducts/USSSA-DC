@@ -1381,9 +1381,12 @@ function GridBuilderView(){
 }
 
 /* ════════════════════ SCHEDULE BUILDER (formerly Layout Builder) ════════════════════ */
-function LayoutView({games,setGames,teams:propTeams}){
-  // Imported teams layer — added by Excel import, merged with prop teams
+function LayoutView({games:propGames,setGames,teams:propTeams}){
+  // Imported games/teams layers — local state, avoids parent-batching race condition
+  const [xlGames,setXlGames]=useState([]);
   const [xlTeams,setXlTeams]=useState([]);
+  // Merge: imported games replace prop games when present
+  const games=React.useMemo(()=>xlGames.length?xlGames:propGames,[propGames,xlGames]);
   const teams=React.useMemo(()=>{
     if(!xlTeams.length)return propTeams;
     const existIds=new Set(propTeams.map(t=>t.id));
@@ -1500,7 +1503,8 @@ function LayoutView({games,setGames,teams:propTeams}){
     }
     function parseMatchup(str){
       if(!str||typeof str!=='string')return null;
-      const m=str.match(/^(.+?)\s+vs\.?\s*(.+)$/i);
+      // Handle: "A vs B", "A vs. B", "A v.s B", "A vs, B", "A v B", "A VS B"
+      const m=str.match(/^(.+?)\s+v(?:s\.?|\.s\.?|s,)\s*(.+)$/i)||str.match(/^(.+?)\s+v\s+(.+)$/i);
       return m?[m[1].trim(),m[2].trim()]:null;
     }
 
@@ -1568,13 +1572,14 @@ function LayoutView({games,setGames,teams:propTeams}){
       setXlImport({status:'error',msg:'No game matchups found. Make sure this is the Schedule file.',counts:null});
       return;
     }
-    // Apply state — xl teams stored locally, games/rows pushed to shared state
+    // Apply all state locally — keeps games/rows/fields in one batch, no parent re-render race
     setXlTeams(newTeams);
-    setGames(newGames);
+    setXlGames(newGames);
     setRows(newRows);
     setFieldNames(prev=>{const n=[...prev];newFieldNames.forEach((f,i)=>{n[i]=f;});return n;});
     setNf(newFieldNames.length);
-    setXlImport({status:'done',msg:'Import complete!',counts:{games:newGames.length,teams:newTeams.length,fields:newFieldNames.length,rows:newRows.length}});
+    setShowNames(true); // auto-enable team names so matchups are visible
+    setXlImport({status:'done',msg:`✅ Imported ${newGames.length} games across ${newFieldNames.length} fields (${newRows.length} time slots)`,counts:{games:newGames.length,teams:newTeams.length,fields:newFieldNames.length,rows:newRows.length}});
   }
 
   function parseGridWorkbook(wb){
@@ -2040,6 +2045,8 @@ function LayoutView({games,setGames,teams:propTeams}){
                   <select value={fieldNames[fi]} onChange={e=>{const n=[...fieldNames];n[fi]=e.target.value;setFieldNames(n);}}
                     style={{fontSize:12,padding:"3px 5px",borderRadius:3,border:"1px solid rgba(255,255,255,.3)",
                       background:"rgba(255,255,255,.15)",color:"#fff",width:"100%",cursor:"pointer",fontWeight:700}}>
+                    {/* If the current name isn't in FIELD_OPTS (e.g. imported), add it first */}
+                    {!FIELD_OPTS.includes(fieldNames[fi])&&<option key="__curr" style={{background:"#1e3a5f",color:"#fff"}}>{fieldNames[fi]}</option>}
                     {FIELD_OPTS.map(o=><option key={o} style={{background:"#1e3a5f",color:"#fff"}}>{o}</option>)}
                   </select>
                 </th>
