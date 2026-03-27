@@ -3489,6 +3489,7 @@ function App(){
   const [allGames,setAllGames]=useState([...PG8,...PG9,...PG12]);
   const [allBracketGames,setAllBracketGames]=useState([...BG8,...BG9]);
   const [dbStatus,setDbStatus]=useState('connecting');
+  const [liveDiv,setLiveDiv]=useState({status:'idle',updatedAt:null});
   useEffect(()=>{
     (async()=>{
       const rows=await dbLoad('events');
@@ -3504,6 +3505,24 @@ function App(){
         setDbStatus(rows!==null?'connected':'offline');
       }
     })();
+  },[]);
+  useEffect(()=>{
+    setLiveDiv({status:'loading',updatedAt:null});
+    fetch('https://usssa-poller.chad-157.workers.dev/divisions')
+      .then(r=>r.json())
+      .then(data=>{
+        if(data.status==='ok'&&data.divisions){
+          setEvents(prev=>prev.map(ev=>{
+            const live=data.divisions[String(ev.id)];
+            if(live&&live.length>0)return{...ev,divisions:live};
+            return ev;
+          }));
+          setLiveDiv({status:'loaded',updatedAt:data.updatedAt,source:data.source});
+        }else{
+          setLiveDiv({status:'error',updatedAt:null});
+        }
+      })
+      .catch(()=>setLiveDiv({status:'error',updatedAt:null}));
   },[]);
   function nav(id){setView(id);if(id==="events")setSelEv(null)}
   function selectEvent(ev){setSelEv(ev);setView("event-detail")}
@@ -3546,6 +3565,9 @@ function App(){
           </div>
           <div className="tb-right">
             <span className={`badge ${dbStatus==='connected'?'b-green':dbStatus==='connecting'?'b-gold':'b-red'}`} style={{fontSize:10}}>{dbStatus==='connected'?'● DB Connected':dbStatus==='connecting'?'◌ Connecting...':'○ Offline (Demo)'}</span>
+            {liveDiv.status==='loading'&&<span className="badge b-gold" style={{fontSize:10}}>⟳ Divisions loading…</span>}
+            {liveDiv.status==='loaded'&&<span className="badge b-green" title={`Source: ${liveDiv.source} · Updated: ${new Date(liveDiv.updatedAt).toLocaleTimeString()}`} style={{fontSize:10}}>● Divisions live</span>}
+            {liveDiv.status==='error'&&<span className="badge b-red" style={{fontSize:10}}>○ Divisions offline</span>}
             <span className="badge b-gray" style={{fontSize:10}}>2026 Season</span>
             {view!=="create"&&<button className="btn btn-primary btn-sm" onClick={()=>nav("create")}>+ New Event</button>}
           </div>
