@@ -925,6 +925,7 @@ function GridBuilderView(){
   const [divFilter,setDivFilter]=useState("");
   const [addTimeVal,setAddTimeVal]=useState("08:00");
   const [showTimeAdd,setShowTimeAdd]=useState(false);
+  const [editingPkId,setEditingPkId]=useState(null);
 
   const pk=parks.find(p=>p.id===activePkId)||parks[0];
 
@@ -1017,25 +1018,50 @@ function GridBuilderView(){
           const isAct=p.id===activePkId;
           return(
             <div key={p.id}
-              onClick={()=>{setActivePkId(p.id);setSelCell(null);setNewField("");}}
-              style={{display:"flex",alignItems:"center",gap:5,padding:"7px 14px",
+              onClick={()=>{setActivePkId(p.id);setSelCell(null);setNewField("");setEditingPkId(null);}}
+              style={{display:"flex",alignItems:"center",gap:5,padding:"7px 13px",
                 cursor:"pointer",fontWeight:isAct?800:600,fontSize:12,whiteSpace:"nowrap",
                 background:isAct?p.color:"#f8fafc",color:isAct?"#fff":"#475569",
                 borderRadius:"7px 7px 0 0",border:isAct?`2px solid ${p.color}`:"2px solid #e2e8f0",
                 borderBottom:isAct?"2px solid "+p.color:"2px solid #e2e8f0",
                 marginRight:2,marginBottom:isAct?-2:0,transition:"all .12s",
                 boxShadow:isAct?"0 -2px 8px rgba(0,0,0,.09)":"none"}}>
-              {/* Editable name — direct input always */}
-              <input value={p.name}
-                onClick={e=>e.stopPropagation()}
-                onChange={e=>upd(p.id,{name:e.target.value})}
-                style={{border:"none",background:"transparent",fontWeight:isAct?800:600,
-                  color:isAct?"#fff":"#475569",outline:"none",fontSize:12,
-                  width:Math.max(60,p.name.length*7.5),cursor:"text",minWidth:60}}/>
-              <span style={{fontSize:10,opacity:.65,flexShrink:0}}>{p.fields.length}f</span>
+
+              {editingPkId===p.id?(
+                /* ── Rename input — shows when pencil clicked ── */
+                <input
+                  autoFocus
+                  value={p.name}
+                  onClick={e=>e.stopPropagation()}
+                  onChange={e=>upd(p.id,{name:e.target.value})}
+                  onBlur={()=>setEditingPkId(null)}
+                  onKeyDown={e=>{if(e.key==="Enter"||e.key==="Escape")setEditingPkId(null);}}
+                  style={{border:"none",borderBottom:"2px solid rgba(255,255,255,.6)",
+                    background:"rgba(255,255,255,.15)",color:"#fff",outline:"none",
+                    fontSize:12,fontWeight:800,padding:"1px 4px",borderRadius:3,
+                    width:Math.max(70,p.name.length*8),minWidth:70}}/>
+              ):(
+                /* ── Static name + pencil icon ── */
+                <span style={{display:"flex",alignItems:"center",gap:4}}>
+                  <span>{p.name}</span>
+                  {isAct&&(
+                    <span
+                      onClick={e=>{e.stopPropagation();setEditingPkId(p.id);}}
+                      title="Rename complex"
+                      style={{fontSize:11,opacity:.7,cursor:"pointer",lineHeight:1,
+                        padding:"1px 4px",borderRadius:3,
+                        background:"rgba(255,255,255,.2)",
+                        transition:"opacity .1s"}}
+                    >✏️</span>
+                  )}
+                </span>
+              )}
+
+              <span style={{fontSize:10,opacity:.55,flexShrink:0,marginLeft:2}}>{p.fields.length}f</span>
               <span onClick={e=>{e.stopPropagation();delComplex(p.id);}}
-                style={{opacity:.55,cursor:"pointer",fontSize:14,lineHeight:1,flexShrink:0}}
-                title="Remove">×</span>
+                style={{opacity:.5,cursor:"pointer",fontSize:15,lineHeight:1,flexShrink:0,
+                  padding:"0 2px"}}
+                title="Remove complex">×</span>
             </div>
           );
         })}
