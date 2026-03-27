@@ -4409,26 +4409,30 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
   const [showPricing,setShowPricing]=useState(false);
   const [usssaTeams,setUsssaTeams]=useState([]);
   const [loadingTeams,setLoadingTeams]=useState(false);
-  useEffect(()=>{
-    if(!ev.evid||!activeDivObj)return;
-    setLoadingTeams(true);
-    setUsssaTeams([]);
+  const [searchState,setSearchState]=useState(ev.state||"FL");
+  const [hasSearched,setHasSearched]=useState(false);
+  function runTeamSearch(){
+    if(!activeDivAge||!sb)return;
+    setLoadingTeams(true);setUsssaTeams([]);setHasSearched(true);
     const go=async()=>{
       try{
-        if(!sb)throw new Error("no db");
-        const{data,error}=await sb.from("usssa_registrations")
-          .select("team_name,manager_name,manager_email,manager_phone,team_city,team_state,entry_status,payment_status")
-          .eq("event_id",String(ev.evid))
-          .eq("division",activeDivObj.label);
+        let q=sb.from("usssa_registrations")
+          .select("team_name,manager_name,manager_email,manager_phone,team_city,team_state,entry_status,payment_status,division")
+          .ilike("division",activeDivAge+"%")
+          .order("team_name",{ascending:true})
+          .limit(400);
+        if(searchState&&searchState!=="all")q=q.eq("team_state",searchState);
+        const{data,error}=await q;
         if(error)throw error;
-        setUsssaTeams(data||[]);
-      }catch(e){
-        console.warn("USSSA teams:",e.message);
-        setUsssaTeams([]);
-      }finally{setLoadingTeams(false);}
+        const seen=new Set();
+        const deduped=(data||[]).filter(t=>{if(seen.has(t.team_name))return false;seen.add(t.team_name);return true;});
+        setUsssaTeams(deduped);
+      }catch(e){console.warn("USSSA search:",e.message);setUsssaTeams([]);}
+      finally{setLoadingTeams(false);}
     };
     go();
-  },[activeDivId]);
+  }
+  useEffect(()=>{setUsssaTeams([]);setHasSearched(false);},[activeDivId]);
 
   const rosterKey=String(ev.id)+"_"+(activeDivId||"");
   const divRoster=evRosters[rosterKey]||[];
@@ -4453,9 +4457,9 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
   const activeDivAge=activeDivObj?parseDivAge(activeDivObj.label):null;
   const rosterIds=new Set(divRoster.map(t=>t.id));
   const ageFiltered=activeDivAge?ALL_TEAMS.filter(t=>parseDivAge(t.cls)===activeDivAge):ALL_TEAMS;
-  const usssaRaw=usssaTeams.filter(t=>!rosterIds.has(usssaId(t)));
+  const usssaNotInRoster=usssaTeams.filter(t=>!rosterIds.has(usssaId(t)));
   const demoFallback=ageFiltered.filter(t=>!rosterIds.has(t.id));
-  const browseSource=usssaTeams.length>0?usssaTeams:ageFiltered;
+  const browseSource=hasSearched?(usssaNotInRoster.length>0||loadingTeams?usssaNotInRoster:usssaTeams):[];
   const browseable=teamSearch.length>1?browseSource.filter(t=>{const nm=t.name||t.team_name||"";return nm.toLowerCase().includes(teamSearch.toLowerCase());}):browseSource;
   const defPricing=divPricing[rosterKey]||{entryFee:"",gateFee:""};
   const totalTeams=divisions.reduce((a,d)=>a+d.numTeams,0);
@@ -4667,24 +4671,31 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
             </div>
           </div>
           <div className="card" style={{marginTop:12}}>
-            <div className="card-hd">
+            <div className="card-hd" style={{flexWrap:"wrap",gap:8}}>
               <div>
-                <span className="card-title">➕ Add Teams from USSSA — {activeDivObj?activeDivObj.label:""}</span>
-                {usssaTeams.length>0?(<span style={{marginLeft:8,fontSize:11,background:"#dcfce7",color:"#15803d",borderRadius:10,padding:"2px 8px",fontWeight:700}}>● {usssaTeams.length} from USSSA</span>):loadingTeams?(<span style={{marginLeft:8,fontSize:11,color:"var(--gray)"}}>⟳ Loading…</span>):(<span style={{marginLeft:8,fontSize:11,color:"#aaa"}}>Demo data</span>)}
+                <span className="card-title">➕ Search &amp; Add Teams — {activeDivObj?activeDivObj.label:""}</span>
+                {hasSearched&&usssaTeams.length>0?(<span style={{marginLeft:8,fontSize:11,background:"#dcfce7",color:"#15803d",borderRadius:10,padding:"2px 8px",fontWeight:700}}>● {usssaTeams.length} found in USSSA</span>):null}
               </div>
-              <input style={{padding:"5px 10px",border:"1px solid #ddd",borderRadius:5,fontSize:12,width:220}} placeholder="🔍 Search by team name..." value={teamSearch} onChange={e=>setTeamSearch(e.target.value)} onClick={e=>e.stopPropagation()}/>
+              <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
+                <select value={searchState} onChange={e=>setSearchState(e.target.value)} style={{padding:"5px 8px",border:"1px solid #ddd",borderRadius:5,fontSize:12}}>
+                  <option value="all">All States</option>
+                  {ALL_STATES.map(s=><option key={s} value={s}>{s}</option>)}
+                </select>
+                <input style={{padding:"5px 10px",border:"1px solid #ddd",borderRadius:5,fontSize:12,width:180}} placeholder="🔍 Filter by name..." value={teamSearch} onChange={e=>setTeamSearch(e.target.value)}/>
+                <button className="btn btn-primary btn-sm" onClick={e=>{e.stopPropagation();runTeamSearch();}} style={{fontSize:12,padding:"5px 14px"}}>🔍 Search USSSA</button>
+              </div>
             </div>
-            {usssaTeams.length===0&&!loadingTeams&&!teamSearch?(
-              <div style={{padding:"8px 18px",background:"#fffbeb",borderBottom:"1px solid #fde68a",fontSize:12,color:"#92400e"}}>
-                ⚠ No USSSA registrations found for this event/division yet — showing demo teams. Data syncs automatically every 10 min.
+            {!hasSearched&&!loadingTeams?(
+              <div style={{padding:"10px 18px",background:"#eff6ff",borderBottom:"1px solid #bfdbfe",fontSize:12,color:"#1e40af"}}>
+                Select a state and click <strong>Search USSSA</strong> to find teams not yet in this event. Results search across all USSSA team registrations.
               </div>
             ):null}
             <div style={{maxHeight:380,overflowY:"auto"}}>
               {loadingTeams?(
-                <div style={{textAlign:"center",padding:"32px 20px",color:"var(--gray)",fontSize:13}}>⟳ Loading teams from USSSA database…</div>
-              ):browseable.length===0?(
-                <div style={{textAlign:"center",padding:"28px 20px",color:"var(--gray)",fontSize:13}}>No teams found{teamSearch?" matching your search":""}.</div>
-              ):(
+                <div style={{textAlign:"center",padding:"32px 20px",color:"var(--gray)",fontSize:13}}>⟳ Searching USSSA database…</div>
+              ):hasSearched&&browseable.length===0&&!loadingTeams?(
+                <div style={{textAlign:"center",padding:"28px 20px",color:"var(--gray)",fontSize:13}}>{usssaTeams.length>0?"All found teams are already in this event.":"No teams found. Try a different state or search term."}</div>
+              ):hasSearched?(
                 <table>
                   <thead><tr>
                     <th style={{width:30}}>#</th>
@@ -4723,7 +4734,7 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
                     );
                   })}</tbody>
                 </table>
-              )}
+              ):null}
             </div>
           </div>
         </div>
