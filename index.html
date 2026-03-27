@@ -4404,6 +4404,30 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
   const [actionTeamId,setActionTeamId]=useState(null);
   const [schedMsg,setSchedMsg]=useState("");
   const [localFlights,setLocalFlights]=useState({});
+  const [divPricing,setDivPricing]=useState({});
+  const [showPricing,setShowPricing]=useState(false);
+  const [usssaTeams,setUsssaTeams]=useState([]);
+  const [loadingTeams,setLoadingTeams]=useState(false);
+  useEffect(()=>{
+    if(!ev.evid||!activeDivObj)return;
+    setLoadingTeams(true);
+    setUsssaTeams([]);
+    const go=async()=>{
+      try{
+        if(!sb)throw new Error("no db");
+        const{data,error}=await sb.from("usssa_registrations")
+          .select("team_name,manager_name,manager_email,manager_phone,team_city,team_state,entry_status,payment_status")
+          .eq("event_id",String(ev.evid))
+          .eq("division",activeDivObj.label);
+        if(error)throw error;
+        setUsssaTeams(data||[]);
+      }catch(e){
+        console.warn("USSSA teams:",e.message);
+        setUsssaTeams([]);
+      }finally{setLoadingTeams(false);}
+    };
+    go();
+  },[activeDivId]);
 
   const rosterKey=String(ev.id)+"_"+(activeDivId||"");
   const divRoster=evRosters[rosterKey]||[];
@@ -4423,26 +4447,59 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
   const pubTeams=teamDB(pubDivNorm?pubDivNorm.id:"");
   const pubGames=poolGamesDB(pubDivNorm?pubDivNorm.id:"");
   function parseDivAge(lbl){const m=(lbl||"").match(/^(\d+)/);return m?parseInt(m[1]):null;}
+  function teamFinalFee(t){const base=(parseFloat(t.entryFee)||0)+(parseFloat(t.gateFee)||0);const disc=parseFloat(t.discount)||0;return base*(1-disc/100);}
+  function usssaId(t){return "us_"+String(ev.evid||"")+"_"+(t.team_name||"").replace(/\W+/g,"_");}
   const activeDivAge=activeDivObj?parseDivAge(activeDivObj.label):null;
   const rosterIds=new Set(divRoster.map(t=>t.id));
   const ageFiltered=activeDivAge?ALL_TEAMS.filter(t=>parseDivAge(t.cls)===activeDivAge):ALL_TEAMS;
-  const browseable=teamSearch.length>1?ALL_TEAMS.filter(t=>t.name.toLowerCase().includes(teamSearch.toLowerCase())):ageFiltered;
+  const usssaRaw=usssaTeams.filter(t=>!rosterIds.has(usssaId(t)));
+  const demoFallback=ageFiltered.filter(t=>!rosterIds.has(t.id));
+  const browseSource=usssaTeams.length>0?usssaTeams:ageFiltered;
+  const browseable=teamSearch.length>1?browseSource.filter(t=>{const nm=t.name||t.team_name||"";return nm.toLowerCase().includes(teamSearch.toLowerCase());}):browseSource;
+  const defPricing=divPricing[rosterKey]||{entryFee:"",gateFee:""};
   const totalTeams=divisions.reduce((a,d)=>a+d.numTeams,0);
   const paidCount=divRoster.filter(t=>t.payStatus==="Paid").length;
   const approvedCount=divRoster.filter(t=>t.entryStatus==="Approved").length;
-  const totalEntryDue=divRoster.reduce((a,t)=>a+(parseFloat(t.entryFee)||0)+(parseFloat(t.gateFee)||0),0);
-  const totalPaid=divRoster.filter(t=>t.payStatus==="Paid").reduce((a,t)=>a+(parseFloat(t.entryFee)||0)+(parseFloat(t.gateFee)||0),0);
-  const totalOwed=totalEntryDue-totalPaid;
+  const totalFinal=divRoster.reduce((a,t)=>a+teamFinalFee(t),0);
+  const totalPaid=divRoster.filter(t=>t.payStatus==="Paid").reduce((a,t)=>a+teamFinalFee(t),0);
+  const totalOwed=totalFinal-totalPaid;
   const ENTRY_STATUSES=["Approved","Pending","Hold","Waitlist"];
   const PAY_STATUSES=["Paid","Partial Paid","Not Paid"];
   const inStyle={width:"100%",padding:"3px 6px",border:"1px solid #ddd",borderRadius:4,fontSize:12,boxSizing:"border-box"};
 
   function updateRoster(fn){setEvRosters(p=>({...p,[rosterKey]:fn(p[rosterKey]||[])}));}
   function addTeam(team){
-    const already=(evRosters[rosterKey]||[]).some(t=>t.id===team.id);
+    const isUSSSA=!team.id;
+    const tid=isUSSSA?usssaId(team):team.id;
+    const already=(evRosters[rosterKey]||[]).some(t=>t.id===tid);
     if(already)return;
-    updateRoster(prev=>[...prev,{...team,entryStatus:"Approved",payStatus:"Not Paid",entryFee:"",gateFee:"",notes:""}]);
+    const dp=divPricing[rosterKey]||{};
+    const rawEntry=team.entry_status||"";
+    const rawPay=team.payment_status||"";
+    const entryS=rawEntry==="Approved"?"Approved":rawEntry==="Pending"?"Pending":rawEntry==="Hold"?"Hold":"Approved";
+    const payS=rawPay==="Paid"?"Paid":rawPay.toLowerCase().includes("partial")?"Partial Paid":"Not Paid";
+    updateRoster(prev=>[...prev,{
+      id:tid,
+      name:team.name||team.team_name||"Unknown",
+      city:team.city||team.team_city||"",
+      state:team.state||team.team_state||"",
+      cls:team.cls||activeDivObj?.label||"",
+      pts:team.pts||0,
+      phone:team.manager_phone||"",
+      email:team.manager_email||"",
+      manager:team.manager_name||"",
+      entryStatus:entryS,
+      payStatus:payS,
+      entryFee:dp.entryFee||"",
+      gateFee:dp.gateFee||"",
+      discount:"",
+      notes:""
+    }]);
     setTeamSearch("");
+  }
+  function applyPricingToAll(){
+    const dp=divPricing[rosterKey]||{};
+    updateRoster(prev=>prev.map(t=>({...t,entryFee:dp.entryFee||t.entryFee,gateFee:dp.gateFee||t.gateFee})));
   }
   function removeTeam(teamId){updateRoster(prev=>prev.filter(t=>t.id!==teamId));}
   function setField(teamId,field,val){updateRoster(prev=>prev.map(t=>t.id===teamId?{...t,[field]:val}:t));}
@@ -4474,7 +4531,7 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
         </div>
       </div>
       <div className="tabs" style={{marginBottom:16}}>
-        <div className={`tab ${evTab==="roster"?"active":""}`} onClick={()=>setEvTab("roster")}>👥 Team Roster</div>
+        <div className={`tab ${evTab==="roster"?"active":""}`} onClick={()=>setEvTab("roster")}>👥 Teams in Event</div>
         <div className={`tab ${evTab==="director"?"active":""}`} onClick={()=>setEvTab("director")}>🔧 Director Tools</div>
         <div className={`tab ${evTab==="public"?"active":""}`} onClick={()=>setEvTab("public")}>👁 Public View</div>
       </div>
@@ -4492,16 +4549,34 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
               );
             })}
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:16}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:12}}>
             <div className="stat-card"><div className="stat-ico" style={{background:"#dbeafe"}}>👥</div><div><div className="stat-val">{divRoster.length}</div><div className="stat-lbl">Rostered</div></div></div>
             <div className="stat-card"><div className="stat-ico" style={{background:"#dcfce7"}}>✓</div><div><div className="stat-val">{approvedCount}</div><div className="stat-lbl">Approved</div></div></div>
             <div className="stat-card"><div className="stat-ico" style={{background:"#d1fae5"}}>💰</div><div><div className="stat-val">{paidCount}</div><div className="stat-lbl">Paid</div></div></div>
             <div className="stat-card"><div className="stat-ico" style={{background:"#fef9c3"}}>$</div><div><div className="stat-val">{"$"+totalPaid.toFixed(0)}</div><div className="stat-lbl">Collected</div></div></div>
             <div className="stat-card"><div className="stat-ico" style={{background:"#fee2e2"}}>!</div><div><div className="stat-val" style={{color:totalOwed>0?"var(--red)":"var(--green)"}}>{"$"+totalOwed.toFixed(0)}</div><div className="stat-lbl">Balance Due</div></div></div>
           </div>
+          <div className="card" style={{marginBottom:12}}>
+            <div className="card-hd" style={{cursor:"pointer"}} onClick={e=>{e.stopPropagation();setShowPricing(!showPricing);}}>
+              <span className="card-title">💲 Division Pricing — {activeDivObj?activeDivObj.label:""}</span>
+              <div style={{display:"flex",gap:12,alignItems:"center",fontSize:12,color:"var(--gray)"}}>
+                {defPricing.entryFee?<span>Entry: <strong style={{color:"var(--navy)"}}>${defPricing.entryFee}</strong></span>:<span style={{color:"#aaa"}}>No entry fee set</span>}
+                {defPricing.gateFee?<span>Gate: <strong style={{color:"var(--navy)"}}>${defPricing.gateFee}</strong></span>:null}
+                <span style={{fontSize:11,color:"var(--blue)"}}>{showPricing?"▲ Close":"▼ Edit Pricing"}</span>
+              </div>
+            </div>
+            {showPricing?(
+              <div style={{padding:"14px 18px",background:"#f8fafc",borderTop:"1px solid #e2e8f0",display:"flex",gap:16,alignItems:"flex-end",flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
+                <div><div style={{fontSize:11,fontWeight:700,color:"var(--gray)",marginBottom:4}}>Default Entry Fee ($)</div><input type="number" min="0" step="5" style={{padding:"6px 10px",border:"1px solid #ddd",borderRadius:5,fontSize:13,width:110}} placeholder="e.g. 150" value={defPricing.entryFee} onChange={e=>setDivPricing(p=>({...p,[rosterKey]:{...defPricing,entryFee:e.target.value}}))}/></div>
+                <div><div style={{fontSize:11,fontWeight:700,color:"var(--gray)",marginBottom:4}}>Default Gate Fee ($)</div><input type="number" min="0" step="5" style={{padding:"6px 10px",border:"1px solid #ddd",borderRadius:5,fontSize:13,width:110}} placeholder="e.g. 10" value={defPricing.gateFee} onChange={e=>setDivPricing(p=>({...p,[rosterKey]:{...defPricing,gateFee:e.target.value}}))}/></div>
+                <button className="btn btn-primary btn-sm" onClick={applyPricingToAll}>Apply to All Teams</button>
+                <div style={{fontSize:11,color:"var(--gray)"}}>New teams added will inherit these fees. Use per-team Discount % to reduce individual pricing.</div>
+              </div>
+            ):null}
+          </div>
           <div className="card">
             <div className="card-hd">
-              <span className="card-title">👥 {activeDivObj?activeDivObj.label:"Division"} — Roster ({divRoster.length}{activeDivObj?" / "+activeDivObj.numTeams+"t":""})</span>
+              <span className="card-title">👥 {activeDivObj?activeDivObj.label:"Division"} — Teams in Event ({divRoster.length}{activeDivObj?" / "+activeDivObj.numTeams+"t":""})</span>
               <div className="flex-c gap-2">
                 {schedMsg?<span style={{fontSize:12,color:"var(--red)",fontWeight:600}}>⚠ {schedMsg}</span>:null}
                 <button className="btn btn-secondary btn-sm" onClick={e=>{e.stopPropagation();handleSchedule();}}>📅 Schedule Builder →</button>
@@ -4519,16 +4594,19 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
                     <th>Team Name</th>
                     <th>Class</th>
                     <th>City, ST</th>
-                    <th style={{width:130}}>Entry Status</th>
-                    <th style={{width:130}}>Payment</th>
-                    <th style={{width:90}}>Entry Fee</th>
-                    <th style={{width:90}}>Gate Fee</th>
-                    <th style={{width:80}}>Total Due</th>
+                    <th style={{width:120}}>Entry Status</th>
+                    <th style={{width:120}}>Payment</th>
+                    <th style={{width:80}}>Entry Fee</th>
+                    <th style={{width:80}}>Gate Fee</th>
+                    <th style={{width:70}}>Disc %</th>
+                    <th style={{width:80}}>Final Due</th>
                     <th style={{width:110}}>Actions</th>
                   </tr></thead>
                   <tbody>{divRoster.map((t,i)=>{
-                    const total=(parseFloat(t.entryFee)||0)+(parseFloat(t.gateFee)||0);
-                    const totalStr=total>0?"$"+total.toFixed(0):"—";
+                    const final=teamFinalFee(t);
+                    const base=(parseFloat(t.entryFee)||0)+(parseFloat(t.gateFee)||0);
+                    const hasDisc=parseFloat(t.discount)>0;
+                    const totalStr=final>0?("$"+final.toFixed(0)+(hasDisc?" ✂":"")):"—";
                     const isOpen=actionTeamId===t.id;
                     const entryClr=t.entryStatus==="Approved"?"var(--green)":t.entryStatus==="Pending"?"#b45309":"var(--red)";
                     const payClr=t.payStatus==="Paid"?"var(--green)":t.payStatus==="Partial Paid"?"#b45309":"var(--red)";
@@ -4552,7 +4630,8 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
                         </td>
                         <td><input type="number" min="0" step="25" style={inStyle} placeholder="$0" value={t.entryFee} onChange={e=>setField(t.id,"entryFee",e.target.value)}/></td>
                         <td><input type="number" min="0" step="25" style={inStyle} placeholder="$0" value={t.gateFee} onChange={e=>setField(t.id,"gateFee",e.target.value)}/></td>
-                        <td style={{fontWeight:700,fontSize:12,textAlign:"right",paddingRight:8,color:t.payStatus==="Paid"?"var(--green)":"var(--navy)"}}>{totalStr}</td>
+                        <td><input type="number" min="0" max="100" step="5" style={{...inStyle,color:hasDisc?"var(--red)":"inherit",fontWeight:hasDisc?700:400}} placeholder="0" value={t.discount||""} onChange={e=>setField(t.id,"discount",e.target.value)}/></td>
+                        <td style={{fontWeight:700,fontSize:12,textAlign:"right",paddingRight:8,color:t.payStatus==="Paid"?"var(--green)":hasDisc?"var(--red)":"var(--navy)"}}>{totalStr}</td>
                         <td style={{position:"relative"}} onClick={e=>e.stopPropagation()}>
                           <button className="btn btn-secondary btn-sm" style={{fontSize:11,padding:"3px 10px",width:"100%"}}
                             onClick={()=>setActionTeamId(isOpen?null:t.id)}>
@@ -4588,26 +4667,56 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
           </div>
           <div className="card" style={{marginTop:12}}>
             <div className="card-hd">
-              <span className="card-title">➕ Add Teams to {activeDivObj?activeDivObj.label:"Division"}</span>
-              <input style={{padding:"5px 10px",border:"1px solid #ddd",borderRadius:5,fontSize:12,width:220}} placeholder="🔍 Filter by name..." value={teamSearch} onChange={e=>setTeamSearch(e.target.value)} onClick={e=>e.stopPropagation()}/>
+              <div>
+                <span className="card-title">➕ Add Teams from USSSA — {activeDivObj?activeDivObj.label:""}</span>
+                {usssaTeams.length>0?(<span style={{marginLeft:8,fontSize:11,background:"#dcfce7",color:"#15803d",borderRadius:10,padding:"2px 8px",fontWeight:700}}>● {usssaTeams.length} from USSSA</span>):loadingTeams?(<span style={{marginLeft:8,fontSize:11,color:"var(--gray)"}}>⟳ Loading…</span>):(<span style={{marginLeft:8,fontSize:11,color:"#aaa"}}>Demo data</span>)}
+              </div>
+              <input style={{padding:"5px 10px",border:"1px solid #ddd",borderRadius:5,fontSize:12,width:220}} placeholder="🔍 Search by team name..." value={teamSearch} onChange={e=>setTeamSearch(e.target.value)} onClick={e=>e.stopPropagation()}/>
             </div>
-            <div style={{maxHeight:320,overflowY:"auto"}}>
-              {browseable.length===0?(
-                <div style={{textAlign:"center",padding:"28px 20px",color:"var(--gray)",fontSize:13}}>No teams found{teamSearch?" matching your search":""}. Teams will auto-populate when USSSA data is synced.</div>
+            {usssaTeams.length===0&&!loadingTeams&&!teamSearch?(
+              <div style={{padding:"8px 18px",background:"#fffbeb",borderBottom:"1px solid #fde68a",fontSize:12,color:"#92400e"}}>
+                ⚠ No USSSA registrations found for this event/division yet — showing demo teams. Data syncs automatically every 10 min.
+              </div>
+            ):null}
+            <div style={{maxHeight:380,overflowY:"auto"}}>
+              {loadingTeams?(
+                <div style={{textAlign:"center",padding:"32px 20px",color:"var(--gray)",fontSize:13}}>⟳ Loading teams from USSSA database…</div>
+              ):browseable.length===0?(
+                <div style={{textAlign:"center",padding:"28px 20px",color:"var(--gray)",fontSize:13}}>No teams found{teamSearch?" matching your search":""}.</div>
               ):(
                 <table>
-                  <thead><tr><th style={{width:30}}>#</th><th>Team Name</th><th>Class</th><th>City, ST</th><th style={{width:70,textAlign:"right"}}>USSSA Pts</th><th style={{width:80,textAlign:"center"}}>Status</th></tr></thead>
+                  <thead><tr>
+                    <th style={{width:30}}>#</th>
+                    <th>Team Name</th>
+                    <th>Class / Division</th>
+                    <th>City, ST</th>
+                    <th style={{width:100}}>USSSA Entry</th>
+                    <th style={{width:100}}>USSSA Pay</th>
+                    <th style={{width:90,textAlign:"center"}}>Action</th>
+                  </tr></thead>
                   <tbody>{browseable.map((t,i)=>{
-                    const inRoster=rosterIds.has(t.id);
+                    const tid=t.id||usssaId(t);
+                    const inR=rosterIds.has(tid);
+                    const nm=t.name||t.team_name||"";
+                    const cy=t.city||t.team_city||"";
+                    const st=t.state||t.team_state||"";
+                    const cl=t.cls||activeDivObj?.label||"";
+                    const es=t.entry_status||"";
+                    const ps=t.payment_status||"";
+                    const esBg=es==="Approved"?"#dcfce7":es==="Pending"?"#fef3c7":"#fee2e2";
+                    const esClr=es==="Approved"?"#15803d":es==="Pending"?"#92400e":"#dc2626";
+                    const psBg=ps==="Paid"?"#dcfce7":ps.toLowerCase().includes("partial")?"#fef3c7":"#f1f5f9";
+                    const psClr=ps==="Paid"?"#15803d":ps.toLowerCase().includes("partial")?"#92400e":"#64748b";
                     return(
-                      <tr key={t.id} style={{background:inRoster?"#f0fdf4":i%2===0?"#f9fbfc":"#fff"}}>
+                      <tr key={tid} style={{background:inR?"#f0fdf4":i%2===0?"#f9fbfc":"#fff"}}>
                         <td style={{textAlign:"center",fontSize:12,color:"var(--gray)",fontWeight:700}}>{i+1}</td>
-                        <td style={{fontWeight:700,fontSize:13}}>{t.name}</td>
-                        <td><span className="badge b-blue" style={{fontSize:10}}>{t.cls}</span></td>
-                        <td className="t-sm t-gray">{t.city}, {t.state}</td>
-                        <td style={{textAlign:"right",fontSize:12,fontWeight:700,color:"var(--navy)",paddingRight:10}}>{t.pts||"—"}</td>
+                        <td style={{fontWeight:700,fontSize:13}}>{nm}</td>
+                        <td><span className="badge b-blue" style={{fontSize:10}}>{cl}</span></td>
+                        <td className="t-sm t-gray">{cy}{cy&&st?", ":""}{st}</td>
+                        <td>{es?(<span style={{fontSize:10,fontWeight:700,background:esBg,color:esClr,borderRadius:10,padding:"2px 8px"}}>{es}</span>):(<span style={{fontSize:11,color:"#aaa"}}>—</span>)}</td>
+                        <td>{ps?(<span style={{fontSize:10,fontWeight:700,background:psBg,color:psClr,borderRadius:10,padding:"2px 8px"}}>{ps}</span>):(<span style={{fontSize:11,color:"#aaa"}}>—</span>)}</td>
                         <td style={{textAlign:"center"}}>
-                          {inRoster?(<span style={{fontSize:11,color:"var(--green)",fontWeight:700}}>✓ Rostered</span>):(<button className="btn btn-primary btn-sm" style={{fontSize:11,padding:"3px 10px"}} onClick={e=>{e.stopPropagation();addTeam(t);}}>+ Add</button>)}
+                          {inR?(<span style={{fontSize:11,color:"var(--green)",fontWeight:700}}>✓ Added</span>):(<button className="btn btn-primary btn-sm" style={{fontSize:11,padding:"3px 10px"}} onClick={e=>{e.stopPropagation();addTeam(t);}}>+ Add</button>)}
                         </td>
                       </tr>
                     );
@@ -4654,7 +4763,7 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
                       <div className="card-body" style={{textAlign:"center",padding:"36px 24px"}}>
                         <div style={{fontSize:40,marginBottom:10}}>📋</div>
                         <div style={{fontSize:16,fontWeight:700,color:"var(--navy)",marginBottom:8}}>No Flights Configured for {dirDiv.label}</div>
-                        <div style={{fontSize:13,color:"var(--gray)",maxWidth:420,margin:"0 auto 20px"}}>Add a flight here, or go to the <strong>Team Roster</strong> tab and use <strong>Schedule Builder →</strong> to schedule directly.</div>
+                        <div style={{fontSize:13,color:"var(--gray)",maxWidth:420,margin:"0 auto 20px"}}>Add a flight here, or go to the <strong>Teams in Event</strong> tab and use <strong>Schedule Builder →</strong> to schedule directly.</div>
                         <div style={{display:"flex",gap:12,justifyContent:"center"}}>
                           <button className="btn btn-primary btn-sm" onClick={e=>{e.stopPropagation();addFlight("pool");}}>+ Add Pool Flight</button>
                           <button className="btn btn-secondary btn-sm" onClick={e=>{e.stopPropagation();addFlight("bracket");}}>+ Add Bracket Flight</button>
