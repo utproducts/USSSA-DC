@@ -2134,29 +2134,46 @@ function LayoutView({games:propGames,setGames,teams:propTeams}){
                       {ageTeams.filter(t=>t.cls===cls).map((t,ti)=>{
                         const isHalf1=halfFill&&halfFill.t1Id===t.id;
                         const seed=(t.pts||0)+(t.pr||0);
+                        // Count placed games for this team
+                        const placedCount=rows.flatMap(r=>Object.values(r.cells))
+                          .filter(v=>v&&v!=="blocked")
+                          .filter(v=>{const g=games.find(g2=>g2.id===v);return g&&(g.t1===t.id||g.t2===t.id);}).length;
+                        const isFull=placedCount>=maxGames;
                         return(
                           <div key={t.id}
-                            draggable="true"
-                            onDragStart={e=>{e.dataTransfer.setData("teamId",t.id);e.dataTransfer.setData("teamCls",cls);e.dataTransfer.effectAllowed="copy";}}
+                            draggable={isFull?"false":"true"}
+                            onDragStart={e=>{
+                              if(isFull){e.preventDefault();return;}
+                              e.dataTransfer.setData("teamId",t.id);
+                              e.dataTransfer.setData("teamCls",cls);
+                              e.dataTransfer.effectAllowed="copy";
+                            }}
+                            title={isFull?`Fully scheduled (${placedCount}/${maxGames} games)`:`${placedCount}/${maxGames} games scheduled`}
                             style={{
-                              padding:"7px 12px",borderRadius:8,cursor:"grab",userSelect:"none",
-                              border:isHalf1?"2px solid #2563eb":"1.5px solid #e2e8f0",
-                              background:isHalf1?"#dbeafe":"#fff",
-                              color:isHalf1?"#1d4ed8":"#0f172a",fontSize:13,fontWeight:600,
-                              boxShadow:isHalf1?"0 0 0 3px rgba(37,99,235,.15)":"0 1px 3px rgba(0,0,0,.06)",
-                              transition:"all .12s",display:"flex",alignItems:"center",gap:7
+                              padding:"7px 12px",borderRadius:8,userSelect:"none",
+                              cursor:isFull?"not-allowed":"grab",
+                              opacity:isFull?0.42:1,
+                              border:isFull?"1.5px solid #e2e8f0":isHalf1?"2px solid #2563eb":"1.5px solid #e2e8f0",
+                              background:isFull?"#f1f5f9":isHalf1?"#dbeafe":"#fff",
+                              color:isFull?"#94a3b8":isHalf1?"#1d4ed8":"#0f172a",
+                              fontSize:13,fontWeight:600,
+                              boxShadow:isFull?"none":isHalf1?"0 0 0 3px rgba(37,99,235,.15)":"0 1px 3px rgba(0,0,0,.06)",
+                              transition:"all .12s",display:"flex",alignItems:"center",gap:7,
+                              filter:isFull?"grayscale(1)":"none"
                             }}>
                             {/* Seed rank badge */}
                             <span style={{width:20,height:20,borderRadius:"50%",
-                              background:isHalf1?"#1d4ed8":"#1e3a5f",color:"#fff",
+                              background:isFull?"#cbd5e1":isHalf1?"#1d4ed8":"#1e3a5f",color:"#fff",
                               fontSize:9,fontWeight:900,display:"flex",alignItems:"center",
                               justifyContent:"center",flexShrink:0}}>{ti+1}</span>
                             <span>{t.name}</span>
-                            {seed>0&&<span style={{marginLeft:"auto",fontSize:9,fontWeight:700,
-                              color:"#94a3b8",background:"#f1f5f9",borderRadius:4,
-                              padding:"1px 5px",whiteSpace:"nowrap"}}>
-                              {t.pts||0}+{t.pr||0}
-                            </span>}
+                            {/* Game count pill — always visible */}
+                            <span style={{marginLeft:"auto",fontSize:9,fontWeight:800,
+                              color:isFull?"#fff":"#475569",
+                              background:isFull?"#94a3b8":"#e2e8f0",
+                              borderRadius:10,padding:"1px 6px",whiteSpace:"nowrap",flexShrink:0}}>
+                              {isFull?"✓ done":`${placedCount}/${maxGames}`}
+                            </span>
                           </div>
                         );
                       })}
