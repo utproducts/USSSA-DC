@@ -1441,6 +1441,129 @@ function LayoutView({games:propGames,setGames,teams:propTeams}){
   const pickedGame=picked?games.find(g=>g.id===picked):null;
   const dayGroups=[...new Set(rows.map(r=>r.date))].sort();
 
+  /* ══ Auto-Schedule ══════════════════════════════════════════ */
+  const [autoModal,setAutoModal]=useState(false);
+  const [autoRules,setAutoRules]=useState({noRematch:true,noConsecBreak:true,balanceFields:true,allowOverride:false});
+  const [autoResult,setAutoResult]=useState(null);
+
+  function autoScheduleGames(){
+    // 1 — Group teams by division (cls)
+    const divGroups={};
+    teams.forEach(t=>{
+      const key=t.cls||t.division||'General';
+      if(!divGroups[key])divGroups[key]=[];
+      divGroups[key].push(t.id);
+    });
+
+    // 2 — Generate round-robin matchups per division
+    const allMatchups=[]; // [{t1,t2,div}]
+    Object.entries(divGroups).forEach(([div,tIds])=>{
+      if(tIds.length<2)return;
+      const arr=[...tIds];
+      if(arr.length%2===1)arr.push(null); // bye slot for odd teams
+      const numRounds=arr.length-1;
+      const half=arr.length/2;
+      const rot=[...arr];
+      for(let r=0;r<numRounds;r++){
+        for(let i=0;i<half;i++){
+          const t1=rot[i],t2=rot[rot.length-1-i];
+          if(t1&&t2)allMatchups.push({t1,t2,div});
+        }
+        // Rotate: keep index 0 fixed, rotate [1..end]
+        rot.splice(1,0,rot.pop());
+      }
+    });
+
+    // 3 — Build available slots sorted by date→time→field
+    const slots=[];
+    rows.forEach(row=>{
+      for(let fi=0;fi<nf;fi++){
+        const v=row.cells[fi];
+        if(!v||v==='blocked') slots.push({rowId:row.id,fi,date:row.date,time:row.time,taken:false});
+      }
+    });
+    // Sort: pack games into earliest slots first, then by field
+    slots.sort((a,b)=>{
+      if(a.date!==b.date)return a.date<b.date?-1:1;
+      if(a.time!==b.time)return a.time<b.time?-1:1;
+      return a.fi-b.fi;
+    });
+    // Optionally shuffle field order within each time slot for balance
+    if(autoRules.balanceFields){
+      const timeKeys=[...new Set(slots.map(s=>`${s.date}|${s.time}`))];
+      timeKeys.forEach(tk=>{
+        const [d,t]=tk.split('|');
+        const idxs=slots.reduce((acc,s,i)=>s.date===d&&s.time===t?[...acc,i]:acc,[]);
+        // shuffle within this time slot
+        for(let i=idxs.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));const tmp=slots[idxs[i]].fi;slots[idxs[i]].fi=slots[idxs[j]].fi;slots[idxs[j]].fi=tmp;}
+      });
+    }
+
+    // 4 — Assign matchups to slots (greedy)
+    const teamBusy={};       // rowId → Set of team IDs busy in that slot
+    const pairPlayed={};     // "t1|t2" → count of times played
+    const teamSchedule={};   // teamId → [rowId] list of slots they play in
+    const newGames=[];
+    const updatedCells={};
+    let gNum=xlGames.length+games.filter(g=>!xlGames.find(x=>x.id===g.id)).length+1;
+    const failed=[];
+
+    allMatchups.forEach(({t1,t2,div})=>{
+      const pairKey=[t1,t2].sort().join('|');
+      // Check rematch rule
+      if(autoRules.noRematch&&(pairPlayed[pairKey]||0)>0){failed.push({t1,t2,div,reason:'rematch'});return;}
+
+      let placed=false;
+      for(const slot of slots){
+        if(slot.taken)continue;
+        const busy=teamBusy[slot.rowId]||new Set();
+        if(busy.has(t1)||busy.has(t2))continue;
+
+        // Check consecutive-break rule: if a team already has >1 consecutive unplayed rows, prefer not adding another
+        if(autoRules.noConsecBreak){
+          const t1sched=teamSchedule[t1]||[];
+          const t2sched=teamSchedule[t2]||[];
+          // Get row index for this slot
+          const rowIdx=rows.findIndex(r=>r.id===slot.rowId);
+          // Count consecutive rows skipped before this one for each team
+          const countSkips=(sched)=>{
+            let skips=0;
+            for(let ri=rowIdx-1;ri>=0;ri--){
+              if(sched.includes(rows[ri].id))break;
+              skips++;
+            }
+            return skips;
+          };
+          if(t1sched.length>0&&countSkips(t1sched)>1)continue;
+          if(t2sched.length>0&&countSkips(t2sched)>1)continue;
+        }
+
+        // Place the game
+        const gameId=`ga_${gNum}`;
+        newGames.push({id:gameId,num:`G${gNum}`,pool:'A',division:div,
+          date:slot.date,time:slot.time,field:fieldNames[slot.fi],
+          t1,t2,s1:null,s2:null,status:'scheduled'});
+        if(!updatedCells[slot.rowId])updatedCells[slot.rowId]={};
+        updatedCells[slot.rowId][slot.fi]=gameId;
+        if(!teamBusy[slot.rowId])teamBusy[slot.rowId]=new Set();
+        teamBusy[slot.rowId].add(t1);teamBusy[slot.rowId].add(t2);
+        pairPlayed[pairKey]=(pairPlayed[pairKey]||0)+1;
+        if(!teamSchedule[t1])teamSchedule[t1]=[];teamSchedule[t1].push(slot.rowId);
+        if(!teamSchedule[t2])teamSchedule[t2]=[];teamSchedule[t2].push(slot.rowId);
+        slot.taken=true;gNum++;placed=true;break;
+      }
+      if(!placed)failed.push({t1,t2,div,reason:'no_slot'});
+    });
+
+    // 5 — Apply state
+    const newRows=rows.map(r=>updatedCells[r.id]?{...r,cells:{...r.cells,...updatedCells[r.id]}}:r);
+    setXlGames(prev=>[...prev,...newGames]);
+    setRows(newRows);
+    setShowNames(true);
+    setAutoResult({placed:newGames.length,failed:failed.length,failedList:failed,
+      days:[...new Set(newGames.map(g=>g.date))].length});
+  }
+
   /* ══ Excel Import ══════════════════════════════════════════ */
   const [xlImport,setXlImport]=useState({status:'idle',msg:'',counts:null});
 
@@ -1755,6 +1878,23 @@ function LayoutView({games:propGames,setGames,teams:propTeams}){
             </div>
           </div>
 
+          {/* ── Auto-Schedule Banner ─────────────────────────────── */}
+          <div style={{background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",border:"2px solid #c4b5fd",borderRadius:10,
+            padding:"14px 18px",marginBottom:18,display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+            <div style={{flex:1,minWidth:200}}>
+              <div style={{fontSize:13,fontWeight:800,color:"#4c1d95",marginBottom:3}}>⚡ Auto-Schedule Generator</div>
+              <div style={{fontSize:12,color:"#5b21b6",lineHeight:1.5}}>
+                Automatically generate a full round-robin schedule from your team list. Sets rules for no rematches, no double-booking, and balanced breaks.
+              </div>
+            </div>
+            <button onClick={()=>{setAutoModal(true);setAutoResult(null);}}
+              style={{padding:"10px 20px",background:"#7c3aed",color:"#fff",border:"none",
+                borderRadius:7,fontWeight:800,fontSize:13,cursor:"pointer",
+                boxShadow:"0 2px 8px rgba(124,58,237,.4)",whiteSpace:"nowrap",flexShrink:0}}>
+              ⚡ Auto-Generate
+            </button>
+          </div>
+
           <div style={{fontSize:10,fontWeight:800,color:"#cbd5e1",textTransform:"uppercase",letterSpacing:1,
             marginBottom:12,borderTop:"1px solid #e2e8f0",paddingTop:14}}>
             — or set up manually —
@@ -1941,8 +2081,9 @@ function LayoutView({games:propGames,setGames,teams:propTeams}){
                       <span style={{fontSize:10,color:"#cbd5e1"}}>{ageTeams.filter(t=>t.cls===cls).length} teams</span>
                     </div>
                     <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
-                      {ageTeams.filter(t=>t.cls===cls).map(t=>{
+                      {ageTeams.filter(t=>t.cls===cls).map((t,ti)=>{
                         const isSel=teamPick[0]===t.id;
+                        const seed=(t.pts||0)+(t.pr||0);
                         return(
                           <div key={t.id} onClick={()=>{
                             if(isSel){setTeamPick([]);return;}
@@ -1950,17 +2091,28 @@ function LayoutView({games:propGames,setGames,teams:propTeams}){
                             if(t.id===teamPick[0])return;
                             const gameId=`gx_${Date.now()}`;
                             const num=`G${games.length+1}`;
-                            setGames(pg=>[...pg,{id:gameId,num,pool:gamePool,date:"",time:"",field:"",t1:teamPick[0],t2:t.id,s1:null,s2:null,status:"scheduled"}]);
+                            setGames(pg=>[...pg,{id:gameId,num,pool:gamePool,division:cls,date:"",time:"",field:"",t1:teamPick[0],t2:t.id,s1:null,s2:null,status:"scheduled"}]);
                             setTeamPick([]);
                           }} style={{
-                            padding:"9px 14px",borderRadius:8,cursor:"pointer",userSelect:"none",
+                            padding:"7px 12px",borderRadius:8,cursor:"pointer",userSelect:"none",
                             border:isSel?"2px solid #2563eb":"1.5px solid #e2e8f0",
                             background:isSel?"#dbeafe":teamPick.length>0&&!isSel?"#f0fdf4":"#fff",
                             color:isSel?"#1d4ed8":"#0f172a",fontSize:13,fontWeight:600,
                             boxShadow:isSel?"0 0 0 3px rgba(37,99,235,.15)":"0 1px 3px rgba(0,0,0,.06)",
-                            transform:isSel?"scale(1.03)":"scale(1)",transition:"all .12s"
+                            transform:isSel?"scale(1.03)":"scale(1)",transition:"all .12s",
+                            display:"flex",alignItems:"center",gap:7
                           }}>
-                            {t.name}
+                            {/* Seed rank badge */}
+                            <span style={{width:20,height:20,borderRadius:"50%",
+                              background:isSel?"#1d4ed8":"#1e3a5f",color:"#fff",
+                              fontSize:9,fontWeight:900,display:"flex",alignItems:"center",
+                              justifyContent:"center",flexShrink:0}}>{ti+1}</span>
+                            <span>{t.name}</span>
+                            {seed>0&&<span style={{marginLeft:"auto",fontSize:9,fontWeight:700,
+                              color:"#94a3b8",background:"#f1f5f9",borderRadius:4,
+                              padding:"1px 5px",whiteSpace:"nowrap"}}>
+                              {t.pts||0}+{t.pr||0}
+                            </span>}
                           </div>
                         );
                       })}
@@ -2187,6 +2339,104 @@ function LayoutView({games:propGames,setGames,teams:propTeams}){
         <span style={{fontSize:11,color:"#94a3b8",marginLeft:4}}>{rows.length} rows · {nf} fields · {assignedIds.size} assigned · {unscheduled.length} unscheduled</span>
         <button style={B("#16a34a","#fff",{marginLeft:"auto",boxShadow:"0 2px 8px rgba(22,163,74,.25)"})}>💾 Save Layout</button>
       </div>
+
+      {/* ══ Auto-Schedule Modal ══ */}
+      {autoModal&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:500,
+          display:"flex",alignItems:"center",justifyContent:"center",padding:20}}
+          onClick={()=>setAutoModal(false)}>
+          <div onClick={e=>e.stopPropagation()}
+            style={{background:"#fff",borderRadius:14,boxShadow:"0 24px 60px rgba(0,0,0,.25)",
+              padding:28,maxWidth:480,width:"100%",fontFamily:"inherit"}}>
+
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
+              <span style={{fontSize:28}}>⚡</span>
+              <div>
+                <div style={{fontSize:17,fontWeight:900,color:"#1e3a5f"}}>Auto-Schedule Generator</div>
+                <div style={{fontSize:12,color:"#94a3b8",marginTop:2}}>
+                  Generates a full round-robin for each division and assigns games to your available slots.
+                </div>
+              </div>
+            </div>
+
+            {/* Rules */}
+            <div style={{background:"#f8fafc",borderRadius:10,padding:"14px 16px",marginBottom:18}}>
+              <div style={{fontSize:11,fontWeight:800,color:"#64748b",textTransform:"uppercase",letterSpacing:.8,marginBottom:10}}>Schedule Rules</div>
+              {[
+                ["noRematch","No rematches — teams can't play the same opponent twice in pool play"],
+                ["noConsecBreak","Limit consecutive breaks — avoid more than one back-to-back sit-out per team"],
+                ["balanceFields","Balance field usage — distribute games evenly across fields"],
+              ].map(([key,label])=>(
+                <label key={key} style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:10,cursor:"pointer"}}>
+                  <input type="checkbox" checked={autoRules[key]}
+                    onChange={e=>setAutoRules(r=>({...r,[key]:e.target.checked}))}
+                    style={{marginTop:2,width:15,height:15,accentColor:"#7c3aed",flexShrink:0}}/>
+                  <span style={{fontSize:13,color:"#1e293b",lineHeight:1.4}}>{label}</span>
+                </label>
+              ))}
+              <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer"}}>
+                <input type="checkbox" checked={autoRules.allowOverride}
+                  onChange={e=>setAutoRules(r=>({...r,allowOverride:e.target.checked}))}
+                  style={{marginTop:2,width:15,height:15,accentColor:"#7c3aed",flexShrink:0}}/>
+                <span style={{fontSize:13,color:"#1e293b",lineHeight:1.4}}>
+                  Allow rematch override — if a slot can't be filled any other way, allow a rematch (director override)
+                </span>
+              </label>
+            </div>
+
+            {/* Info */}
+            <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:8,
+              padding:"10px 14px",marginBottom:18,fontSize:12,color:"#92400e",lineHeight:1.5}}>
+              ⚠️ Auto-schedule will <strong>add games to empty slots</strong> in your current grid. Existing games won't be moved. Make sure you have enough time slots and fields set up first.
+            </div>
+
+            {/* Stats preview */}
+            <div style={{display:"flex",gap:12,marginBottom:20,flexWrap:"wrap"}}>
+              {[
+                ["Teams",teams.length,"👥"],
+                ["Available Slots",rows.reduce((a,r)=>{let c=0;for(let fi=0;fi<nf;fi++){if(!r.cells[fi]||r.cells[fi]==='blocked')c++;}return a+c;},0),"📋"],
+                ["Divisions",[...new Set(teams.map(t=>t.cls||'General'))].length,"🏷"],
+              ].map(([lbl,val,ico])=>(
+                <div key={lbl} style={{flex:1,minWidth:90,background:"#f8fafc",borderRadius:8,
+                  padding:"10px 12px",textAlign:"center",border:"1px solid #e2e8f0"}}>
+                  <div style={{fontSize:20,marginBottom:3}}>{ico}</div>
+                  <div style={{fontSize:18,fontWeight:900,color:"#1e3a5f"}}>{val}</div>
+                  <div style={{fontSize:10,color:"#94a3b8",fontWeight:600}}>{lbl}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Result */}
+            {autoResult&&(
+              <div style={{marginBottom:18,padding:"12px 14px",borderRadius:8,
+                background:autoResult.failed>0?"#fff7ed":"#f0fdf4",
+                border:`1px solid ${autoResult.failed>0?"#fdba74":"#86efac"}`}}>
+                <div style={{fontWeight:800,color:autoResult.failed>0?"#c2410c":"#15803d",marginBottom:4}}>
+                  ✅ {autoResult.placed} games placed across {autoResult.days} day{autoResult.days!==1?"s":""}
+                </div>
+                {autoResult.failed>0&&(
+                  <div style={{fontSize:12,color:"#9a3412"}}>
+                    ⚠️ {autoResult.failed} matchup{autoResult.failed!==1?"s":""} could not be placed — not enough open slots. Add more time rows or fields then run again.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Actions */}
+            <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+              <button onClick={()=>setAutoModal(false)}
+                style={{...B("#f1f5f9","#475569"),padding:"10px 20px",fontSize:13}}>
+                Cancel
+              </button>
+              <button onClick={autoScheduleGames}
+                style={{...B("#7c3aed","#fff"),padding:"10px 24px",fontSize:13,
+                  boxShadow:"0 2px 10px rgba(124,58,237,.35)"}}>
+                ⚡ Generate Schedule
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -4391,11 +4641,12 @@ const NAV=[
     {id:"create",ico:"➕",label:"Create Event"},
   ]},
   {sec:"Scheduling Tools",items:[
-    {id:"s-game-mgr",ico:"🗂",label:"Game Manager"},
     {id:"s-grid",ico:"🗺",label:"Grid Builder"},
     {id:"s-layout",ico:"📋",label:"Schedule Builder"},
-    {id:"s-bracket",ico:"🏆",label:"Brackets"},
+    {id:"s-livelock",ico:"🔒",label:"Live & Lock"},
+    {id:"s-game-mgr",ico:"🗂",label:"Game Manager"},
     {id:"s-standings",ico:"📊",label:"Pool Standings"},
+    {id:"s-bracket",ico:"🏆",label:"Brackets"},
   ]},
   {sec:"Setup",items:[
     {id:"s-seeds",ico:"🎯",label:"Seeding"},
@@ -4407,7 +4658,6 @@ const NAV=[
   {sec:"Reports & Tools",items:[
     {id:"s-placing",ico:"🥇",label:"Final Placing"},
     {id:"s-rosters",ico:"👥",label:"Rosters"},
-    {id:"s-livelock",ico:"🔒",label:"Live & Lock"},
   ]},
   {sec:"Public",items:[
     {id:"s-public",ico:"👁",label:"Public Fan View"},
