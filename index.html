@@ -868,7 +868,378 @@ function GameMgrView({games,setGames,teams,readOnly}){
   );
 }
 
-/* ════════════════════ LAYOUT BUILDER ════════════════════ */
+/* ════════════════════ GRID BUILDER ════════════════════ */
+const DIV_CODES=["8u","9AA","9Open","10AA","10Open","11AA","11AAA","12AA","12Open","13AA","13Open","13Maj","14AA","14Open","14AAA","15AA","16AA","Open"];
+const SLOT_TYPES=[
+  {id:"pool",  label:"Pool Play",   color:"#1e3a5f", bg:"#eff6ff"},
+  {id:"selim", label:"Single Elim", color:"#7c3aed", bg:"#faf5ff"},
+  {id:"gold",  label:"Gold Bracket",color:"#b45309", bg:"#fffbeb"},
+  {id:"silver",label:"Silver",      color:"#475569", bg:"#f8fafc"},
+  {id:"bronze",label:"Bronze",      color:"#92400e", bg:"#fff7ed"},
+  {id:"blocked",label:"Blocked",    color:"#dc2626", bg:"#fee2e2"},
+  {id:"open",  label:"Open",        color:"#94a3b8", bg:"#fff"},
+];
+const SLOT_MAP=Object.fromEntries(SLOT_TYPES.map(s=>[s.id,s]));
+const DEFAULT_TIMES=["8:00 AM","10:00 AM","12:00 PM","2:00 PM","4:00 PM","6:00 PM"];
+const PARK_COLORS=["#1e3a5f","#14532d","#4c1d95","#7c2d12","#164e63","#713f12","#881337","#134e4a"];
+
+function GridBuilderView(){
+  const NAVY="#1e3a5f";
+  const B=(bg,fg,x={})=>({padding:"6px 13px",background:bg,color:fg,border:"none",borderRadius:5,fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",...x});
+  const F={padding:"5px 8px",border:"1px solid #cbd5e1",borderRadius:5,fontSize:12,background:"#fff",color:"#0f172a"};
+
+  // ── State ───────────────────────────────────────────────
+  const [parks,setParks]=useState([
+    {id:"pk_1",name:"Park 1",color:PARK_COLORS[0],fields:["Field 1","Field 2"]}
+  ]);
+  const [times,setTimes]=useState(DEFAULT_TIMES);
+  const [day,setDay]=useState("SAT"); // SAT | SUN
+  // grid: { "SAT|SUN" : { parkId_fieldName_time : {div,type} } }
+  const [grid,setGrid]=useState({SAT:{},SUN:{}});
+  const [selCell,setSelCell]=useState(null); // "pkId|field|time"
+  const [editPark,setEditPark]=useState(null); // park id being edited
+  const [newParkName,setNewParkName]=useState("");
+  const [newField,setNewField]=useState("");
+  const [showExport,setShowExport]=useState(false);
+  const [divFilter,setDivFilter]=useState(""); // quick filter for division picker
+
+  const dayGrid=grid[day]||{};
+
+  function cellKey(pkId,field,time){return `${pkId}|${field}|${time}`;}
+
+  function getCell(pkId,field,time){return dayGrid[cellKey(pkId,field,time)]||{div:"",type:"open"};}
+
+  function setCell(pkId,field,time,updates){
+    const key=cellKey(pkId,field,time);
+    setGrid(prev=>{
+      const dg={...(prev[day]||{})};
+      const cur=dg[key]||{div:"",type:"open"};
+      dg[key]={...cur,...updates};
+      return{...prev,[day]:dg};
+    });
+    setSelCell(null);
+  }
+
+  function addPark(){
+    const id=`pk_${Date.now()}`;
+    const color=PARK_COLORS[parks.length%PARK_COLORS.length];
+    setParks(p=>[...p,{id,name:`Park ${parks.length+1}`,color,fields:["Field 1","Field 2"]}]);
+  }
+  function delPark(id){setParks(p=>p.filter(pk=>pk.id!==id));}
+  function updPark(id,updates){setParks(p=>p.map(pk=>pk.id===id?{...pk,...updates}:pk));}
+  function addFieldToPark(pkId,name){
+    if(!name.trim())return;
+    updPark(pkId,{fields:[...(parks.find(p=>p.id===pkId)?.fields||[]),name.trim()]});
+    setNewField("");
+  }
+  function delFieldFromPark(pkId,fi){
+    const pk=parks.find(p=>p.id===pkId);
+    if(!pk)return;
+    updPark(pkId,{fields:pk.fields.filter((_,i)=>i!==fi)});
+  }
+
+  function addTime(){
+    const last=times[times.length-1]||"8:00 AM";
+    const [t,ap]=last.split(" ");
+    const [h,m]=t.split(":").map(Number);
+    let nh=h+(m===0?2:0), nm=m===0?0:0;
+    const nap=nh>=12?"PM":"AM";
+    const nh12=nh>12?nh-12:nh===0?12:nh;
+    const label=`${nh12}:${nm.toString().padStart(2,"0")} ${nap}`;
+    if(!times.includes(label))setTimes(t=>[...t,label]);
+  }
+  function delTime(t){setTimes(ts=>ts.filter(x=>x!==t));}
+
+  // ── Division counts across both days ────────────────────
+  const divStats=React.useMemo(()=>{
+    const counts={};
+    ["SAT","SUN"].forEach(d=>{
+      Object.values(grid[d]||{}).forEach(cell=>{
+        if(cell.div&&cell.type!=="blocked"&&cell.type!=="open"){
+          counts[cell.div]=(counts[cell.div]||0)+1;
+        }
+      });
+    });
+    return counts;
+  },[grid]);
+
+  // ── Selected cell info ───────────────────────────────────
+  const [selPkId,selField,selTime]=selCell?(selCell.split("|")):[];
+  const selVal=selCell?getCell(selPkId,selField,selTime):{div:"",type:"open"};
+
+  // ── Export summary ──────────────────────────────────────
+  const exportLines=React.useMemo(()=>{
+    return parks.map(pk=>{
+      const rows=["SAT","SUN"].flatMap(d=>
+        times.map(t=>{
+          const cells=pk.fields.map(f=>getCell(pk.id,f,t));
+          return{day:d,time:t,cells};
+        })
+      );
+      return{park:pk,rows};
+    });
+  },[parks,times,grid,day]);
+
+  const filteredDivs=divFilter?DIV_CODES.filter(d=>d.toLowerCase().includes(divFilter.toLowerCase())):DIV_CODES;
+
+  return(
+    <div style={{padding:"18px 22px",maxWidth:1400,margin:"0 auto"}}>
+      {/* ── Header ── */}
+      <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:20,flexWrap:"wrap"}}>
+        <div>
+          <div style={{fontSize:22,fontWeight:900,color:NAVY}}>🗺 Grid Builder</div>
+          <div style={{fontSize:12,color:"#64748b",marginTop:2}}>Plan which divisions play on which fields at each time slot — across all your parks</div>
+        </div>
+        <div style={{marginLeft:"auto",display:"flex",gap:8,flexWrap:"wrap"}}>
+          <button onClick={addPark} style={B("#2563eb","#fff")}>+ Add Park</button>
+          <button onClick={()=>setShowExport(e=>!e)} style={B("#16a34a","#fff")}>{showExport?"▲ Hide":"📊 Summary"}</button>
+        </div>
+      </div>
+
+      {/* ── Day toggle ── */}
+      <div style={{display:"flex",gap:0,marginBottom:18,borderRadius:8,overflow:"hidden",border:"2px solid #e2e8f0",width:"fit-content"}}>
+        {["SAT","SUN"].map(d=>(
+          <button key={d} onClick={()=>setDay(d)}
+            style={{padding:"9px 32px",border:"none",fontWeight:800,fontSize:13,cursor:"pointer",
+              background:day===d?NAVY:"#fff",color:day===d?"#fff":"#64748b",transition:"all .15s"}}>
+            {d==="SAT"?"Saturday":"Sunday"}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Division summary bar ── */}
+      {Object.keys(divStats).length>0&&(
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:14,padding:"10px 14px",
+          background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8}}>
+          <span style={{fontSize:10,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.8,alignSelf:"center",marginRight:4}}>Slots assigned:</span>
+          {Object.entries(divStats).sort((a,b)=>b[1]-a[1]).map(([div,cnt])=>(
+            <span key={div} style={{fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:20,
+              background:"#eff6ff",color:"#1d4ed8",border:"1px solid #bfdbfe"}}>
+              {div} <span style={{color:"#93c5fd"}}>×{cnt}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* ── Summary panel ── */}
+      {showExport&&(
+        <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:10,
+          padding:"16px 20px",marginBottom:18}}>
+          <div style={{fontWeight:800,fontSize:14,color:NAVY,marginBottom:12}}>Division Slot Summary (Both Days)</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:24}}>
+            {parks.map(pk=>{
+              const pkCells=["SAT","SUN"].flatMap(d=>
+                pk.fields.flatMap(f=>times.map(t=>getCell(pk.id,f,t)))
+              ).filter(c=>c.div&&c.type!=="open"&&c.type!=="blocked");
+              const pkDiv={};pkCells.forEach(c=>{pkDiv[c.div]=(pkDiv[c.div]||0)+1;});
+              return(
+                <div key={pk.id} style={{minWidth:160}}>
+                  <div style={{fontWeight:700,fontSize:12,color:pk.color,marginBottom:6,borderBottom:`2px solid ${pk.color}`,paddingBottom:4}}>{pk.name}</div>
+                  {Object.keys(pkDiv).length===0
+                    ?<div style={{fontSize:11,color:"#94a3b8"}}>No assignments yet</div>
+                    :Object.entries(pkDiv).map(([d,c])=>(
+                      <div key={d} style={{fontSize:11,display:"flex",justifyContent:"space-between",gap:12,color:"#334155",padding:"2px 0"}}>
+                        <span>{d}</span><span style={{fontWeight:700,color:NAVY}}>{c} slot{c!==1?"s":""}</span>
+                      </div>
+                    ))
+                  }
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Time row header strip ── */}
+      <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
+        <span style={{fontSize:11,fontWeight:700,color:"#64748b"}}>Time slots:</span>
+        {times.map(t=>(
+          <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 10px",
+            background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:20,fontSize:11,fontWeight:600,color:"#0284c7"}}>
+            {t}
+            <span onClick={()=>delTime(t)} style={{cursor:"pointer",color:"#94a3b8",marginLeft:2,fontSize:13,lineHeight:1}}>×</span>
+          </span>
+        ))}
+        <button onClick={addTime} style={B("#e0f2fe","#0284c7",{fontSize:11,padding:"3px 10px",borderRadius:20})}>+ Add Time</button>
+      </div>
+
+      {/* ── Parks ── */}
+      {parks.length===0&&(
+        <div style={{textAlign:"center",padding:"60px 20px",color:"#94a3b8",border:"2px dashed #e2e8f0",borderRadius:12}}>
+          <div style={{fontSize:36,marginBottom:8}}>🏟</div>
+          <div style={{fontSize:15,fontWeight:700,marginBottom:4}}>No parks yet</div>
+          <div style={{fontSize:12}}>Click "Add Park" to get started</div>
+        </div>
+      )}
+
+      {parks.map((pk,pki)=>(
+        <div key={pk.id} style={{marginBottom:24,border:`2px solid ${pk.color}`,borderRadius:12,overflow:"hidden",boxShadow:"0 2px 10px rgba(0,0,0,.06)"}}>
+          {/* Park header */}
+          <div style={{background:pk.color,padding:"10px 16px",display:"flex",alignItems:"center",gap:10}}>
+            {editPark===pk.id?(
+              <input value={pk.name} onChange={e=>updPark(pk.id,{name:e.target.value})}
+                onBlur={()=>setEditPark(null)} onKeyDown={e=>e.key==="Enter"&&setEditPark(null)}
+                autoFocus style={{...F,background:"rgba(255,255,255,.15)",color:"#fff",
+                  border:"1px solid rgba(255,255,255,.3)",fontWeight:700,fontSize:14,flex:1,maxWidth:260}}/>
+            ):(
+              <span onClick={()=>setEditPark(pk.id)}
+                style={{fontWeight:800,fontSize:15,color:"#fff",cursor:"pointer",flex:1}}
+                title="Click to rename">{pk.name} ✏️</span>
+            )}
+            <span style={{fontSize:11,color:"rgba(255,255,255,.7)",fontWeight:500}}>
+              {pk.fields.length} field{pk.fields.length!==1?"s":""} · {times.length} time slots
+            </span>
+            {/* color picker */}
+            <input type="color" value={pk.color}
+              onChange={e=>updPark(pk.id,{color:e.target.value})}
+              style={{width:26,height:26,border:"none",borderRadius:4,cursor:"pointer",background:"none",padding:0}}
+              title="Change park color"/>
+            <button onClick={()=>delPark(pk.id)}
+              style={{...B("rgba(255,255,255,.15)","#fff",{padding:"4px 10px",fontSize:11})}}>✕ Remove</button>
+          </div>
+
+          {/* Fields manager */}
+          <div style={{background:"#f8fafc",borderBottom:"1px solid #e2e8f0",padding:"8px 14px",
+            display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            {pk.fields.map((f,fi)=>(
+              <span key={fi} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",
+                background:"#fff",border:`1px solid ${pk.color}40`,borderRadius:20,fontSize:11,
+                fontWeight:600,color:pk.color}}>
+                {f}
+                <span onClick={()=>delFieldFromPark(pk.id,fi)}
+                  style={{cursor:"pointer",color:"#94a3b8",marginLeft:2}}>×</span>
+              </span>
+            ))}
+            <input value={newField} onChange={e=>setNewField(e.target.value)}
+              onKeyDown={e=>e.key==="Enter"&&addFieldToPark(pk.id,newField)}
+              placeholder="New field name…"
+              style={{...F,width:130,fontSize:11}}/>
+            <button onClick={()=>addFieldToPark(pk.id,newField)}
+              style={B(pk.color,"#fff",{fontSize:11,padding:"4px 10px"})}>+ Add Field</button>
+          </div>
+
+          {/* Grid table */}
+          <div style={{overflowX:"auto"}}>
+            <table style={{borderCollapse:"collapse",width:"100%",fontSize:12}}>
+              <thead>
+                <tr>
+                  <th style={{background:pk.color,color:"#fff",padding:"8px 12px",textAlign:"left",
+                    minWidth:90,position:"sticky",left:0,zIndex:2,fontWeight:700,fontSize:11}}>
+                    Time
+                  </th>
+                  {pk.fields.map((f,fi)=>(
+                    <th key={fi} style={{background:pk.color,color:"#fff",padding:"8px 10px",
+                      textAlign:"center",minWidth:140,borderLeft:"1px solid rgba(255,255,255,.2)",
+                      fontWeight:700,fontSize:11}}>
+                      {f}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {times.map((t,ti)=>(
+                  <tr key={t} style={{background:ti%2===0?"#fff":"#fafafa"}}>
+                    <td style={{padding:"8px 12px",fontWeight:700,fontSize:12,color:NAVY,
+                      borderBottom:"1px solid #f1f5f9",borderRight:"2px solid #e2e8f0",
+                      position:"sticky",left:0,background:ti%2===0?"#fff":"#fafafa",zIndex:1}}>
+                      {t}
+                    </td>
+                    {pk.fields.map((f,fi)=>{
+                      const key=cellKey(pk.id,f,t);
+                      const isOpen=selCell===key;
+                      const cell=getCell(pk.id,f,t);
+                      const st=SLOT_MAP[cell.type]||SLOT_MAP.open;
+                      const isEmpty=!cell.div&&cell.type==="open";
+                      return(
+                        <td key={fi} onClick={()=>setSelCell(isOpen?null:key)}
+                          style={{borderLeft:"1px solid #e2e8f0",borderBottom:"1px solid #f1f5f9",
+                            padding:4,textAlign:"center",cursor:"pointer",
+                            background:isOpen?"#eff6ff":st.bg,
+                            outline:isOpen?`2px solid ${pk.color}`:"none",
+                            transition:"all .1s",position:"relative"}}>
+                          {isEmpty?(
+                            <div style={{padding:"10px 4px",color:isOpen?"#2563eb":"#cbd5e1",
+                              fontSize:11,fontWeight:isOpen?700:400}}>
+                              {isOpen?"▼ select":"— open —"}
+                            </div>
+                          ):(
+                            <div style={{padding:"6px 4px"}}>
+                              <div style={{fontWeight:800,fontSize:12,color:st.color}}>{cell.div||"—"}</div>
+                              {cell.type!=="open"&&cell.type!=="pool"&&(
+                                <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",
+                                  color:st.color,opacity:.7,letterSpacing:.5,marginTop:1}}>
+                                  {st.label}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Inline picker — shown when cell is selected */}
+                          {isOpen&&(
+                            <div onClick={e=>e.stopPropagation()}
+                              style={{position:"absolute",top:"100%",left:0,zIndex:50,
+                                background:"#fff",border:"1.5px solid #2563eb",borderRadius:8,
+                                boxShadow:"0 8px 24px rgba(0,0,0,.15)",padding:10,minWidth:200,
+                                textAlign:"left"}}>
+                              <div style={{fontSize:10,fontWeight:800,color:"#94a3b8",
+                                textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Division</div>
+                              <input value={divFilter} onChange={e=>setDivFilter(e.target.value)}
+                                placeholder="Filter…" style={{...F,width:"100%",marginBottom:6,fontSize:11}}/>
+                              <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8,maxHeight:110,overflowY:"auto"}}>
+                                {filteredDivs.map(d=>(
+                                  <span key={d} onClick={()=>setCell(pk.id,f,t,{div:d,type:cell.type==="open"?"pool":cell.type})}
+                                    style={{padding:"3px 8px",borderRadius:12,fontSize:11,fontWeight:700,cursor:"pointer",
+                                      background:cell.div===d?"#1e3a5f":"#f0f4ff",
+                                      color:cell.div===d?"#fff":"#1d4ed8",border:"1px solid #bfdbfe"}}>
+                                    {d}
+                                  </span>
+                                ))}
+                              </div>
+                              <div style={{fontSize:10,fontWeight:800,color:"#94a3b8",
+                                textTransform:"uppercase",letterSpacing:.8,marginBottom:5}}>Type</div>
+                              <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
+                                {SLOT_TYPES.filter(s=>s.id!=="open").map(s=>(
+                                  <span key={s.id} onClick={()=>setCell(pk.id,f,t,{type:s.id})}
+                                    style={{padding:"3px 8px",borderRadius:12,fontSize:10,fontWeight:700,cursor:"pointer",
+                                      background:cell.type===s.id?s.color:s.bg,
+                                      color:cell.type===s.id?"#fff":s.color,border:`1px solid ${s.color}40`}}>
+                                    {s.label}
+                                  </span>
+                                ))}
+                              </div>
+                              <button onClick={()=>setCell(pk.id,f,t,{div:"",type:"open"})}
+                                style={B("#fee2e2","#dc2626",{fontSize:10,padding:"3px 10px",width:"100%"})}>
+                                Clear Cell
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+
+      {/* ── Quick legend ── */}
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",marginTop:8}}>
+        {SLOT_TYPES.filter(s=>s.id!=="open").map(s=>(
+          <span key={s.id} style={{display:"inline-flex",alignItems:"center",gap:5,
+            padding:"4px 10px",borderRadius:20,fontSize:10,fontWeight:700,
+            background:s.bg,color:s.color,border:`1px solid ${s.color}40`}}>
+            <span style={{width:8,height:8,borderRadius:"50%",background:s.color,display:"inline-block"}}/>
+            {s.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════ SCHEDULE BUILDER (formerly Layout Builder) ════════════════════ */
 function LayoutView({games,setGames,teams:propTeams}){
   // Imported teams layer — added by Excel import, merged with prop teams
   const [xlTeams,setXlTeams]=useState([]);
@@ -3380,7 +3751,7 @@ function FlightView({flight,divId,divCode,eventParks}){
   const brkTabs=["bracket","game-manager","pool2bracket","placing","seeds","contact"];
   const activeTabs=isPool?poolTabs:brkTabs;
   const [tab,setTab]=useState(isPool?"standings":"bracket");
-  const TL={standings:"📊 Standings",seeds:"🎯 Seeds","game-manager":"🗂 Game Manager",layout:"📐 Layout",pitching:"⚾ Pitching",parks:"🏟 Parks",umpires:"🟡 Umpires","live-lock":"🔒 Live & Lock",contact:"📞 Contact","pp-matrix":"🔢 PP Matrix",bracket:"🏆 Bracket","pool2bracket":"↗ Pool → Bracket",placing:"🥇 Placing"};
+  const TL={standings:"📊 Standings",seeds:"🎯 Seeds","game-manager":"🗂 Game Manager",layout:"📋 Schedule Builder",pitching:"⚾ Pitching",parks:"🏟 Parks",umpires:"🟡 Umpires","live-lock":"🔒 Live & Lock",contact:"📞 Contact","pp-matrix":"🔢 PP Matrix",bracket:"🏆 Bracket","pool2bracket":"↗ Pool → Bracket",placing:"🥇 Placing"};
   return(
     <div>
       <div className="tabs">
@@ -3865,7 +4236,8 @@ const NAV=[
   ]},
   {sec:"Scheduling Tools",items:[
     {id:"s-game-mgr",ico:"🗂",label:"Game Manager"},
-    {id:"s-layout",ico:"📐",label:"Layout Builder"},
+    {id:"s-grid",ico:"🗺",label:"Grid Builder"},
+    {id:"s-layout",ico:"📋",label:"Schedule Builder"},
     {id:"s-bracket",ico:"🏆",label:"Brackets"},
     {id:"s-standings",ico:"📊",label:"Pool Standings"},
   ]},
@@ -3888,7 +4260,7 @@ const NAV=[
 const SHORTCUT_IDS=new Set(NAV.flatMap(s=>s.items).map(i=>i.id).filter(i=>i.startsWith("s-")));
 
 function ShortcutHint({id}){
-  const labels={"s-game-mgr":["🗂","Game Manager","View/edit game assignments, swap teams, enter scores. Access via: Events → Event → Division → Pool Flight → Game Manager tab."],"s-layout":["📐","Layout Builder","Visual time-slot grid. Set fields, game durations, block times. Access via: Events → Event → Division → Pool Flight → Layout tab."],"s-bracket":["🏆","Brackets","Single/double elimination bracket management. Access via: Events → Event → Division → Bracket Flight → Bracket tab."],"s-standings":["📊","Pool Standings","Real-time W/L/T, PF/PA, run differential. Access via: Events → Event → Division → Pool Flight → Standings tab."],"s-seeds":["🎯","Seeding","USSSA Points + Power Rating seeding table. Access via: Events → Event → Division → Flight → Seeds tab."],"s-parks":["🏟","Parks & Fields","Select and assign tournament parks. Access via: Events → Event → Division → Flight → Parks tab."],"s-umpires":["🟡","Umpires","Assign certified umpires to games. Access via: Events → Event → Division → Flight → Umpires tab."],"s-pitching":["⚾","Pitching Tracker","Pitch counts and rest requirements by age group. Access via: Events → Event → Division → Pool Flight → Pitching tab."],"s-ppmatrix":["🔢","Pool Matrix","Serpentine seeding matrix calculator. Access via: Events → Event → Division → Flight → PP Matrix tab."],"s-placing":["🥇","Final Placing","Division champion and runner-up display. Access via: Events → Event → Division → Bracket Flight → Placing tab."],"s-rosters":["👥","Rosters","Team rosters for any division. Access via: Events → Event → Division → Flight → Contact tab."],"s-livelock":["🔒","Live & Lock Settings","Control public visibility and lock events. Access via: Events → Event → Division → Flight → Live & Lock tab."],"s-public":["👁","Public Fan View","Toggle any event to Public Fan View mode using the view toggle in the event detail page."]};
+  const labels={"s-game-mgr":["🗂","Game Manager","View/edit game assignments, swap teams, enter scores. Access via: Events → Event → Division → Pool Flight → Game Manager tab."],"s-grid":["🗺","Grid Builder","Plan which divisions play on which fields at each time slot across all your parks. The division assignment layer before scheduling. Access via: Scheduling Tools → Grid Builder."],"s-layout":["📋","Schedule Builder","Build matchups, assign games to time slots and fields, import from Excel. Access via: Events → Event → Division → Pool Flight → Schedule Builder tab."],"s-bracket":["🏆","Brackets","Single/double elimination bracket management. Access via: Events → Event → Division → Bracket Flight → Bracket tab."],"s-standings":["📊","Pool Standings","Real-time W/L/T, PF/PA, run differential. Access via: Events → Event → Division → Pool Flight → Standings tab."],"s-seeds":["🎯","Seeding","USSSA Points + Power Rating seeding table. Access via: Events → Event → Division → Flight → Seeds tab."],"s-parks":["🏟","Parks & Fields","Select and assign tournament parks. Access via: Events → Event → Division → Flight → Parks tab."],"s-umpires":["🟡","Umpires","Assign certified umpires to games. Access via: Events → Event → Division → Flight → Umpires tab."],"s-pitching":["⚾","Pitching Tracker","Pitch counts and rest requirements by age group. Access via: Events → Event → Division → Pool Flight → Pitching tab."],"s-ppmatrix":["🔢","Pool Matrix","Serpentine seeding matrix calculator. Access via: Events → Event → Division → Flight → PP Matrix tab."],"s-placing":["🥇","Final Placing","Division champion and runner-up display. Access via: Events → Event → Division → Bracket Flight → Placing tab."],"s-rosters":["👥","Rosters","Team rosters for any division. Access via: Events → Event → Division → Flight → Contact tab."],"s-livelock":["🔒","Live & Lock Settings","Control public visibility and lock events. Access via: Events → Event → Division → Flight → Live & Lock tab."],"s-public":["👁","Public Fan View","Toggle any event to Public Fan View mode using the view toggle in the event detail page."]};
   const info=labels[id];
   if(!info)return null;
   const [ico,title,desc]=info;
@@ -4002,6 +4374,7 @@ function App(){
           {view==="event-detail"&&selEv&&<EventDetailView ev={selEv} onBack={()=>nav("events")}/>}
           {view==="create"&&<CreateEventView/>}
           {view==="s-game-mgr"&&<GameMgrView games={allGames} setGames={setAllGames} teams={ALL_TEAMS}/>}
+          {view==="s-grid"&&<GridBuilderView/>}
           {view==="s-layout"&&<LayoutView games={allGames} setGames={setAllGames} teams={ALL_TEAMS}/>}
           {view==="s-bracket"&&<BracketView bGames={allBracketGames} setBGames={setAllBracketGames} teams={ALL_TEAMS} games={allGames} editable={true}/>}
           {view==="s-standings"&&<StandingsView teams={ALL_TEAMS} games={allGames}/>}
@@ -4012,7 +4385,7 @@ function App(){
           {view==="s-ppmatrix"&&<PPMatrixView/>}
           {view==="s-placing"&&<PlacingView bGames={allBracketGames} teams={ALL_TEAMS}/>}
           {view==="s-livelock"&&<LiveLockView/>}
-          {SHORTCUT_IDS.has(view)&&!["s-game-mgr","s-layout","s-bracket","s-standings","s-seeds","s-parks","s-umpires","s-pitching","s-ppmatrix","s-placing","s-livelock"].includes(view)&&<ShortcutHint id={view}/>}
+          {SHORTCUT_IDS.has(view)&&!["s-game-mgr","s-grid","s-layout","s-bracket","s-standings","s-seeds","s-parks","s-umpires","s-pitching","s-ppmatrix","s-placing","s-livelock"].includes(view)&&<ShortcutHint id={view}/>}
         </div>
       </main>
     </div>
