@@ -243,7 +243,49 @@ const T12=[
   {id:"v8",name:"Sharon Springs Spartans",city:"Cumming",state:"GA",cls:"12AAA",pts:0,pr:0,icr:"0-4",ovr:"2-10"},
 ];
 
-const ALL_TEAMS=[...T8,...T9,...T12];
+// 10U teams
+const T10=[
+  {id:"w1",name:"Ft. Lauderdale Force",city:"Ft. Lauderdale",state:"FL",cls:"10AAA",pts:720,pr:1045,icr:"4-1",ovr:"17-4"},
+  {id:"w2",name:"Miami Gators",city:"Miami",state:"FL",cls:"10AAA",pts:610,pr:935,icr:"3-2",ovr:"14-6"},
+  {id:"w3",name:"Orlando Elite",city:"Orlando",state:"FL",cls:"10AA",pts:490,pr:820,icr:"3-2",ovr:"13-7"},
+  {id:"w4",name:"Tampa Bay Storm",city:"Tampa",state:"FL",cls:"10AA",pts:350,pr:710,icr:"2-3",ovr:"10-9"},
+  {id:"w5",name:"Central FL Patriots",city:"Kissimmee",state:"FL",cls:"10A",pts:220,pr:620,icr:"1-4",ovr:"8-11"},
+  {id:"w6",name:"Brevard County Bandits",city:"Melbourne",state:"FL",cls:"10A",pts:140,pr:540,icr:"1-4",ovr:"5-13"},
+  {id:"w7",name:"Space Coast Rockets",city:"Titusville",state:"FL",cls:"10Open",pts:80,pr:460,icr:"0-5",ovr:"3-15"},
+];
+// 11U teams
+const T11=[
+  {id:"x1",name:"South FL Hurricanes",city:"Coral Gables",state:"FL",cls:"11AAA",pts:850,pr:1120,icr:"4-1",ovr:"19-3"},
+  {id:"x2",name:"Treasure Coast Titans",city:"Port St. Lucie",state:"FL",cls:"11AAA",pts:700,pr:980,icr:"3-2",ovr:"16-5"},
+  {id:"x3",name:"Gainesville Gators",city:"Gainesville",state:"FL",cls:"11AA",pts:560,pr:860,icr:"3-2",ovr:"14-7"},
+  {id:"x4",name:"Sarasota Surge",city:"Sarasota",state:"FL",cls:"11AA",pts:430,pr:740,icr:"2-3",ovr:"11-9"},
+  {id:"x5",name:"Tallahassee Chiefs",city:"Tallahassee",state:"FL",cls:"11A",pts:290,pr:640,icr:"2-3",ovr:"9-11"},
+  {id:"x6",name:"Hernando Hammers",city:"Brooksville",state:"FL",cls:"11A",pts:160,pr:550,icr:"1-4",ovr:"6-13"},
+  {id:"x7",name:"Pasco Predators",city:"Zephyrhills",state:"FL",cls:"11Open",pts:90,pr:470,icr:"0-5",ovr:"3-16"},
+];
+// 13U teams
+const T13=[
+  {id:"y1",name:"Sarasota Select",city:"Sarasota",state:"FL",cls:"13AAA",pts:890,pr:1180,icr:"4-1",ovr:"20-3"},
+  {id:"y2",name:"Manatee Mustangs",city:"Bradenton",state:"FL",cls:"13AAA",pts:740,pr:1020,icr:"3-2",ovr:"17-5"},
+  {id:"y3",name:"Charlotte Harbor Sharks",city:"Port Charlotte",state:"FL",cls:"13AA",pts:610,pr:900,icr:"3-2",ovr:"15-6"},
+  {id:"y4",name:"Lee County Eagles",city:"Ft. Myers",state:"FL",cls:"13AA",pts:470,pr:770,icr:"2-3",ovr:"12-8"},
+  {id:"y5",name:"Collier County Cobras",city:"Naples",state:"FL",cls:"13A",pts:320,pr:650,icr:"2-3",ovr:"10-10"},
+  {id:"y6",name:"Hillsborough Hawks",city:"Plant City",state:"FL",cls:"13A",pts:200,pr:560,icr:"1-4",ovr:"7-12"},
+  {id:"y7",name:"Pinellas Bombers",city:"Pinellas Park",state:"FL",cls:"13Open",pts:150,pr:490,icr:"1-4",ovr:"5-14"},
+  {id:"y8",name:"Polk County Power",city:"Winter Haven",state:"FL",cls:"13Open",pts:100,pr:440,icr:"0-5",ovr:"3-16"},
+  {id:"y9",name:"Lakeland Lightning",city:"Lakeland",state:"FL",cls:"13Open",pts:60,pr:390,icr:"0-5",ovr:"2-17"},
+];
+// 14U teams
+const T14=[
+  {id:"z1",name:"TBSA Premier",city:"Tampa",state:"FL",cls:"14AAA",pts:920,pr:1210,icr:"4-1",ovr:"21-2"},
+  {id:"z2",name:"Gulf Coast Generals",city:"Bonita Springs",state:"FL",cls:"14AAA",pts:760,pr:1050,icr:"3-2",ovr:"18-4"},
+  {id:"z3",name:"Space Coast Elite",city:"Cocoa",state:"FL",cls:"14AA",pts:630,pr:920,icr:"3-2",ovr:"15-6"},
+  {id:"z4",name:"Central FL Prospects",city:"Clermont",state:"FL",cls:"14AA",pts:480,pr:790,icr:"2-3",ovr:"12-8"},
+  {id:"z5",name:"Pasco Blue Sox",city:"Dade City",state:"FL",cls:"14A",pts:340,pr:680,icr:"1-4",ovr:"9-11"},
+  {id:"z6",name:"Citrus County Crackers",city:"Lecanto",state:"FL",cls:"14A",pts:210,pr:570,icr:"1-4",ovr:"6-13"},
+  {id:"z7",name:"Marion Outlaws",city:"Ocala",state:"FL",cls:"14Open",pts:130,pr:500,icr:"0-5",ovr:"4-15"},
+];
+const ALL_TEAMS=[...T8,...T9,...T10,...T11,...T12,...T13,...T14];
 
 // Wellington 8Op pool games
 const PG8=[
@@ -4380,7 +4422,11 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
   const pubDivNorm=divisions.find(d=>d.id===pubDivId)||divisions[0];
   const pubTeams=teamDB(pubDivNorm?pubDivNorm.id:"");
   const pubGames=poolGamesDB(pubDivNorm?pubDivNorm.id:"");
-  const searchResults=teamSearch.length>1?ALL_TEAMS.filter(t=>t.name.toLowerCase().includes(teamSearch.toLowerCase())).slice(0,12):[];
+  function parseDivAge(lbl){const m=(lbl||"").match(/^(\d+)/);return m?parseInt(m[1]):null;}
+  const activeDivAge=activeDivObj?parseDivAge(activeDivObj.label):null;
+  const rosterIds=new Set(divRoster.map(t=>t.id));
+  const ageFiltered=activeDivAge?ALL_TEAMS.filter(t=>parseDivAge(t.cls)===activeDivAge):ALL_TEAMS;
+  const browseable=teamSearch.length>1?ALL_TEAMS.filter(t=>t.name.toLowerCase().includes(teamSearch.toLowerCase())):ageFiltered;
   const totalTeams=divisions.reduce((a,d)=>a+d.numTeams,0);
   const paidCount=divRoster.filter(t=>t.payStatus==="Paid").length;
   const approvedCount=divRoster.filter(t=>t.entryStatus==="Approved").length;
@@ -4455,40 +4501,16 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
           </div>
           <div className="card">
             <div className="card-hd">
-              <span className="card-title">Teams — {activeDivObj?activeDivObj.label:"Division"}</span>
+              <span className="card-title">👥 {activeDivObj?activeDivObj.label:"Division"} — Roster ({divRoster.length}{activeDivObj?" / "+activeDivObj.numTeams+"t":""})</span>
               <div className="flex-c gap-2">
                 {schedMsg?<span style={{fontSize:12,color:"var(--red)",fontWeight:600}}>⚠ {schedMsg}</span>:null}
-                <button className="btn btn-primary btn-sm" onClick={e=>{e.stopPropagation();setShowAdd(!showAdd);setTeamSearch("");}}>➕ Add Team</button>
                 <button className="btn btn-secondary btn-sm" onClick={e=>{e.stopPropagation();handleSchedule();}}>📅 Schedule Builder →</button>
               </div>
             </div>
-            {showAdd?(
-              <div style={{padding:"12px 18px",background:"#f0f7ff",borderBottom:"1px solid #d0e4f8"}} onClick={e=>e.stopPropagation()}>
-                <input style={{width:"100%",padding:"9px 12px",border:"1px solid #cdd5df",borderRadius:6,fontSize:13,boxSizing:"border-box"}}
-                  placeholder="🔍 Search teams to add (type 2+ chars)..."
-                  value={teamSearch}
-                  onChange={e=>setTeamSearch(e.target.value)}/>
-                {searchResults.length>0?(
-                  <div style={{border:"1px solid #e2e8f0",borderRadius:6,marginTop:6,background:"#fff",maxHeight:220,overflowY:"auto",boxShadow:"0 4px 12px rgba(0,0,0,.1)"}}>
-                    {searchResults.map(t=>{
-                      const already=divRoster.some(x=>x.id===t.id);
-                      return(
-                        <div key={t.id} style={{padding:"9px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #f0f4f8",fontSize:13}}>
-                          <div><span style={{fontWeight:700}}>{t.name}</span><span style={{color:"var(--gray)",marginLeft:8,fontSize:11}}>{t.city}, {t.state} · {t.cls}</span></div>
-                          {already?<span style={{fontSize:11,color:"var(--green)",fontWeight:700}}>✓ Added</span>:<button className="btn btn-primary btn-sm" style={{padding:"3px 12px",fontSize:11}} onClick={()=>addTeam(t)}>+ Add</button>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                ):null}
-              </div>
-            ):null}
             <div className="tbl-scroll">
               {divRoster.length===0?(
-                <div style={{textAlign:"center",padding:"44px 20px",color:"var(--gray)"}}>
-                  <div style={{fontSize:36,marginBottom:8}}>👥</div>
-                  <div style={{fontSize:15,fontWeight:700,color:"var(--navy)",marginBottom:6}}>No Teams Rostered</div>
-                  <div style={{fontSize:13}}>Click <strong>➕ Add Team</strong> to add teams to <strong>{activeDivObj?activeDivObj.label:"this division"}</strong>.</div>
+                <div style={{padding:"18px 18px 8px",color:"var(--gray)",fontSize:13,textAlign:"center",borderBottom:"1px solid #f0f4f8"}}>
+                  No teams rostered yet. Add teams from the list below.
                 </div>
               ):(
                 <table>
@@ -4557,14 +4579,42 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
                 </table>
               )}
             </div>
-            {divRoster.length>0?(
-              <div style={{padding:"12px 18px",borderTop:"1px solid #eee",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#fafbfc"}}>
-                <div style={{fontSize:12,color:"var(--gray)"}}>
-                  {divRoster.length} teams · {approvedCount} approved · {paidCount} paid · <strong>${totalPaid.toFixed(0)}</strong> collected · <strong style={{color:totalOwed>0?"var(--red)":"inherit"}}>${totalOwed.toFixed(0)}</strong> balance due
-                </div>
-                <button className="btn btn-primary btn-sm" onClick={e=>{e.stopPropagation();handleSchedule();}}>📅 Schedule This Division in Builder →</button>
+            <div style={{padding:"10px 18px",borderTop:"1px solid #eee",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#fafbfc",flexWrap:"wrap",gap:8}}>
+              <div style={{fontSize:12,color:"var(--gray)"}}>
+                {divRoster.length>0?(<span>{divRoster.length} teams · {approvedCount} approved · {paidCount} paid · <strong>${totalPaid.toFixed(0)}</strong> collected · <strong style={{color:totalOwed>0?"var(--red)":"inherit"}}>${totalOwed.toFixed(0)}</strong> balance due</span>):(<span>0 teams rostered</span>)}
               </div>
-            ):null}
+              <button className="btn btn-primary btn-sm" onClick={e=>{e.stopPropagation();handleSchedule();}}>📅 Schedule This Division in Builder →</button>
+            </div>
+          </div>
+          <div className="card" style={{marginTop:12}}>
+            <div className="card-hd">
+              <span className="card-title">➕ Add Teams to {activeDivObj?activeDivObj.label:"Division"}</span>
+              <input style={{padding:"5px 10px",border:"1px solid #ddd",borderRadius:5,fontSize:12,width:220}} placeholder="🔍 Filter by name..." value={teamSearch} onChange={e=>setTeamSearch(e.target.value)} onClick={e=>e.stopPropagation()}/>
+            </div>
+            <div style={{maxHeight:320,overflowY:"auto"}}>
+              {browseable.length===0?(
+                <div style={{textAlign:"center",padding:"28px 20px",color:"var(--gray)",fontSize:13}}>No teams found{teamSearch?" matching your search":""}. Teams will auto-populate when USSSA data is synced.</div>
+              ):(
+                <table>
+                  <thead><tr><th style={{width:30}}>#</th><th>Team Name</th><th>Class</th><th>City, ST</th><th style={{width:70,textAlign:"right"}}>USSSA Pts</th><th style={{width:80,textAlign:"center"}}>Status</th></tr></thead>
+                  <tbody>{browseable.map((t,i)=>{
+                    const inRoster=rosterIds.has(t.id);
+                    return(
+                      <tr key={t.id} style={{background:inRoster?"#f0fdf4":i%2===0?"#f9fbfc":"#fff"}}>
+                        <td style={{textAlign:"center",fontSize:12,color:"var(--gray)",fontWeight:700}}>{i+1}</td>
+                        <td style={{fontWeight:700,fontSize:13}}>{t.name}</td>
+                        <td><span className="badge b-blue" style={{fontSize:10}}>{t.cls}</span></td>
+                        <td className="t-sm t-gray">{t.city}, {t.state}</td>
+                        <td style={{textAlign:"right",fontSize:12,fontWeight:700,color:"var(--navy)",paddingRight:10}}>{t.pts||"—"}</td>
+                        <td style={{textAlign:"center"}}>
+                          {inRoster?(<span style={{fontSize:11,color:"var(--green)",fontWeight:700}}>✓ Rostered</span>):(<button className="btn btn-primary btn-sm" style={{fontSize:11,padding:"3px 10px"}} onClick={e=>{e.stopPropagation();addTeam(t);}}>+ Add</button>)}
+                        </td>
+                      </tr>
+                    );
+                  })}</tbody>
+                </table>
+              )}
+            </div>
           </div>
         </div>
       ):(
@@ -4577,7 +4627,7 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
                 <div className="div-pills">
                   {divisions.map(d=>(
                     <div key={d.id} className={`div-pill ${dirDivId===d.id?"dp-on":"dp-off"}`}
-                      onClick={()=>{setDirDivId(d.id);setFlightId(null);}}>
+                      onClick={e=>{e.stopPropagation();setDirDivId(d.id);setFlightId(null);}}>
                       {d.label}<span style={{fontSize:10,opacity:.65,marginLeft:4}}>({d.numTeams}t)</span>
                     </div>
                   ))}
@@ -4589,13 +4639,13 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
                         {dirFlights.map(f=>(
                           <div key={f.id}
                             className={`fl-tab ${(!flightId&&f===dirFlights[0])||flightId===f.id?"on":""} ${f.live?"fl-live":""}`}
-                            onClick={()=>setFlightId(f.id)}>
+                            onClick={e=>{e.stopPropagation();setFlightId(f.id);}}>
                             {f.type==="pool"?"🔵":"🏆"} {f.name}
                             <span style={{marginLeft:6,fontSize:10,opacity:.6}}>{f.status}</span>
                           </div>
                         ))}
-                        <div className="fl-tab fl-add" style={{color:"var(--green)",borderColor:"var(--green)",cursor:"pointer"}} onClick={()=>addFlight("pool")}>+ Add Pool Flight</div>
-                        <div className="fl-tab fl-add" style={{color:"var(--gold)",borderColor:"var(--gold)",cursor:"pointer"}} onClick={()=>addFlight("bracket")}>+ Add Bracket Flight</div>
+                        <div className="fl-tab fl-add" style={{color:"var(--green)",borderColor:"var(--green)",cursor:"pointer"}} onClick={e=>{e.stopPropagation();addFlight("pool");}}>+ Add Pool Flight</div>
+                        <div className="fl-tab fl-add" style={{color:"var(--gold)",borderColor:"var(--gold)",cursor:"pointer"}} onClick={e=>{e.stopPropagation();addFlight("bracket");}}>+ Add Bracket Flight</div>
                       </div>
                       {dirFlight?<FlightView flight={dirFlight} divId={dirDivId} divCode={dirDiv.code} eventParks={ev.parks||[]}/>:null}
                     </div>
@@ -4606,8 +4656,8 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
                         <div style={{fontSize:16,fontWeight:700,color:"var(--navy)",marginBottom:8}}>No Flights Configured for {dirDiv.label}</div>
                         <div style={{fontSize:13,color:"var(--gray)",maxWidth:420,margin:"0 auto 20px"}}>Add a flight here, or go to the <strong>Team Roster</strong> tab and use <strong>Schedule Builder →</strong> to schedule directly.</div>
                         <div style={{display:"flex",gap:12,justifyContent:"center"}}>
-                          <button className="btn btn-primary btn-sm" onClick={()=>addFlight("pool")}>+ Add Pool Flight</button>
-                          <button className="btn btn-secondary btn-sm" onClick={()=>addFlight("bracket")}>+ Add Bracket Flight</button>
+                          <button className="btn btn-primary btn-sm" onClick={e=>{e.stopPropagation();addFlight("pool");}}>+ Add Pool Flight</button>
+                          <button className="btn btn-secondary btn-sm" onClick={e=>{e.stopPropagation();addFlight("bracket");}}>+ Add Bracket Flight</button>
                         </div>
                       </div>
                     </div>
