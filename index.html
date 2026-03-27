@@ -518,6 +518,18 @@ function bracketGamesDB(divId){
   return map[divId]||[];
 }
 
+/* ════ normDiv — unify live {divID,ageCode,numTeams} vs old {id,label,teams,flights} ════ */
+function normDiv(d){
+  return{
+    id:d.divID||d.id||"d"+d.ageCode||"d0",
+    label:d.ageCode||d.label||"Division",
+    code:d.code||(d.ageCode||"").replace(/\s+/g,""),
+    numTeams:d.numTeams!=null?d.numTeams:(d.teams!=null?d.teams:0),
+    flights:d.flights||[],
+    wl:d.wl||""
+  };
+}
+
 /* ════════════════════ SMALL COMPONENTS ════════════════════ */
 function Ev_StatusBadge({status}){
   if(status==="complete")return <span className="badge b-green">✓ Complete</span>;
@@ -4268,120 +4280,252 @@ function FlightView({flight,divId,divCode,eventParks}){
 }
 
 /* ════════════════════ EVENT DETAIL ════════════════════ */
-function EventDetailView({ev,onBack}){
-  const lastDiv=ev.divisions[ev.divisions.length-1];
-  const [divId,setDivId]=useState(lastDiv.id);
+function EventDetailView({ev,onBack,onNav}){
+  const divisions=(ev.divisions||[]).map(normDiv);
+  const firstId=divisions.length>0?divisions[0].id:null;
+  const [divId,setDivId]=useState(firstId);
   const [flightId,setFlightId]=useState(null);
-  const [pubMode,setPubMode]=useState(false);
+  const [evTab,setEvTab]=useState("director");
   const [pubTab,setPubTab]=useState("standings");
-  const [pubDivId,setPubDivId]=useState(ev.divisions[0].id);
-  const div=ev.divisions.find(d=>d.id===divId)||ev.divisions[0];
-  const flight=(flightId?div.flights.find(f=>f.id===flightId):null)||div.flights[0];
-  const pubTeams=teamDB(pubDivId);
-  const pubGames=poolGamesDB(pubDivId);
-  const pubBracket=bracketGamesDB(pubDivId);
-  const [pubBg,setPubBg]=useState(pubBracket);
+  const [pubDivId,setPubDivId]=useState(firstId);
+  const [divTeams,setDivTeams]=useState({});
+  const [teamSearch,setTeamSearch]=useState("");
+  const [addDivId,setAddDivId]=useState(firstId);
+
+  const div=divisions.find(d=>d.id===divId)||divisions[0]||null;
+  const flights=div?div.flights:[];
+  const flight=(flightId?flights.find(f=>f.id===flightId):null)||(flights.length>0?flights[0]:null);
+  const pubDivNorm=divisions.find(d=>d.id===pubDivId)||divisions[0];
+  const pubDivKey=pubDivNorm?pubDivNorm.id:"";
+  const pubTeams=teamDB(pubDivKey);
+  const pubGames=poolGamesDB(pubDivKey);
+  const [pubBg,setPubBg]=useState(()=>bracketGamesDB(firstId||""));
+
+  const activeDivId=addDivId||firstId||"";
+  const activeDivLabel=(divisions.find(d=>d.id===activeDivId)||divisions[0]||{label:"Division"}).label;
+  const currentTeams=divTeams[activeDivId]||[];
+  const searchResults=teamSearch.length>1?ALL_TEAMS.filter(t=>t.name.toLowerCase().includes(teamSearch.toLowerCase())).slice(0,10):[];
+  const totalTeams=divisions.reduce((a,d)=>a+d.numTeams,0);
+
+  function addTeam(dId,team){
+    setDivTeams(p=>({...p,[dId]:[...((p[dId]||[]).filter(t=>t.id!==team.id)),team]}));
+  }
+  function removeTeam(dId,teamId){
+    setDivTeams(p=>({...p,[dId]:(p[dId]||[]).filter(t=>t.id!==teamId)}));
+  }
+  function goSchedule(){if(onNav)onNav("s-layout");}
 
   return(
     <div>
+      {/* ── Top bar ── */}
       <div className="flex-b mb4">
         <button className="btn btn-secondary btn-sm" onClick={onBack}>← Back to Events</button>
         <div className="flex-c gap-3">
-          <span className="t-xs t-gray">View mode:</span>
-          <div className="v-toggle">
-            <button className={`v-btn ${!pubMode?"on":""}`} onClick={()=>setPubMode(false)}>🔧 Director</button>
-            <button className={`v-btn ${pubMode?"on":""}`} onClick={()=>setPubMode(true)}>👁 Public Fan View</button>
+          <button className="btn btn-primary btn-sm" onClick={goSchedule}>📋 Open Schedule Builder</button>
+          <Ev_StatusBadge status={ev.status}/>
+        </div>
+      </div>
+
+      {/* ── Event info card ── */}
+      <div className="card mb4">
+        <div className="card-body" style={{padding:"14px 20px"}}>
+          <div className="flex-b">
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:20,fontWeight:900,color:"var(--navy)",marginBottom:4}}>{ev.name}</div>
+              <div className="t-sm t-gray">📍 {ev.loc} · 📅 {ev.date} · {ev.stature}{ev.director?` · Director: ${ev.director}`:""}</div>
+              <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
+                {ev.format?<span className="badge b-blue">{ev.format}</span>:null}
+                <span className="badge b-gray">{divisions.length} Division{divisions.length!==1?"s":""}</span>
+                <span className="badge b-gray">{totalTeams} Teams</span>
+                {ev.lwc?<span className="badge b-gold">{ev.lwc==="open"?"Open for Entries":ev.lwc==="waitlist"?"Wait List":ev.lwc==="closed"?"Closed":"On Hold"}</span>:null}
+                {ev.minGames?<span className="badge b-gray">Min {ev.minGames} Games</span>:null}
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {pubMode?(
-        <div style={{background:"#fff",borderRadius:12,overflow:"hidden",boxShadow:"var(--sh-lg)"}}>
-          <div className="pub-header">
-            <div className="pub-ename">{ev.name}</div>
-            <div className="pub-meta">📍 {ev.loc} · 📅 {ev.date} · {ev.stature}</div>
-            <div className="pub-divs">
-              {ev.divisions.map(d=>(
-                <div key={d.id} className={`pub-div ${pubDivId===d.id?"on":""}`}
-                  onClick={()=>{setPubDivId(d.id);setPubBg(bracketGamesDB(d.id))}}>
-                  {d.label}
+      {/* ── Tab bar ── */}
+      <div className="tabs" style={{marginBottom:16}}>
+        <div className={`tab ${evTab==="director"?"active":""}`} onClick={()=>setEvTab("director")}>🔧 Director</div>
+        <div className={`tab ${evTab==="teams"?"active":""}`} onClick={()=>setEvTab("teams")}>👥 Teams</div>
+        <div className={`tab ${evTab==="public"?"active":""}`} onClick={()=>setEvTab("public")}>👁 Public View</div>
+      </div>
+
+      {/* ── Director tab ── */}
+      {evTab==="director"?(
+        divisions.length===0?(
+          <div className="card"><div className="card-body" style={{textAlign:"center",padding:48,color:"var(--gray)"}}>No divisions configured for this event.</div></div>
+        ):(
+          <div>
+            <div className="div-pills">
+              {divisions.map(d=>(
+                <div key={d.id} className={`div-pill ${divId===d.id?"dp-on":"dp-off"}`}
+                  onClick={()=>{setDivId(d.id);setFlightId(null)}}>
+                  {d.label}<span style={{fontSize:10,opacity:.65,marginLeft:4}}>({d.numTeams}t)</span>
                 </div>
               ))}
             </div>
-            <div className="pub-tabs">
-              {["standings","bracket","schedule"].map(t=>(
-                <div key={t} className={`pub-tab ${pubTab===t?"on":""}`} onClick={()=>setPubTab(t)}>
-                  {t==="standings"?"📊 Standings":t==="bracket"?"🏆 Bracket":"📅 Schedule"}
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="pub-body">
-            {pubTab==="standings"&&<StandingsView teams={pubTeams} games={pubGames}/>}
-            {pubTab==="bracket"&&<BracketView bGames={pubBg} setBGames={setPubBg} teams={pubTeams} editable={false}/>}
-            {pubTab==="schedule"&&(
-              <div className="tbl-wrap">
-                <table>
-                  <thead><tr><th>#</th><th>Pool</th><th>Date</th><th>Time</th><th>Field</th><th>Home</th><th>Score</th><th>Away</th><th>Status</th></tr></thead>
-                  <tbody>{pubGames.map(g=>{
-                    const t1=tByIdFrom(g.t1,pubTeams),t2=tByIdFrom(g.t2,pubTeams),w=winOf(g);
-                    return<tr key={g.id}>
-                      <td className="fw7">{g.num}</td>
-                      <td>{g.pool&&<span className={`chip ${poolChipClass(g.pool)}`}>Pool {g.pool}</span>}</td>
-                      <td className="t-sm">{g.date}</td><td className="t-sm">{g.time}</td>
-                      <td className="t-sm t-gray">{g.field}</td>
-                      <td style={{fontWeight:w===g.t1?700:400}}>{t1?.name||"—"}</td>
-                      <td className="fw8" style={{textAlign:"center"}}>{g.s1!=null?`${g.s1} — ${g.s2}`:""}</td>
-                      <td style={{fontWeight:w===g.t2?700:400}}>{t2?.name||"—"}</td>
-                      <td><span className={`status ${g.status==="final"?"s-final":"s-scheduled"}`}>
-                        {g.status==="final"?"✓ Final":"Scheduled"}
-                      </span></td>
-                    </tr>;
-                  })}</tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      ):(
-        <>
-          <div className="card mb4">
-            <div className="card-body" style={{padding:"14px 18px"}}>
-              <div className="flex-b">
+            {div?(
+              flights.length>0?(
                 <div>
-                  <div style={{fontSize:19,fontWeight:900,color:"var(--navy)"}}>{ev.name}</div>
-                  <div className="t-sm t-gray mt1">📍 {ev.loc} · 📅 {ev.date} · {ev.stature} · Director: {ev.director}</div>
+                  <div className="fl-tabs">
+                    {flights.map(f=>(
+                      <div key={f.id}
+                        className={`fl-tab ${(!flightId&&f===flights[0])||flightId===f.id?"on":""} ${f.live?"fl-live":""}`}
+                        onClick={()=>setFlightId(f.id)}>
+                        {f.type==="pool"?"🔵":"🏆"} {f.name}
+                        <span style={{marginLeft:6,fontSize:10,opacity:.6}}>{f.status}</span>
+                      </div>
+                    ))}
+                    <div className="fl-tab fl-add" style={{color:"var(--green)",borderColor:"var(--green)"}}>+ Add Pool Flight</div>
+                    <div className="fl-tab fl-add" style={{color:"var(--gold)",borderColor:"var(--gold)"}}>+ Add Bracket Flight</div>
+                  </div>
+                  {flight?<FlightView flight={flight} divId={divId} divCode={div.code} eventParks={ev.parks||[]}/>:null}
                 </div>
-                <Ev_StatusBadge status={ev.status}/>
-              </div>
-            </div>
+              ):(
+                <div className="card" style={{marginTop:16}}>
+                  <div className="card-body" style={{textAlign:"center",padding:"40px 24px"}}>
+                    <div style={{fontSize:44,marginBottom:12}}>📋</div>
+                    <div style={{fontSize:17,fontWeight:800,color:"var(--navy)",marginBottom:8}}>No Flights Configured for {div.label}</div>
+                    <div style={{fontSize:13,color:"var(--gray)",maxWidth:420,margin:"0 auto 24px"}}>Add a pool flight or bracket to set up scheduling, or jump directly into Schedule Builder.</div>
+                    <div style={{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap"}}>
+                      <button className="btn btn-primary btn-sm">+ Add Pool Flight</button>
+                      <button className="btn btn-secondary btn-sm">+ Add Bracket Flight</button>
+                      <button className="btn btn-secondary btn-sm" onClick={goSchedule}>📋 Open Schedule Builder</button>
+                    </div>
+                  </div>
+                </div>
+              )
+            ):null}
           </div>
-          <div className="div-pills">
-            {ev.divisions.map(d=>(
-              <div key={d.divID} className={`div-pill ${divId===d.divID?"dp-on":"dp-off"}`}
-                onClick={()=>{setDivId(d.divID);setFlightId(null)}}>
-                {d.ageCode} <span style={{fontSize:10,opacity:.65,marginLeft:3}}>({d.numTeams}t)</span>
-              </div>
-            ))}
-          </div>
-          {div&&(
-            <div>
-              <div className="fl-tabs">
-                {div.flights.map(f=>(
-                  <div key={f.id}
-                    className={`fl-tab ${(!flightId&&f===div.flights[0])||flightId===f.id?"on":""} ${f.live?"fl-live":""}`}
-                    onClick={()=>setFlightId(f.id)}>
-                    {f.type==="pool"?"🔵":"🏆"} {f.name}
-                    <span style={{marginLeft:6,fontSize:10,opacity:.6}}>{f.status}</span>
+        )
+      ):(
+        evTab==="teams"?(
+          /* ── Teams tab ── */
+          <div style={{display:"grid",gridTemplateColumns:"240px 1fr",gap:16,alignItems:"start"}}>
+            <div className="card">
+              <div className="card-hd"><span className="card-title">Divisions</span></div>
+              <div style={{padding:"6px 0"}}>
+                {divisions.map(d=>(
+                  <div key={d.id} onClick={()=>setAddDivId(d.id)}
+                    style={{padding:"10px 16px",cursor:"pointer",background:addDivId===d.id?"var(--blue-l)":"transparent",borderLeft:addDivId===d.id?"3px solid var(--blue)":"3px solid transparent",display:"flex",justifyContent:"space-between",alignItems:"center",transition:"background .15s"}}>
+                    <span style={{fontWeight:600,fontSize:13}}>{d.label}</span>
+                    <span className="badge b-gray" style={{fontSize:10}}>{(divTeams[d.id]||[]).length} teams</span>
                   </div>
                 ))}
-                <div className="fl-tab fl-add" style={{color:"var(--green)",borderColor:"var(--green)"}}>+ Add Pool Flight</div>
-                <div className="fl-tab fl-add" style={{color:"var(--gold)",borderColor:"var(--gold)"}}>+ Add Bracket Flight</div>
               </div>
-              {flight&&<FlightView flight={flight} divId={divId} divCode={div.code} eventParks={ev.parks}/>}
+              <div style={{padding:"12px 16px",borderTop:"1px solid #eee"}}>
+                <button className="btn btn-primary btn-sm" style={{width:"100%"}} onClick={goSchedule}>📋 Schedule This Event</button>
+              </div>
             </div>
-          )}
-        </>
+            <div className="card">
+              <div className="card-hd">
+                <span className="card-title">Teams — {activeDivLabel}</span>
+                <span className="badge b-blue" style={{fontSize:11}}>{currentTeams.length} registered</span>
+              </div>
+              <div className="card-body">
+                <div style={{marginBottom:14,position:"relative"}}>
+                  <input
+                    style={{width:"100%",padding:"9px 12px",border:"1px solid #cdd5df",borderRadius:6,fontSize:13,boxSizing:"border-box",outline:"none"}}
+                    placeholder="🔍 Search teams to add..."
+                    value={teamSearch}
+                    onChange={e=>setTeamSearch(e.target.value)}/>
+                  {searchResults.length>0?(
+                    <div style={{position:"absolute",left:0,right:0,top:"100%",zIndex:50,background:"#fff",border:"1px solid #e2e8f0",borderRadius:6,boxShadow:"0 4px 14px rgba(0,0,0,.12)",maxHeight:240,overflowY:"auto"}}>
+                      {searchResults.map(t=>{
+                        const already=currentTeams.some(x=>x.id===t.id);
+                        return(
+                          <div key={t.id} style={{padding:"9px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #f0f4f8",fontSize:13,background:"#fff"}}>
+                            <div>
+                              <span style={{fontWeight:700}}>{t.name}</span>
+                              <span style={{color:"var(--gray)",marginLeft:8,fontSize:11}}>{t.city}, {t.state} · {t.cls}</span>
+                            </div>
+                            {already?<span style={{fontSize:11,color:"var(--green)",fontWeight:700}}>✓ Added</span>:<button className="btn btn-primary btn-sm" style={{padding:"3px 12px",fontSize:11}} onClick={()=>{addTeam(activeDivId,t);setTeamSearch("");}}>+ Add</button>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ):null}
+                </div>
+                {currentTeams.length===0?(
+                  <div style={{textAlign:"center",padding:"32px 0",color:"var(--gray)",fontSize:13}}>
+                    <div style={{fontSize:32,marginBottom:8}}>👥</div>
+                    No teams added yet. Search above to register teams for this division.
+                  </div>
+                ):(
+                  <div>
+                    <div style={{display:"grid",gridTemplateColumns:"auto 1fr auto auto",gap:"6px 12px",alignItems:"center",fontSize:12,fontWeight:700,color:"var(--gray)",padding:"0 8px 6px",textTransform:"uppercase",letterSpacing:.5,borderBottom:"1px solid #eee",marginBottom:6}}>
+                      <span>#</span><span>Team</span><span>Class</span><span></span>
+                    </div>
+                    {currentTeams.map((t,i)=>(
+                      <div key={t.id} style={{display:"grid",gridTemplateColumns:"auto 1fr auto auto",gap:"6px 12px",alignItems:"center",padding:"8px 8px",background:i%2===0?"#f8fafc":"#fff",borderRadius:5,marginBottom:2}}>
+                        <span style={{fontWeight:700,fontSize:12,color:"var(--gray)",width:20,textAlign:"center"}}>{i+1}</span>
+                        <div>
+                          <div style={{fontWeight:700,fontSize:13}}>{t.name}</div>
+                          <div style={{fontSize:11,color:"var(--gray)"}}>{t.city}, {t.state}</div>
+                        </div>
+                        <span className="badge b-blue" style={{fontSize:10}}>{t.cls}</span>
+                        <button onClick={()=>removeTeam(activeDivId,t.id)} title="Remove team"
+                          style={{background:"none",border:"1px solid #fca5a5",borderRadius:4,cursor:"pointer",color:"var(--red)",fontSize:14,lineHeight:1,padding:"2px 7px",fontWeight:700}}>✕</button>
+                      </div>
+                    ))}
+                    <div style={{marginTop:12,paddingTop:12,borderTop:"1px solid #eee",display:"flex",gap:10,justifyContent:"flex-end"}}>
+                      <button className="btn btn-primary btn-sm" onClick={goSchedule}>📋 Schedule These Teams</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ):(
+          /* ── Public View tab ── */
+          <div style={{background:"#fff",borderRadius:12,overflow:"hidden",boxShadow:"var(--sh-lg)"}}>
+            <div className="pub-header">
+              <div className="pub-ename">{ev.name}</div>
+              <div className="pub-meta">📍 {ev.loc} · 📅 {ev.date} · {ev.stature}</div>
+              <div className="pub-divs">
+                {divisions.map(d=>(
+                  <div key={d.id} className={`pub-div ${pubDivId===d.id?"on":""}`}
+                    onClick={()=>{setPubDivId(d.id);setPubBg(bracketGamesDB(d.id))}}>
+                    {d.label}
+                  </div>
+                ))}
+              </div>
+              <div className="pub-tabs">
+                {["standings","bracket","schedule"].map(t=>(
+                  <div key={t} className={`pub-tab ${pubTab===t?"on":""}`} onClick={()=>setPubTab(t)}>
+                    {t==="standings"?"📊 Standings":t==="bracket"?"🏆 Bracket":"📅 Schedule"}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="pub-body">
+              {pubTab==="standings"?<StandingsView teams={pubTeams} games={pubGames}/>:null}
+              {pubTab==="bracket"?<BracketView bGames={pubBg} setBGames={setPubBg} teams={pubTeams} editable={false}/>:null}
+              {pubTab==="schedule"?(
+                <div className="tbl-wrap">
+                  <table>
+                    <thead><tr><th>#</th><th>Pool</th><th>Date</th><th>Time</th><th>Field</th><th>Home</th><th>Score</th><th>Away</th><th>Status</th></tr></thead>
+                    <tbody>{pubGames.map(g=>{
+                      const t1=tByIdFrom(g.t1,pubTeams),t2=tByIdFrom(g.t2,pubTeams),w=winOf(g);
+                      return<tr key={g.id}>
+                        <td className="fw7">{g.num}</td>
+                        <td>{g.pool?<span className={`chip ${poolChipClass(g.pool)}`}>Pool {g.pool}</span>:null}</td>
+                        <td className="t-sm">{g.date}</td><td className="t-sm">{g.time}</td>
+                        <td className="t-sm t-gray">{g.field}</td>
+                        <td style={{fontWeight:w===g.t1?700:400}}>{t1?t1.name:"—"}</td>
+                        <td className="fw8" style={{textAlign:"center"}}>{g.s1!=null?`${g.s1} — ${g.s2}`:""}</td>
+                        <td style={{fontWeight:w===g.t2?700:400}}>{t2?t2.name:"—"}</td>
+                        <td><span className={`status ${g.status==="final"?"s-final":"s-scheduled"}`}>{g.status==="final"?"✓ Final":"Scheduled"}</span></td>
+                      </tr>;
+                    })}</tbody>
+                  </table>
+                </div>
+              ):null}
+            </div>
+          </div>
+        )
       )}
     </div>
   );
@@ -4439,20 +4583,24 @@ function Dashboard({events,onSelect,onNav}){
           <table>
             <thead><tr>
               <th style={{width:14}}></th><th>Event ID</th><th>State</th><th>Start Date</th>
-              <th>Event Name</th><th># Div</th><th>Teams</th><th>Stature</th><th>Director</th><th>Status</th>
+              <th>Event Name</th><th># Div</th><th>Teams</th><th>Stature</th><th>Director</th><th>Status</th><th style={{width:90}}>Actions</th>
             </tr></thead>
             <tbody>{shown.map(ev=>(
-              <tr key={ev.id}>
+              <tr key={ev.id} onClick={()=>onSelect(ev)} style={{cursor:"pointer"}}>
                 <td style={{paddingLeft:12}}><div style={{width:8,height:8,borderRadius:"50%",background:ev.status==="complete"?"var(--green)":ev.status==="live"?"var(--red)":"var(--blue)"}}/></td>
                 <td className="fw7 t-sm">{ev.evid}</td>
                 <td><span className="badge b-gray">{ev.state}</span></td>
                 <td className="t-sm">{ev.date}</td>
-                <td><span style={{color:"var(--blue)",cursor:"pointer",fontWeight:600}} onClick={()=>onSelect(ev)}>{ev.name}</span></td>
+                <td><span style={{color:"var(--blue)",fontWeight:700}}>{ev.name}</span></td>
                 <td className="t-sm">{ev.divisions.length}</td>
                 <td className="t-sm">{ev.divisions.reduce((a,d)=>a+(d.numTeams||0),0)}</td>
                 <td className="t-sm">{ev.stature}</td>
                 <td className="t-sm">{ev.director}</td>
                 <td><Ev_StatusBadge status={ev.status}/></td>
+                <td onClick={e=>e.stopPropagation()} style={{whiteSpace:"nowrap"}}>
+                  <button className="btn btn-secondary btn-sm" style={{fontSize:11,padding:"3px 8px",marginRight:4}} onClick={()=>onSelect(ev)}>Open</button>
+                  <button className="btn btn-primary btn-sm" style={{fontSize:11,padding:"3px 8px"}} onClick={()=>onNav("s-layout")}>📋</button>
+                </td>
               </tr>
             ))}</tbody>
           </table>
@@ -4862,7 +5010,7 @@ function App(){
         </div>
         <div className="content">
           {view==="events"&&<Dashboard events={events} onSelect={selectEvent} onNav={nav}/>}
-          {view==="event-detail"&&selEv&&<EventDetailView ev={selEv} onBack={()=>nav("events")}/>}
+          {view==="event-detail"&&selEv&&<EventDetailView ev={selEv} onBack={()=>nav("events")} onNav={nav}/>}
           {view==="create"&&<CreateEventView/>}
           {view==="s-game-mgr"&&<GameMgrView games={allGames} setGames={setAllGames} teams={ALL_TEAMS}/>}
           {view==="s-grid"&&<GridBuilderView/>}
