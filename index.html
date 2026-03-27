@@ -2320,7 +2320,8 @@ function LayoutView({games:propGames,setGames,teams:propTeams}){
                                   const cls=teams.find(t=>t.id===halfFill.t1Id)?.cls||teamCls||"";
                                   setGames(pg=>[...pg,{id:gameId,num,pool:gamePool,division:cls,
                                     date:row.date,time:row.time,field:fieldLabel,
-                                    t1:halfFill.t1Id,t2:teamId,s1:null,s2:null,status:"scheduled"}]);
+                                    t1:halfFill.t1Id,t2:teamId,home:halfFill.t1Id,
+                                    s1:null,s2:null,status:"scheduled"}]);
                                   setRows(prev=>prev.map(r=>r.id===row.id?{...r,cells:{...r.cells,[fi]:gameId}}:r));
                                   setHalfFill(null);
                                 }else{
@@ -2331,37 +2332,67 @@ function LayoutView({games:propGames,setGames,teams:propTeams}){
                                 }
                               }}
                               style={{borderLeft:`3px solid ${hBdr}`,borderBottom:"1px solid #e2e8f0",
-                                padding:3,textAlign:"center",verticalAlign:"middle",
-                                minWidth:150,background:cellBg,cursor:"pointer",transition:"background .1s",
+                                padding:0,verticalAlign:"middle",
+                                minWidth:240,background:cellBg,cursor:"pointer",transition:"background .1s",
                                 outline:isHalfThis?"2px dashed #2563eb":"none"}}>
-                              {game?(
-                                <div style={{padding:"5px 6px"}}>
-                                  {/* Team names — always prominent */}
-                                  <div style={{fontSize:11,fontWeight:800,color:"#0f172a",lineHeight:1.25,
-                                    overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:138}}>
-                                    {t1n}
-                                  </div>
-                                  <div style={{fontSize:9,color:"#94a3b8",fontWeight:600,margin:"1px 0"}}>vs</div>
-                                  <div style={{fontSize:11,fontWeight:800,color:"#0f172a",lineHeight:1.25,
-                                    overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:138}}>
-                                    {t2n}
-                                  </div>
-                                  {(game.division||game.pool)&&(
-                                    <div style={{display:"flex",gap:3,justifyContent:"center",flexWrap:"wrap",marginTop:3}}>
-                                      {game.division&&<span style={{fontSize:9,background:hBg,color:"#fff",borderRadius:3,
-                                        padding:"1px 5px",fontWeight:800,display:"inline-block"}}>{game.division}</span>}
-                                      {game.pool&&<span style={{fontSize:9,background:accentBorder,color:hBg,borderRadius:3,
-                                        padding:"1px 5px",fontWeight:700,display:"inline-block"}}>Pool {game.pool}</span>}
+                              {game?(()=>{
+                                const homeId=game.home||game.t1;
+                                const awayId=homeId===game.t1?game.t2:game.t1;
+                                const homeObj=tByIdFrom(homeId,teams);
+                                const awayObj=tByIdFrom(awayId,teams);
+                                const homeName=homeObj?.name||"TBD";
+                                const awayName=awayObj?.name||"TBD";
+                                return(
+                                <div style={{padding:"4px 5px"}}>
+                                  {/* Side-by-side matchup row */}
+                                  <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",alignItems:"center",gap:3}}>
+                                    {/* Home team */}
+                                    <div style={{textAlign:"right",minWidth:0}}>
+                                      <div style={{fontSize:8,fontWeight:800,color:"#16a34a",
+                                        background:"#dcfce7",borderRadius:3,padding:"0 4px",
+                                        display:"inline-block",marginBottom:2,letterSpacing:.3}}>HOME</div>
+                                      <div style={{fontSize:10,fontWeight:800,color:"#0f172a",
+                                        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.2}}>
+                                        {homeName}
+                                      </div>
                                     </div>
-                                  )}
-                                  <div style={{display:"flex",justifyContent:"center",gap:10,marginTop:4}}>
-                                    <span style={{color:"#16a34a",fontSize:13,fontWeight:700}}>✓</span>
+                                    {/* Center: vs + swap */}
+                                    <div style={{textAlign:"center",flexShrink:0}}>
+                                      <div style={{fontSize:8,color:"#94a3b8",fontWeight:700,lineHeight:1}}>vs</div>
+                                      <button onClick={ev=>{ev.stopPropagation();
+                                        setGames(prev=>prev.map(g=>g.id===game.id?{...g,home:g.home===g.t1?g.t2:g.t1}:g));
+                                      }} title="Swap Home/Away"
+                                        style={{background:"none",border:"1px solid #d1d5db",borderRadius:4,
+                                          cursor:"pointer",fontSize:10,padding:"1px 4px",color:"#64748b",
+                                          marginTop:2,display:"block",lineHeight:1}}>⇄</button>
+                                    </div>
+                                    {/* Away team */}
+                                    <div style={{textAlign:"left",minWidth:0}}>
+                                      <div style={{fontSize:8,fontWeight:800,color:"#64748b",
+                                        background:"#f1f5f9",borderRadius:3,padding:"0 4px",
+                                        display:"inline-block",marginBottom:2,letterSpacing:.3}}>AWAY</div>
+                                      <div style={{fontSize:10,fontWeight:800,color:"#0f172a",
+                                        overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",lineHeight:1.2}}>
+                                        {awayName}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {/* Bottom row: division badge + pool badge + actions */}
+                                  <div style={{display:"flex",alignItems:"center",justifyContent:"center",
+                                    gap:4,marginTop:3,paddingTop:3,borderTop:"1px solid rgba(0,0,0,.06)"}}>
+                                    {game.division&&<span style={{fontSize:8,background:hBg,color:"#fff",
+                                      borderRadius:3,padding:"1px 5px",fontWeight:800}}>{game.division}</span>}
+                                    {game.pool&&<span style={{fontSize:8,background:accentBorder,color:hBg,
+                                      borderRadius:3,padding:"1px 5px",fontWeight:700}}>Pool {game.pool}</span>}
+                                    <span style={{color:"#16a34a",fontSize:12,fontWeight:700,marginLeft:2}}>✓</span>
                                     <span onClick={ev=>{ev.stopPropagation();setPicked(val);setRows(prev=>prev.map(r=>{if(r.id!==row.id)return r;const c={...r.cells};delete c[fi];return{...r,cells:c};}));}}
-                                      title="Pick up & move" style={{color:"#f59e0b",fontSize:13,cursor:"pointer"}}>↩</span>
-                                    <span onClick={ev=>{ev.stopPropagation();setRows(prev=>prev.map(r=>{if(r.id!==row.id)return r;const c={...r.cells};delete c[fi];return{...r,cells:c};}));}} title="Remove"
-                                      style={{color:"#dc2626",fontSize:13,cursor:"pointer"}}>✕</span>
+                                      title="Move to another slot" style={{color:"#f59e0b",fontSize:12,cursor:"pointer"}}>↩</span>
+                                    <span onClick={ev=>{ev.stopPropagation();setRows(prev=>prev.map(r=>{if(r.id!==row.id)return r;const c={...r.cells};delete c[fi];return{...r,cells:c};}));}}
+                                      title="Remove game" style={{color:"#dc2626",fontSize:12,cursor:"pointer"}}>✕</span>
                                   </div>
                                 </div>
+                                );
+                              })()
                               ):isBlocked?(
                                 <div style={{padding:"8px 4px",background:"#fee2e2"}}>
                                   <div style={{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:.5}}>BLOCKED</div>
