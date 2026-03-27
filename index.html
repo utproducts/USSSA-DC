@@ -8,6 +8,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#1a1a2e;min-height:100vh}
@@ -868,7 +869,14 @@ function GameMgrView({games,setGames,teams,readOnly}){
 }
 
 /* ════════════════════ LAYOUT BUILDER ════════════════════ */
-function LayoutView({games,setGames,teams}){
+function LayoutView({games,setGames,teams:propTeams}){
+  // Imported teams layer — added by Excel import, merged with prop teams
+  const [xlTeams,setXlTeams]=useState([]);
+  const teams=React.useMemo(()=>{
+    if(!xlTeams.length)return propTeams;
+    const existIds=new Set(propTeams.map(t=>t.id));
+    return [...propTeams,...xlTeams.filter(t=>!existIds.has(t.id))];
+  },[propTeams,xlTeams]);
   const fmtISO=d=>{const y=d.getFullYear(),m=(d.getMonth()+1).toString().padStart(2,'0'),dd=d.getDate().toString().padStart(2,'0');return`${y}-${m}-${dd}`;};
   const toMins=t=>{const[h,mn]=t.split(":").map(Number);return h*60+mn;};
   const toLabel=m=>{const h=Math.floor(m/60),mn=m%60,ap=h>=12?"PM":"AM",h12=h>12?h-12:h===0?12:h;return`${h12}:${mn.toString().padStart(2,"0")} ${ap}`;};
@@ -917,6 +925,191 @@ function LayoutView({games,setGames,teams}){
   const unscheduled=games.filter(g=>!assignedIds.has(g.id));
   const pickedGame=picked?games.find(g=>g.id===picked):null;
   const dayGroups=[...new Set(rows.map(r=>r.date))].sort();
+
+  /* ══ Excel Import ══════════════════════════════════════════ */
+  const [xlImport,setXlImport]=useState({status:'idle',msg:'',counts:null});
+
+  function xlTimeToLabel(val){
+    // SheetJS raw time = decimal fraction of a day (e.g. 0.333... = 8:00 AM)
+    if(typeof val!=='number')return String(val);
+    const totalMins=Math.round(val*24*60);
+    const h=Math.floor(totalMins/60), m=totalMins%60;
+    const ap=h>=12?'PM':'AM', h12=h>12?h-12:h===0?12:h;
+    return `${h12}:${m.toString().padStart(2,'0')} ${ap}`;
+  }
+  function xlTimeMins(val){
+    if(typeof val!=='number')return 0;
+    return Math.round(val*24*60);
+  }
+
+  function importExcelFile(file){
+    if(!file)return;
+    if(typeof XLSX==='undefined'){alert('SheetJS not loaded – please refresh.');return;}
+    setXlImport({status:'loading',msg:'Reading file…',counts:null});
+    const reader=new FileReader();
+    reader.onload=e=>{
+      try{
+        const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:false});
+        // Detect file type: Grid (has division codes) vs Schedule (has "vs" matchups)
+        const firstSheet=wb.Sheets[wb.SheetNames[0]];
+        const sample=XLSX.utils.sheet_to_json(firstSheet,{header:1,defval:null,raw:false}).flat().filter(Boolean).join(' ');
+        const isSchedule=/ vs\.? /i.test(sample);
+        if(isSchedule) parseScheduleWorkbook(wb);
+        else parseGridWorkbook(wb);
+      }catch(err){
+        setXlImport({status:'error',msg:'Error reading file: '+err.message,counts:null});
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function parseScheduleWorkbook(wb){
+    const teamMapObj={};
+    const newTeams=[];
+    const newGames=[];
+    const newRows=[];
+    const newFieldNames=[];
+    let gameNum=1, rowNum=1;
+
+    function getOrMakeTeam(name){
+      const key=name.trim().toLowerCase();
+      if(!teamMapObj[key]){
+        const id=`t_xl_${Date.now()}_${newTeams.length}`;
+        teamMapObj[key]=id;
+        newTeams.push({id,name:name.trim(),division:'',pool:'A',seed:null});
+      }
+      return teamMapObj[key];
+    }
+    function getOrRegField(fn){
+      const f=fn.trim();
+      let idx=newFieldNames.indexOf(f);
+      if(idx===-1){idx=newFieldNames.length;newFieldNames.push(f);}
+      return idx;
+    }
+    function parseMatchup(str){
+      if(!str||typeof str!=='string')return null;
+      const m=str.match(/^(.+?)\s+vs\.?\s*(.+)$/i);
+      return m?[m[1].trim(),m[2].trim()]:null;
+    }
+
+    // Determine SAT/SUN → calendar dates
+    const satDate=evtStart;
+    const sunDate=evtEnd;
+
+    for(const sheetName of wb.SheetNames){
+      if(sheetName.toLowerCase()==='requests')continue;
+      const sheet=wb.Sheets[sheetName];
+      const data=XLSX.utils.sheet_to_json(sheet,{header:1,defval:null,raw:true});
+      let curDay=null, sectionFields=[];
+
+      for(const row of data){
+        if(!row||!row.length)continue;
+        const first=row[0];
+
+        // Section header: "SAT" or "SUN"
+        if(first==='SAT'||first==='SUN'){
+          curDay=first;
+          sectionFields=[];
+          for(let ci=1;ci<row.length;ci++){
+            const fn=row[ci];
+            if(fn&&typeof fn==='string'&&fn.trim()){
+              sectionFields.push({name:fn.trim(),ci,gIdx:getOrRegField(fn.trim())});
+            }
+          }
+          continue;
+        }
+
+        // Time row: numeric < 1 = Excel time fraction
+        if(typeof first==='number'&&first>0&&first<1&&curDay){
+          const timeStr=xlTimeToLabel(first);
+          const timeMins=xlTimeMins(first);
+          const dateStr=curDay==='SAT'?satDate:sunDate;
+
+          let gridRow=newRows.find(r=>r.date===dateStr&&r.time===timeStr);
+          if(!gridRow){
+            gridRow={id:`r_xl_${rowNum}`,num:rowNum++,date:dateStr,time:timeStr,_mins:timeMins,cells:{}};
+            newRows.push(gridRow);
+          }
+
+          for(const {name,ci,gIdx} of sectionFields){
+            const cell=row[ci];
+            if(!cell)continue;
+            const parsed=parseMatchup(String(cell));
+            if(!parsed)continue;
+            const [t1n,t2n]=parsed;
+            const t1id=getOrMakeTeam(t1n), t2id=getOrMakeTeam(t2n);
+            const gameId=`g_xl_${gameNum}`;
+            newGames.push({id:gameId,num:`G${gameNum}`,pool:'A',date:dateStr,time:timeStr,field:name,
+              t1:t1id,t2:t2id,s1:null,s2:null,status:'scheduled'});
+            gameNum++;
+            gridRow.cells[gIdx]=gameId;
+          }
+        }
+      }
+    }
+
+    // Sort rows: by date then time (minutes)
+    newRows.sort((a,b)=>a.date!==b.date?(a.date<b.date?-1:1):a._mins-b._mins);
+    newRows.forEach((r,i)=>{r.num=i+1;delete r._mins;});
+
+    if(!newGames.length){
+      setXlImport({status:'error',msg:'No game matchups found. Make sure this is the Schedule file.',counts:null});
+      return;
+    }
+    // Apply state — xl teams stored locally, games/rows pushed to shared state
+    setXlTeams(newTeams);
+    setGames(newGames);
+    setRows(newRows);
+    setFieldNames(prev=>{const n=[...prev];newFieldNames.forEach((f,i)=>{n[i]=f;});return n;});
+    setNf(newFieldNames.length);
+    setXlImport({status:'done',msg:'Import complete!',counts:{games:newGames.length,teams:newTeams.length,fields:newFieldNames.length,rows:newRows.length}});
+  }
+
+  function parseGridWorkbook(wb){
+    // Grid file: set up fields and time-slot rows from division assignment sheet
+    const newFieldNames=[];
+    const newRows=[];
+    let rowNum=1;
+    const satDate=evtStart, sunDate=evtEnd;
+
+    function getOrRegField(fn){
+      const f=fn.trim();
+      let idx=newFieldNames.indexOf(f);
+      if(idx===-1){idx=newFieldNames.length;newFieldNames.push(f);}
+      return idx;
+    }
+
+    for(const sheetName of wb.SheetNames){
+      const sheet=wb.Sheets[sheetName];
+      const data=XLSX.utils.sheet_to_json(sheet,{header:1,defval:null,raw:true});
+      let curDay=null, sectionFields=[];
+
+      for(const row of data){
+        if(!row||!row.length)continue;
+        const first=row[0];
+        if(first==='Sat'||first==='SAT'){curDay='SAT';sectionFields=[];
+          for(let ci=1;ci<row.length;ci++){const fn=row[ci];if(fn&&typeof fn==='string'&&fn.trim()&&fn!=='Sat'&&fn!=='Sun')sectionFields.push({name:fn.trim(),ci,gIdx:getOrRegField(fn.trim())});}
+          continue;}
+        if(first==='Sun'||first==='SUN'){curDay='SUN';sectionFields=[];
+          for(let ci=1;ci<row.length;ci++){const fn=row[ci];if(fn&&typeof fn==='string'&&fn.trim()&&fn!=='Sat'&&fn!=='Sun')sectionFields.push({name:fn.trim(),ci,gIdx:getOrRegField(fn.trim())});}
+          continue;}
+        if(typeof first==='number'&&first>0&&first<1&&curDay){
+          const timeStr=xlTimeToLabel(first);
+          const timeMins=xlTimeMins(first);
+          const dateStr=curDay==='SAT'?satDate:sunDate;
+          let gridRow=newRows.find(r=>r.date===dateStr&&r.time===timeStr);
+          if(!gridRow){gridRow={id:`r_xl_${rowNum}`,num:rowNum++,date:dateStr,time:timeStr,_mins:timeMins,cells:{}};newRows.push(gridRow);}
+        }
+      }
+    }
+    newRows.sort((a,b)=>a.date!==b.date?(a.date<b.date?-1:1):a._mins-b._mins);
+    newRows.forEach((r,i)=>{r.num=i+1;delete r._mins;});
+    if(!newRows.length){setXlImport({status:'error',msg:'No time slots found in Grid file.',counts:null});return;}
+    setRows(newRows);
+    setFieldNames(prev=>{const n=[...prev];newFieldNames.forEach((f,i)=>{n[i]=f;});return n;});
+    setNf(newFieldNames.length);
+    setXlImport({status:'done',msg:'Grid imported — fields and time slots set up.',counts:{fields:newFieldNames.length,rows:newRows.length}});
+  }
 
   function submitFieldData(){
     const len=parseInt(gl);
@@ -1003,6 +1196,51 @@ function LayoutView({games,setGames,teams}){
           <span style={{fontSize:11,color:"rgba(255,255,255,.6)",marginLeft:8}}>{rows.length} rows · {nf} field{nf!==1?"s":""} · {assignedIds.size} assigned</span>
         </div>
         <div className="card-body" style={{padding:"18px 20px"}}>
+
+          {/* ── Excel Import Banner ────────────────────────────────── */}
+          <div style={{background:"linear-gradient(135deg,#f0fdf4,#dcfce7)",border:"2px solid #86efac",borderRadius:10,
+            padding:"14px 18px",marginBottom:18,display:"flex",alignItems:"flex-start",gap:16,flexWrap:"wrap"}}>
+            <div style={{flex:1,minWidth:200}}>
+              <div style={{fontSize:13,fontWeight:800,color:"#14532d",marginBottom:3}}>📥 Import from Excel</div>
+              <div style={{fontSize:12,color:"#166534",lineHeight:1.5}}>
+                Already have your schedule built in Excel? Upload it here — teams, games, fields and time slots will all be imported automatically. No more double entry.
+              </div>
+              {xlImport.status==='done'&&xlImport.counts&&(
+                <div style={{marginTop:8,padding:"7px 10px",background:"#fff",border:"1px solid #86efac",borderRadius:6,fontSize:11}}>
+                  <span style={{fontWeight:700,color:"#15803d"}}>✓ Import complete — </span>
+                  {xlImport.counts.games!=null&&<span style={{color:"#166534"}}>{xlImport.counts.games} games · </span>}
+                  {xlImport.counts.teams!=null&&<span style={{color:"#166534"}}>{xlImport.counts.teams} teams · </span>}
+                  <span style={{color:"#166534"}}>{xlImport.counts.fields} fields · {xlImport.counts.rows} time slots</span>
+                </div>
+              )}
+              {xlImport.status==='error'&&(
+                <div style={{marginTop:8,padding:"7px 10px",background:"#fff",border:"1px solid #fca5a5",borderRadius:6,fontSize:11,color:"#dc2626"}}>
+                  ✗ {xlImport.msg}
+                </div>
+              )}
+              {xlImport.status==='loading'&&(
+                <div style={{marginTop:8,fontSize:11,color:"#15803d",fontWeight:600}}>⟳ {xlImport.msg}</div>
+              )}
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:8,alignItems:"flex-start"}}>
+              <label style={{display:"inline-flex",alignItems:"center",gap:7,padding:"8px 16px",
+                background:"#16a34a",color:"#fff",borderRadius:6,fontSize:12,fontWeight:700,
+                cursor:"pointer",boxShadow:"0 2px 6px rgba(22,163,74,.3)",whiteSpace:"nowrap"}}>
+                📂 Choose Schedule (.xlsx)
+                <input type="file" accept=".xlsx,.xls" style={{display:"none"}}
+                  onChange={e=>{if(e.target.files&&e.target.files[0])importExcelFile(e.target.files[0]);e.target.value='';}}/>
+              </label>
+              <div style={{fontSize:10,color:"#166534",textAlign:"center",lineHeight:1.4}}>
+                Works with Schedule file<br/>(e.g. "UA Championship.Schedule…")<br/>or Grid file
+              </div>
+            </div>
+          </div>
+
+          <div style={{fontSize:10,fontWeight:800,color:"#cbd5e1",textTransform:"uppercase",letterSpacing:1,
+            marginBottom:12,borderTop:"1px solid #e2e8f0",paddingTop:14}}>
+            — or set up manually —
+          </div>
+
           <div style={{display:"grid",gridTemplateColumns:"auto auto 1fr",gap:28,alignItems:"start",flexWrap:"wrap"}}>
 
             {/* Field Settings */}
