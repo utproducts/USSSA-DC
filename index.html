@@ -896,7 +896,7 @@ function LayoutView({games,setGames,teams}){
   const [showNames,setShowNames]=useState(false);
   const [teamPick,setTeamPick]=useState([]);
   const [gamePool,setGamePool]=useState("A");
-  const [showTeamPanel,setShowTeamPanel]=useState(true);
+  const [selAge,setSelAge]=useState(null);
 
   const fields=fieldNames.slice(0,nf);
   const assignedIds=new Set(rows.flatMap(r=>Object.values(r.cells)).filter(v=>v!=="blocked"));
@@ -1054,60 +1054,125 @@ function LayoutView({games,setGames,teams}){
       </div>
 
       {/* ══ Teams Panel ══ */}
-      {teams&&teams.length>0&&(
-        <div className="card mb4">
-          <div className="card-hd" style={{cursor:"pointer"}} onClick={()=>setShowTeamPanel(v=>!v)}>
-            <span className="card-title">👥 Teams — Build Matchups</span>
-            <span style={{fontSize:12,color:"#94a3b8",marginLeft:6,fontWeight:400}}>{teams.length} team{teams.length!==1?"s":""}</span>
-            {teamPick.length>0&&<span style={{marginLeft:8,fontSize:11,background:"#eff6ff",color:"#1d4ed8",padding:"2px 8px",borderRadius:10,fontWeight:700,border:"1px solid #93c5fd"}}>{teamPick.length===1?"1 selected — pick opponent":"Ready to create game"}</span>}
-            <span style={{marginLeft:"auto",fontSize:12,color:"#94a3b8"}}>{showTeamPanel?"▲":"▼"}</span>
-          </div>
-          {showTeamPanel&&(
-            <div className="card-body" style={{padding:"12px 16px"}}>
-              <div style={{fontSize:11,color:"#64748b",marginBottom:8}}>Click one team, then another to create a matchup. The game appears in Unscheduled Games below.</div>
-              {/* Group teams by division/class */}
-              {[...new Set(teams.map(t=>t.cls))].sort().map(cls=>(
-                <div key={cls} style={{marginBottom:10}}>
-                  <div style={{fontSize:10,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>{cls}</div>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
-                    {teams.filter(t=>t.cls===cls).map(t=>{
-                      const isSel=teamPick.includes(t.id);
-                      return(
-                        <div key={t.id} onClick={()=>{
-                          if(teamPick.includes(t.id)){setTeamPick(teamPick.filter(x=>x!==t.id));return;}
-                          if(teamPick.length===0){setTeamPick([t.id]);return;}
-                          // Second pick — create game immediately
-                          const t1id=teamPick[0],t2id=t.id;
-                          const gameId=`gx_${Date.now()}`;
-                          const num=`G${games.length+1}`;
-                          setGames(pg=>[...pg,{id:gameId,num,pool:gamePool,date:"",time:"",field:"",t1:t1id,t2:t2id,s1:null,s2:null,status:"scheduled"}]);
-                          setTeamPick([]);
-                        }} style={{
-                          padding:"6px 10px",borderRadius:6,cursor:"pointer",userSelect:"none",fontSize:12,fontWeight:600,
-                          border:isSel?"2px solid #2563eb":"1px solid #e2e8f0",
-                          background:isSel?"#dbeafe":"#f8fafc",
-                          color:isSel?"#1d4ed8":"#0f172a",
-                          boxShadow:isSel?"0 0 0 2px rgba(37,99,235,.15)":"0 1px 2px rgba(0,0,0,.04)",
-                          transform:isSel?"translateY(-1px)":"none",transition:"all .1s"
-                        }}>
-                          {t.name.split(" ").slice(-2).join(" ")}
-                        </div>
-                      );
-                    })}
+      {teams&&teams.length>0&&(()=>{
+        const ageNums=[...new Set(teams.map(t=>parseInt(t.cls)||0))].filter(Boolean).sort((a,b)=>a-b);
+        const ageTeams=selAge?teams.filter(t=>parseInt(t.cls)===selAge):[];
+        const divs=[...new Set(ageTeams.map(t=>t.cls))].sort();
+        const sel1=teamPick[0]?teams.find(t=>t.id===teamPick[0]):null;
+        return(
+          <div className="card mb4">
+            {/* Header */}
+            <div className="card-hd" style={{background:"linear-gradient(135deg,#1e3a5f,#2563eb)"}}>
+              <span className="card-title" style={{color:"#fff"}}>⚾ Build Matchups</span>
+              <span style={{fontSize:11,color:"rgba(255,255,255,.55)",marginLeft:8}}>Select an age group, then pick two teams to create a game</span>
+            </div>
+
+            {/* Age Group Tabs */}
+            <div style={{display:"flex",gap:6,padding:"14px 16px 10px",borderBottom:"1px solid #e2e8f0",flexWrap:"wrap",background:"#f8fafc"}}>
+              <span style={{fontSize:11,fontWeight:700,color:"#64748b",alignSelf:"center",marginRight:4,textTransform:"uppercase",letterSpacing:.5}}>Age:</span>
+              {ageNums.map(age=>{
+                const cnt=teams.filter(t=>parseInt(t.cls)===age).length;
+                const isAct=selAge===age;
+                return(
+                  <button key={age} onClick={()=>{setSelAge(isAct?null:age);setTeamPick([]);}}
+                    style={{padding:"6px 16px",borderRadius:20,border:isAct?"2px solid #2563eb":"1px solid #cbd5e1",
+                      background:isAct?"#2563eb":"#fff",color:isAct?"#fff":"#374151",
+                      fontWeight:700,fontSize:13,cursor:"pointer",transition:"all .15s",
+                      boxShadow:isAct?"0 2px 8px rgba(37,99,235,.3)":"0 1px 2px rgba(0,0,0,.06)"}}>
+                    {age}U <span style={{fontWeight:400,fontSize:11,opacity:.75}}>({cnt})</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* No age selected */}
+            {!selAge&&(
+              <div style={{padding:"28px 16px",textAlign:"center",color:"#94a3b8",fontSize:13}}>
+                ↑ Pick an age group above to see teams
+              </div>
+            )}
+
+            {/* Teams for selected age */}
+            {selAge&&(
+              <div style={{padding:"14px 16px"}}>
+
+                {/* Step indicator */}
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+                  <div style={{display:"flex",alignItems:"center",gap:6,
+                    padding:"8px 14px",borderRadius:8,flex:1,
+                    background:sel1?"#eff6ff":"#f8fafc",
+                    border:sel1?"1.5px solid #93c5fd":"1.5px dashed #cbd5e1"}}>
+                    <span style={{fontSize:18}}>{sel1?"✅":"1️⃣"}</span>
+                    <div>
+                      <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>{sel1?"Team 1 selected":"Step 1"}</div>
+                      <div style={{fontSize:12,fontWeight:700,color:sel1?"#1d4ed8":"#64748b"}}>{sel1?sel1.name:"Click a team below"}</div>
+                    </div>
+                    {sel1&&<button onClick={()=>setTeamPick([])} style={{marginLeft:"auto",fontSize:11,padding:"2px 8px",background:"none",border:"1px solid #93c5fd",borderRadius:4,cursor:"pointer",color:"#64748b"}}>✕</button>}
+                  </div>
+                  <span style={{fontSize:18,color:"#cbd5e1"}}>→</span>
+                  <div style={{display:"flex",alignItems:"center",gap:6,
+                    padding:"8px 14px",borderRadius:8,flex:1,
+                    background:"#f8fafc",border:"1.5px dashed #cbd5e1",opacity:sel1?1:.45}}>
+                    <span style={{fontSize:18}}>2️⃣</span>
+                    <div>
+                      <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>Step 2</div>
+                      <div style={{fontSize:12,fontWeight:700,color:"#64748b"}}>{sel1?"Click the opponent":"Pick Team 1 first"}</div>
+                    </div>
                   </div>
                 </div>
-              ))}
-              <div style={{display:"flex",alignItems:"center",gap:10,marginTop:8,paddingTop:8,borderTop:"1px solid #f1f5f9"}}>
-                <span style={{fontSize:12,fontWeight:600,color:"#475569"}}>Pool:</span>
-                <select value={gamePool} onChange={e=>setGamePool(e.target.value)} style={{fontSize:12,padding:"3px 6px",border:"1px solid #d1d5db",borderRadius:4}}>
-                  {["A","B","C","D","E","F","Open"].map(p=><option key={p}>{p}</option>)}
-                </select>
-                {teamPick.length>0&&<button onClick={()=>setTeamPick([])} style={{fontSize:11,padding:"3px 10px",background:"#f1f5f9",border:"1px solid #cbd5e1",borderRadius:4,cursor:"pointer",color:"#475569"}}>✕ Clear selection</button>}
+
+                {/* Teams grouped by division */}
+                {divs.map(cls=>(
+                  <div key={cls} style={{marginBottom:12}}>
+                    <div style={{fontSize:10,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",letterSpacing:1,marginBottom:6,display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{background:"#e2e8f0",padding:"1px 7px",borderRadius:10,color:"#475569"}}>{cls}</span>
+                      <span style={{fontSize:10,color:"#cbd5e1"}}>{ageTeams.filter(t=>t.cls===cls).length} teams</span>
+                    </div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                      {ageTeams.filter(t=>t.cls===cls).map(t=>{
+                        const isSel=teamPick[0]===t.id;
+                        return(
+                          <div key={t.id} onClick={()=>{
+                            if(isSel){setTeamPick([]);return;}
+                            if(teamPick.length===0){setTeamPick([t.id]);return;}
+                            if(t.id===teamPick[0])return;
+                            const gameId=`gx_${Date.now()}`;
+                            const num=`G${games.length+1}`;
+                            setGames(pg=>[...pg,{id:gameId,num,pool:gamePool,date:"",time:"",field:"",t1:teamPick[0],t2:t.id,s1:null,s2:null,status:"scheduled"}]);
+                            setTeamPick([]);
+                          }} style={{
+                            padding:"9px 14px",borderRadius:8,cursor:"pointer",userSelect:"none",
+                            border:isSel?"2px solid #2563eb":"1.5px solid #e2e8f0",
+                            background:isSel?"#dbeafe":teamPick.length>0&&!isSel?"#f0fdf4":"#fff",
+                            color:isSel?"#1d4ed8":"#0f172a",fontSize:13,fontWeight:600,
+                            boxShadow:isSel?"0 0 0 3px rgba(37,99,235,.15)":"0 1px 3px rgba(0,0,0,.06)",
+                            transform:isSel?"scale(1.03)":"scale(1)",transition:"all .12s"
+                          }}>
+                            {t.name}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Pool selector */}
+                <div style={{display:"flex",alignItems:"center",gap:10,marginTop:10,paddingTop:12,borderTop:"1px solid #f1f5f9"}}>
+                  <span style={{fontSize:12,fontWeight:700,color:"#475569"}}>Pool for new games:</span>
+                  {["A","B","C","D","E","F","Open"].map(p=>(
+                    <button key={p} onClick={()=>setGamePool(p)}
+                      style={{padding:"4px 12px",borderRadius:6,border:gamePool===p?"2px solid #2563eb":"1px solid #d1d5db",
+                        background:gamePool===p?"#eff6ff":"#fff",color:gamePool===p?"#1d4ed8":"#374151",
+                        fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                      {p}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        );
+      })()}
 
       {/* ══ Unscheduled Games ══ */}
       {unscheduled.length>0&&(
