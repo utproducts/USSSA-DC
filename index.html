@@ -874,6 +874,18 @@ function LayoutView({games,setGames,teams}){
   const toLabel=m=>{const h=Math.floor(m/60),mn=m%60,ap=h>=12?"PM":"AM",h12=h>12?h-12:h===0?12:h;return`${h12}:${mn.toString().padStart(2,"0")} ${ap}`;};
   const TIME_OPTS=["6:00 AM","6:30 AM","7:00 AM","7:30 AM","8:00 AM","8:30 AM","9:00 AM","9:30 AM","10:00 AM","10:30 AM","11:00 AM","11:30 AM","12:00 PM","12:30 PM","1:00 PM","1:30 PM","2:00 PM","2:30 PM","3:00 PM","3:30 PM","4:00 PM","4:30 PM","5:00 PM","5:30 PM","6:00 PM","6:30 PM","7:00 PM","7:30 PM","8:00 PM","8:30 PM","9:00 PM"];
   const FIELD_OPTS=["LWR B1","LWR B2","LWR B3","LWR B4","LWR B5","LWR B6","LWR B7","LWR B8","Frank Brown F1","Frank Brown F2","Frank Brown F3","Frank Brown F4","Frank Brown F5","Field 1","Field 2","Field 3","Field 4","Field 5","Field 6","Field 7","Field 8","Diamond 1","Diamond 2","Diamond 3","Diamond 4","Turf 1","Turf 2","Turf 3","Main Field","Varsity","JV Field","East 1","East 2","West 1","West 2","North 1","North 2","South 1","South 2","Complex A","Complex B","Complex C","Showcase 1","Showcase 2","Championship","Stadium","Auxiliary","Practice 1","Practice 2","TBD"];
+  // Per-field color palettes: [headerBg, headerBorder, cellTintEven, cellTintOdd, accentText, accentBorder]
+  const FIELD_COLORS=[
+    ["#1e3a5f","#16305a","#eff6ff","#e0f0ff","#1d4ed8","#93c5fd"],   // blue (F1)
+    ["#14532d","#0f4024","#f0fdf4","#dcfce7","#15803d","#86efac"],   // green (F2)
+    ["#4c1d95","#3b155f","#faf5ff","#ede9fe","#7c3aed","#c4b5fd"],   // purple (F3)
+    ["#7c2d12","#6b1f0a","#fff7ed","#fed7aa","#c2410c","#fdba74"],   // orange (F4)
+    ["#164e63","#0e3a4a","#ecfeff","#cffafe","#0e7490","#67e8f9"],   // cyan (F5)
+    ["#713f12","#5a3009","#fefce8","#fef9c3","#a16207","#fde047"],   // yellow (F6)
+    ["#881337","#6d0f2a","#fff1f2","#ffe4e6","#be123c","#fda4af"],   // rose (F7)
+    ["#134e4a","#0c3a37","#f0fdfa","#ccfbf1","#0f766e","#5eead4"],   // teal (F8)
+  ];
+  function getFC(fi){return FIELD_COLORS[fi%FIELD_COLORS.length];}
   function makeRows(){
     const base=new Date();let n=1;const r=[];
     [{t:"2:30 PM",off:0},{t:"4:30 PM",off:0},{t:"6:30 PM",off:0}].forEach(({t,off})=>{const d=new Date(base);d.setDate(d.getDate()+off);r.push({id:`r${n}`,num:n++,date:fmtISO(d),time:t,cells:{}});});
@@ -1269,17 +1281,20 @@ function LayoutView({games,setGames,teams}){
               <th style={STH(SL[0],SW[0])}>Row</th>
               <th style={STH(SL[1],SW[1])}>Date</th>
               <th style={{...STH(SL[2],SW[2]),boxShadow:"3px 0 8px rgba(0,0,0,.18)"}}>Time</th>
-              {fields.map((f,fi)=>(
-                <th key={fi} style={{background:NAVY,color:"#fff",padding:"7px 6px",
-                  textAlign:"center",minWidth:120,borderLeft:"1px solid #2d5a8e",verticalAlign:"middle"}}>
-                  <div style={{fontSize:10,color:"rgba(255,255,255,.5)",fontWeight:600,marginBottom:3}}>F{fi+1}</div>
+              {fields.map((f,fi)=>{
+                const [hBg,hBdr]=[getFC(fi)[0],getFC(fi)[1]];
+                return(
+                <th key={fi} style={{background:hBg,color:"#fff",padding:"7px 8px",
+                  textAlign:"center",minWidth:130,borderLeft:`3px solid ${hBdr}`,verticalAlign:"middle"}}>
+                  <div style={{fontSize:9,color:"rgba(255,255,255,.6)",fontWeight:700,letterSpacing:.8,marginBottom:2,textTransform:"uppercase"}}>Field {fi+1}</div>
                   <select value={fieldNames[fi]} onChange={e=>{const n=[...fieldNames];n[fi]=e.target.value;setFieldNames(n);}}
-                    style={{fontSize:11,padding:"2px 4px",borderRadius:3,border:"1px solid rgba(255,255,255,.2)",
-                      background:"rgba(255,255,255,.12)",color:"#fff",width:"100%",cursor:"pointer"}}>
+                    style={{fontSize:12,padding:"3px 5px",borderRadius:3,border:"1px solid rgba(255,255,255,.3)",
+                      background:"rgba(255,255,255,.15)",color:"#fff",width:"100%",cursor:"pointer",fontWeight:700}}>
                     {FIELD_OPTS.map(o=><option key={o} style={{background:"#1e3a5f",color:"#fff"}}>{o}</option>)}
                   </select>
                 </th>
-              ))}
+                );
+              })}
               <th style={{background:NAVY,padding:"7px 6px",width:52,borderLeft:"2px solid rgba(255,255,255,.1)"}}></th>
             </tr>
           </thead>
@@ -1324,25 +1339,26 @@ function LayoutView({games,setGames,teams}){
                             {TIME_OPTS.map(t=><option key={t}>{t}</option>)}
                           </select>
                         </td>
-                        {fields.map((_,fi)=>{
+                        {fields.map((fieldLabel,fi)=>{
                           const val=row.cells[fi];
                           const game=val&&val!=="blocked"?games.find(g=>g.id===val):null;
                           const isBlocked=val==="blocked";
                           const canPlace=!!picked&&!isBlocked&&!game;
                           const t1n=game&&showNames?tByIdFrom(game.t1,teams)?.name?.split(" ").slice(-1)[0]||"?":null;
                           const t2n=game&&showNames?tByIdFrom(game.t2,teams)?.name?.split(" ").slice(-1)[0]||"?":null;
-                          let cellBg=rowBg;
+                          const [hBg,hBdr,tintEven,tintOdd,accentText,accentBorder]=getFC(fi);
+                          let cellBg=ri%2===0?tintEven:tintOdd;
                           if(isBlocked)cellBg="#fee2e2";
-                          else if(canPlace)cellBg="#eff6ff";
-                          else if(game)cellBg="#f0f9ff";
+                          else if(canPlace)cellBg=tintEven;
+                          else if(game)cellBg=ri%2===0?tintEven:tintOdd;
                           return(
                             <td key={fi} onClick={()=>clickCell(row.id,fi)}
-                              style={{borderLeft:"1px solid #e2e8f0",borderBottom:"1px solid #f1f5f9",
+                              style={{borderLeft:`3px solid ${hBdr}`,borderBottom:"1px solid #e2e8f0",
                                 padding:3,textAlign:"center",verticalAlign:"middle",
-                                minWidth:120,background:cellBg,cursor:"pointer",transition:"background .1s"}}>
+                                minWidth:130,background:cellBg,cursor:"pointer",transition:"background .1s"}}>
                               {game?(
                                 <div style={{padding:"5px 4px"}}>
-                                  <div style={{fontWeight:800,fontSize:13,color:NAVY,lineHeight:1}}>{game.num}</div>
+                                  <div style={{fontWeight:800,fontSize:13,color:hBg,lineHeight:1}}>{game.num}</div>
                                   {showNames&&t1n&&(
                                     <div style={{fontSize:10,color:"#475569",marginTop:2,lineHeight:1.2}}>
                                       <span style={{fontWeight:600}}>{t1n}</span>
@@ -1350,7 +1366,7 @@ function LayoutView({games,setGames,teams}){
                                       <span style={{fontWeight:600}}>{t2n}</span>
                                     </div>
                                   )}
-                                  {game.pool&&<span style={{fontSize:9,background:"#dbeafe",color:"#1d4ed8",borderRadius:3,
+                                  {game.pool&&<span style={{fontSize:9,background:accentBorder,color:hBg,borderRadius:3,
                                     padding:"1px 5px",fontWeight:700,display:"inline-block",marginTop:2}}>Pool {game.pool}</span>}
                                   <div style={{display:"flex",justifyContent:"center",gap:10,marginTop:4}}>
                                     <span style={{color:"#16a34a",fontSize:13,fontWeight:700}}>✓</span>
@@ -1366,11 +1382,15 @@ function LayoutView({games,setGames,teams}){
                                   <div style={{fontSize:11,color:"#fca5a5",marginTop:2,cursor:"pointer"}}>click to unblock</div>
                                 </div>
                               ):(
-                                <div style={{padding:"10px 4px",opacity:canPlace?1:.5}}>
-                                  {canPlace
-                                    ?<div style={{fontSize:12,fontWeight:700,color:"#2563eb"}}>→ Place Here</div>
-                                    :<div style={{fontSize:10,color:"#cbd5e1"}}>click to block</div>
-                                  }
+                                <div style={{padding:"8px 4px"}}>
+                                  {canPlace?(
+                                    <div style={{fontSize:12,fontWeight:700,color:accentText}}>→ Drop Here</div>
+                                  ):(
+                                    <>
+                                      <div style={{fontSize:10,fontWeight:700,color:accentText,marginBottom:2}}>{fieldLabel}</div>
+                                      <div style={{fontSize:9,color:"#94a3b8"}}>open slot</div>
+                                    </>
+                                  )}
                                 </div>
                               )}
                             </td>
