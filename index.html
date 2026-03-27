@@ -4358,9 +4358,9 @@ function EventDetailView({ev,onBack}){
           </div>
           <div className="div-pills">
             {ev.divisions.map(d=>(
-              <div key={d.id} className={`div-pill ${divId===d.id?"dp-on":"dp-off"}`}
-                onClick={()=>{setDivId(d.id);setFlightId(null)}}>
-                {d.label} <span style={{fontSize:10,opacity:.65,marginLeft:3}}>({d.teams}t)</span>
+              <div key={d.divID} className={`div-pill ${divId===d.divID?"dp-on":"dp-off"}`}
+                onClick={()=>{setDivId(d.divID);setFlightId(null)}}>
+                {d.ageCode} <span style={{fontSize:10,opacity:.65,marginLeft:3}}>({d.numTeams}t)</span>
               </div>
             ))}
           </div>
@@ -4403,7 +4403,7 @@ function Dashboard({events,onSelect,onNav}){
     (directorF==="all"||e.director===directorF)&&
     (statureF==="all"||e.stature===statureF)
   );
-  const totalTeams=shown.reduce((a,ev)=>a+ev.divisions.reduce((b,d)=>b+d.teams,0),0);
+  const totalTeams=shown.reduce((a,ev)=>a+ev.divisions.reduce((b,d)=>b+(d.numTeams||0),0),0);
   return(
     <div>
       <div className="g4 mb4">
@@ -4449,7 +4449,7 @@ function Dashboard({events,onSelect,onNav}){
                 <td className="t-sm">{ev.date}</td>
                 <td><span style={{color:"var(--blue)",cursor:"pointer",fontWeight:600}} onClick={()=>onSelect(ev)}>{ev.name}</span></td>
                 <td className="t-sm">{ev.divisions.length}</td>
-                <td className="t-sm">{ev.divisions.reduce((a,d)=>a+d.teams,0)}</td>
+                <td className="t-sm">{ev.divisions.reduce((a,d)=>a+(d.numTeams||0),0)}</td>
                 <td className="t-sm">{ev.stature}</td>
                 <td className="t-sm">{ev.director}</td>
                 <td><Ev_StatusBadge status={ev.status}/></td>
