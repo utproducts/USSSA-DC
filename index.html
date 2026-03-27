@@ -1834,169 +1834,166 @@ function LayoutView({games:propGames,setGames,teams:propTeams}){
       {/* ══ Settings Panel ══ */}
       <div className="card mb4">
         <div className="card-hd" style={{background:"linear-gradient(135deg,#1e3a5f,#2563eb)"}}>
-          <span className="card-title" style={{color:"#fff"}}>⚙️ Layout Settings</span>
+          <span className="card-title" style={{color:"#fff"}}>⚙️ Schedule Builder Settings</span>
           <span style={{fontSize:11,color:"rgba(255,255,255,.6)",marginLeft:8}}>{rows.length} rows · {nf} field{nf!==1?"s":""} · {assignedIds.size} assigned</span>
         </div>
         <div className="card-body" style={{padding:"18px 20px"}}>
 
-          {/* ── Excel Import Banner ────────────────────────────────── */}
-          <div style={{background:"linear-gradient(135deg,#f0fdf4,#dcfce7)",border:"2px solid #86efac",borderRadius:10,
-            padding:"14px 18px",marginBottom:18,display:"flex",alignItems:"flex-start",gap:16,flexWrap:"wrap"}}>
-            <div style={{flex:1,minWidth:200}}>
-              <div style={{fontSize:13,fontWeight:800,color:"#14532d",marginBottom:3}}>📥 Import from Excel</div>
-              <div style={{fontSize:12,color:"#166534",lineHeight:1.5}}>
-                Already have your schedule built in Excel? Upload it here — teams, games, fields and time slots will all be imported automatically. No more double entry.
+          {/* ── Top row: Import + Auto-Generate side by side ── */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:18}}>
+
+            {/* Excel Import */}
+            <div style={{background:"linear-gradient(135deg,#f0fdf4,#dcfce7)",border:"2px solid #86efac",borderRadius:10,padding:"14px 16px"}}>
+              <div style={{fontSize:13,fontWeight:800,color:"#14532d",marginBottom:4}}>📥 Import from Excel</div>
+              <div style={{fontSize:11,color:"#166534",lineHeight:1.5,marginBottom:10}}>
+                Upload a schedule file — teams, games, fields and time slots import automatically.
               </div>
               {xlImport.status==='done'&&xlImport.counts&&(
-                <div style={{marginTop:8,padding:"7px 10px",background:"#fff",border:"1px solid #86efac",borderRadius:6,fontSize:11}}>
-                  <span style={{fontWeight:700,color:"#15803d"}}>✓ Import complete — </span>
+                <div style={{marginBottom:8,padding:"6px 10px",background:"#fff",border:"1px solid #86efac",borderRadius:6,fontSize:11}}>
+                  <span style={{fontWeight:700,color:"#15803d"}}>✓ </span>
                   {xlImport.counts.games!=null&&<span style={{color:"#166534"}}>{xlImport.counts.games} games · </span>}
                   {xlImport.counts.teams!=null&&<span style={{color:"#166534"}}>{xlImport.counts.teams} teams · </span>}
-                  <span style={{color:"#166534"}}>{xlImport.counts.fields} fields · {xlImport.counts.rows} time slots</span>
+                  <span style={{color:"#166534"}}>{xlImport.counts.fields} fields · {xlImport.counts.rows} slots</span>
                 </div>
               )}
               {xlImport.status==='error'&&(
-                <div style={{marginTop:8,padding:"7px 10px",background:"#fff",border:"1px solid #fca5a5",borderRadius:6,fontSize:11,color:"#dc2626"}}>
-                  ✗ {xlImport.msg}
-                </div>
+                <div style={{marginBottom:8,padding:"6px 10px",background:"#fff",border:"1px solid #fca5a5",borderRadius:6,fontSize:11,color:"#dc2626"}}>✗ {xlImport.msg}</div>
               )}
               {xlImport.status==='loading'&&(
-                <div style={{marginTop:8,fontSize:11,color:"#15803d",fontWeight:600}}>⟳ {xlImport.msg}</div>
+                <div style={{marginBottom:8,fontSize:11,color:"#15803d",fontWeight:600}}>⟳ {xlImport.msg}</div>
               )}
-            </div>
-            <div style={{display:"flex",flexDirection:"column",gap:8,alignItems:"flex-start"}}>
               <label style={{display:"inline-flex",alignItems:"center",gap:7,padding:"8px 16px",
                 background:"#16a34a",color:"#fff",borderRadius:6,fontSize:12,fontWeight:700,
-                cursor:"pointer",boxShadow:"0 2px 6px rgba(22,163,74,.3)",whiteSpace:"nowrap"}}>
+                cursor:"pointer",boxShadow:"0 2px 6px rgba(22,163,74,.3)"}}>
                 📂 Choose Schedule (.xlsx)
                 <input type="file" accept=".xlsx,.xls" style={{display:"none"}}
                   onChange={e=>{if(e.target.files&&e.target.files[0])importExcelFile(e.target.files[0]);e.target.value='';}}/>
               </label>
-              <div style={{fontSize:10,color:"#166534",textAlign:"center",lineHeight:1.4}}>
-                Works with Schedule file<br/>(e.g. "UA Championship.Schedule…")<br/>or Grid file
-              </div>
             </div>
-          </div>
 
-          {/* ── Auto-Schedule Banner ─────────────────────────────── */}
-          <div style={{background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",border:"2px solid #c4b5fd",borderRadius:10,
-            padding:"14px 18px",marginBottom:18,display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
-            <div style={{flex:1,minWidth:200}}>
-              <div style={{fontSize:13,fontWeight:800,color:"#4c1d95",marginBottom:3}}>⚡ Auto-Schedule Generator</div>
-              <div style={{fontSize:12,color:"#5b21b6",lineHeight:1.5}}>
-                Automatically generate a full round-robin schedule from your team list. Sets rules for no rematches, no double-booking, and balanced breaks.
-              </div>
-            </div>
-            <button onClick={()=>{setAutoModal(true);setAutoResult(null);}}
-              style={{padding:"10px 20px",background:"#7c3aed",color:"#fff",border:"none",
-                borderRadius:7,fontWeight:800,fontSize:13,cursor:"pointer",
-                boxShadow:"0 2px 8px rgba(124,58,237,.4)",whiteSpace:"nowrap",flexShrink:0}}>
-              ⚡ Auto-Generate
-            </button>
-          </div>
-
-          <div style={{fontSize:10,fontWeight:800,color:"#cbd5e1",textTransform:"uppercase",letterSpacing:1,
-            marginBottom:12,borderTop:"1px solid #e2e8f0",paddingTop:14}}>
-            — or set up manually —
-          </div>
-
-          <div style={{display:"grid",gridTemplateColumns:"auto auto 1fr",gap:28,alignItems:"start",flexWrap:"wrap"}}>
-
-            {/* Field Settings */}
-            <div>
-              <div style={{fontSize:10,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>Field Settings</div>
-              <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                {[
-                  ["# Fields",<select value={nf} onChange={e=>setNf(+e.target.value)} style={F}>{Array.from({length:50},(_,i)=><option key={i+1}>{i+1}</option>)}</select>],
-                  ["Game Time Length",<select value={gl} onChange={e=>setGl(e.target.value)} style={F}><option value="60">1 hour</option><option value="75">1 hr 15 min</option><option value="90">1 hr 30 min</option><option value="105">1 hr 45 min</option><option value="120">2 hours</option></select>],
-                ].map(([lbl,ctrl])=>(
-                  <div key={lbl} style={{display:"flex",alignItems:"center",gap:10}}>
-                    <span style={{fontSize:12,fontWeight:600,color:"#475569",minWidth:145,whiteSpace:"nowrap"}}>{lbl}</span>
-                    {ctrl}
-                  </div>
-                ))}
-                {/* Event date range */}
-                <div style={{marginTop:4,padding:"10px 12px",background:"#f0f9ff",border:"1.5px solid #bae6fd",borderRadius:7}}>
-                  <div style={{fontSize:10,fontWeight:800,color:"#0284c7",textTransform:"uppercase",letterSpacing:.8,marginBottom:8}}>📅 Event Dates</div>
-                  <div style={{display:"flex",flexDirection:"column",gap:7}}>
-                    {[
-                      ["Start Date",evtStart,setEvtStart],
-                      ["End Date",evtEnd,setEvtEnd],
-                    ].map(([lbl,val,setter])=>(
-                      <div key={lbl} style={{display:"flex",alignItems:"center",gap:10}}>
-                        <span style={{fontSize:12,fontWeight:600,color:"#475569",minWidth:72}}>{lbl}</span>
-                        <input type="date" value={val} onChange={e=>setter(e.target.value)}
-                          style={{...F,color:"#0f172a",fontWeight:600,letterSpacing:.3}}/>
-                      </div>
-                    ))}
-                  </div>
-                  {evtStart&&evtEnd&&evtEnd>=evtStart&&(
-                    <div style={{fontSize:11,color:"#0284c7",marginTop:6}}>
-                      {(()=>{
-                        const days=Math.round((new Date(evtEnd+'T12:00:00')-new Date(evtStart+'T12:00:00'))/(86400000))+1;
-                        return `${days} day${days!==1?"s":""}`;
-                      })()}
-                    </div>
-                  )}
+            {/* Auto-Schedule Generator */}
+            <div style={{background:"linear-gradient(135deg,#f5f3ff,#ede9fe)",border:"2px solid #c4b5fd",borderRadius:10,padding:"14px 16px",display:"flex",flexDirection:"column",justifyContent:"space-between"}}>
+              <div>
+                <div style={{fontSize:13,fontWeight:800,color:"#4c1d95",marginBottom:4}}>⚡ Auto-Schedule Generator</div>
+                <div style={{fontSize:11,color:"#5b21b6",lineHeight:1.5,marginBottom:10}}>
+                  Generate a full round-robin schedule from your team list with rules for no rematches, no double-booking, and balanced breaks.
                 </div>
-                {[
-                  ["Time Range (Day 1)",<div style={{display:"flex",gap:5,alignItems:"center"}}><input type="time" value={d1Start} onChange={e=>setD1Start(e.target.value)} style={{...F,width:92}}/><span style={{color:"#94a3b8",fontSize:11}}>to</span><input type="time" value={d1End} onChange={e=>setD1End(e.target.value)} style={{...F,width:92}}/></div>],
-                  ["Remaining Days",<div style={{display:"flex",gap:5,alignItems:"center"}}><input type="time" value={remStart} onChange={e=>setRemStart(e.target.value)} style={{...F,width:92}}/><span style={{color:"#94a3b8",fontSize:11}}>to</span><input type="time" value={remEnd} onChange={e=>setRemEnd(e.target.value)} style={{...F,width:92}}/></div>],
-                ].map(([lbl,ctrl])=>(
-                  <div key={lbl} style={{display:"flex",alignItems:"center",gap:10}}>
-                    <span style={{fontSize:12,fontWeight:600,color:"#475569",minWidth:145,whiteSpace:"nowrap"}}>{lbl}</span>
-                    {ctrl}
-                  </div>
-                ))}
-                <div style={{marginTop:4}}><button onClick={submitFieldData} style={B(NAVY,"#fff")}>Submit Field Data</button></div>
               </div>
-            </div>
-
-            {/* Time Settings */}
-            <div>
-              <div style={{fontSize:10,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>Time Settings</div>
-              <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                {[
-                  ["Start Row",<select value={startRow} onChange={e=>setStartRow(e.target.value)} style={F}>{Array.from({length:50},(_,i)=><option key={i+1}>{i+1}</option>)}</select>],
-                  ["Time Variable",<select value={timeVar} onChange={e=>setTimeVar(e.target.value)} style={F}>{["5","10","15","20","30"].map(v=><option key={v} value={v}>{v} mins</option>)}</select>],
-                  ["Action",<select value={timeAct} onChange={e=>setTimeAct(e.target.value)} style={F}><option value="increase">+ increase</option><option value="decrease">- decrease</option></select>],
-                  ["Coverage",<select value={coverage} onChange={e=>setCoverage(e.target.value)} style={F}><option value="day_chosen">day chosen</option><option value="all_days">all days</option></select>],
-                ].map(([lbl,ctrl])=>(
-                  <div key={lbl} style={{display:"flex",alignItems:"center",gap:10}}>
-                    <span style={{fontSize:12,fontWeight:600,color:"#475569",minWidth:110,whiteSpace:"nowrap"}}>{lbl}</span>
-                    {ctrl}
-                  </div>
-                ))}
-                <div style={{marginTop:4}}><button onClick={setResetTimes} style={B("#dc2626","#fff")}>Submit</button></div>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div>
-              <div style={{fontSize:10,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>Actions</div>
-              <div style={{display:"flex",flexDirection:"column",gap:7}}>
-                <button onClick={setResetTimes} style={B("#dc2626","#fff",{fontSize:13,padding:"9px 18px",borderRadius:6,boxShadow:"0 2px 6px rgba(220,38,38,.3)"})}>
-                  🔄 Set / Reset Game Times
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                <button onClick={()=>{setAutoModal(true);setAutoResult(null);}}
+                  style={{padding:"9px 18px",background:"#7c3aed",color:"#fff",border:"none",
+                    borderRadius:7,fontWeight:800,fontSize:13,cursor:"pointer",
+                    boxShadow:"0 2px 8px rgba(124,58,237,.4)"}}>
+                  ⚡ Auto-Generate Schedule
                 </button>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  <button style={B("#475569","#fff")}>Start Games — Next Day</button>
-                  <button style={B("#475569","#fff")}>Start Games — Prev Day</button>
-                </div>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  <button onClick={()=>setShowNames(v=>!v)} style={B(showNames?NAVY:"#f1f5f9",showNames?"#fff":"#1e293b",{border:"1px solid #cbd5e1"})}>
-                    {showNames?"✓ ":""}Show Team Names
+                {unscheduled.length>0&&(
+                  <button onClick={autoSchedule}
+                    style={{padding:"9px 14px",background:"#16a34a",color:"#fff",border:"none",
+                      borderRadius:7,fontWeight:700,fontSize:12,cursor:"pointer",
+                      boxShadow:"0 2px 6px rgba(22,163,74,.3)"}}>
+                    📋 Fill Open Slots ({unscheduled.length})
                   </button>
-                  <button style={B("#f1f5f9","#475569",{border:"1px solid #cbd5e1"})}>Show Pool Seed Values</button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Divider ── */}
+          <div style={{fontSize:10,fontWeight:800,color:"#cbd5e1",textTransform:"uppercase",letterSpacing:1,
+            marginBottom:14,borderTop:"1px solid #e2e8f0",paddingTop:14,textAlign:"center"}}>
+            — manual setup —
+          </div>
+
+          {/* ── Main two-column settings ── */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,alignItems:"start"}}>
+
+            {/* LEFT: Grid Setup */}
+            <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:"14px 16px"}}>
+              <div style={{fontSize:10,fontWeight:800,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:12}}>Grid Setup</div>
+              <div style={{display:"flex",flexDirection:"column",gap:9}}>
+                {/* Fields + game length row */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  {[
+                    ["# Fields",<select value={nf} onChange={e=>setNf(+e.target.value)} style={{...F,width:"100%"}}>{Array.from({length:50},(_,i)=><option key={i+1}>{i+1}</option>)}</select>],
+                    ["Game Length",<select value={gl} onChange={e=>setGl(e.target.value)} style={{...F,width:"100%"}}><option value="60">1 hr</option><option value="75">1 hr 15 m</option><option value="90">1 hr 30 m</option><option value="105">1 hr 45 m</option><option value="120">2 hrs</option></select>],
+                  ].map(([lbl,ctrl])=>(
+                    <div key={lbl}>
+                      <div style={{fontSize:10,fontWeight:700,color:"#64748b",marginBottom:3}}>{lbl}</div>
+                      {ctrl}
+                    </div>
+                  ))}
                 </div>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  <button style={B("#1d4ed8","#fff")}>Block Selected Cells</button>
-                  <button onClick={clearAllBlocked} style={B("#1d4ed8","#fff")}>Clear All Blocked Cells</button>
+                {/* Dates */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  {[["Start Date",evtStart,setEvtStart],["End Date",evtEnd,setEvtEnd]].map(([lbl,val,setter])=>(
+                    <div key={lbl}>
+                      <div style={{fontSize:10,fontWeight:700,color:"#64748b",marginBottom:3}}>{lbl}</div>
+                      <input type="date" value={val} onChange={e=>setter(e.target.value)}
+                        style={{...F,width:"100%",color:"#0f172a",fontWeight:600}}/>
+                    </div>
+                  ))}
                 </div>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                  <button onClick={clearGameCells} style={B("#d97706","#fff")}>Clear Game Cells</button>
-                  <button onClick={autoSchedule} disabled={unscheduled.length===0}
-                    style={B("#16a34a","#fff",{opacity:unscheduled.length===0?.4:1,boxShadow:unscheduled.length>0?"0 2px 6px rgba(22,163,74,.3)":"none"})}>
-                    ⚡ Auto-Schedule ({unscheduled.length})
+                {evtStart&&evtEnd&&evtEnd>=evtStart&&(
+                  <div style={{fontSize:11,color:"#0284c7",fontWeight:600}}>
+                    📅 {(()=>{const d=Math.round((new Date(evtEnd+'T12:00:00')-new Date(evtStart+'T12:00:00'))/(86400000))+1;return `${d} day${d!==1?"s":""}`;})()}
+                  </div>
+                )}
+                {/* Time ranges */}
+                {[["Day 1 Start → End",d1Start,setD1Start,d1End,setD1End],["All Other Days",remStart,setRemStart,remEnd,setRemEnd]].map(([lbl,s,ss,e2,se])=>(
+                  <div key={lbl}>
+                    <div style={{fontSize:10,fontWeight:700,color:"#64748b",marginBottom:3}}>{lbl}</div>
+                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                      <input type="time" value={s} onChange={ev=>ss(ev.target.value)} style={{...F,flex:1}}/>
+                      <span style={{color:"#94a3b8",fontSize:11}}>to</span>
+                      <input type="time" value={e2} onChange={ev=>se(ev.target.value)} style={{...F,flex:1}}/>
+                    </div>
+                  </div>
+                ))}
+                <button onClick={submitFieldData} style={{...B(NAVY,"#fff"),width:"100%",marginTop:4,padding:"9px",fontSize:13}}>
+                  🏗 Build Grid
+                </button>
+              </div>
+            </div>
+
+            {/* RIGHT: Time Adjust + Quick Actions stacked */}
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+
+              {/* Time Adjustment */}
+              <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:"14px 16px"}}>
+                <div style={{fontSize:10,fontWeight:800,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:12}}>Adjust Game Times</div>
+                <div style={{display:"flex",flexDirection:"column",gap:9}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    {[
+                      ["Start Row",<select value={startRow} onChange={e=>setStartRow(e.target.value)} style={{...F,width:"100%"}}>{Array.from({length:50},(_,i)=><option key={i+1}>{i+1}</option>)}</select>],
+                      ["Shift",<select value={timeAct} onChange={e=>setTimeAct(e.target.value)} style={{...F,width:"100%"}}><option value="increase">+ Earlier</option><option value="decrease">− Later</option></select>],
+                    ].map(([lbl,ctrl])=>(<div key={lbl}><div style={{fontSize:10,fontWeight:700,color:"#64748b",marginBottom:3}}>{lbl}</div>{ctrl}</div>))}
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    {[
+                      ["By (mins)",<select value={timeVar} onChange={e=>setTimeVar(e.target.value)} style={{...F,width:"100%"}}>{["5","10","15","20","30"].map(v=><option key={v} value={v}>{v} mins</option>)}</select>],
+                      ["Apply To",<select value={coverage} onChange={e=>setCoverage(e.target.value)} style={{...F,width:"100%"}}><option value="day_chosen">This Day</option><option value="all_days">All Days</option></select>],
+                    ].map(([lbl,ctrl])=>(<div key={lbl}><div style={{fontSize:10,fontWeight:700,color:"#64748b",marginBottom:3}}>{lbl}</div>{ctrl}</div>))}
+                  </div>
+                  <button onClick={setResetTimes} style={{...B("#dc2626","#fff"),width:"100%",marginTop:2,padding:"9px",fontSize:13}}>
+                    ↕ Apply Time Shift
+                  </button>
+                </div>
+              </div>
+
+              {/* Quick Actions */}
+              <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:"14px 16px"}}>
+                <div style={{fontSize:10,fontWeight:800,color:"#64748b",textTransform:"uppercase",letterSpacing:1,marginBottom:12}}>Quick Actions</div>
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  <button onClick={()=>setShowNames(v=>!v)}
+                    style={{...B(showNames?NAVY:"#fff",showNames?"#fff":"#374151",{border:`1px solid ${showNames?"#1e3a5f":"#cbd5e1"}`}),width:"100%",padding:"8px",fontSize:12}}>
+                    {showNames?"✓ Team Names ON":"👁 Show Team Names"}
+                  </button>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    <button onClick={()=>{}} style={{...B("#1d4ed8","#fff"),padding:"8px",fontSize:11}}>🔒 Block Selected</button>
+                    <button onClick={clearAllBlocked} style={{...B("#64748b","#fff"),padding:"8px",fontSize:11}}>✕ Clear Blocked</button>
+                  </div>
+                  <button onClick={clearGameCells} style={{...B("#d97706","#fff"),width:"100%",padding:"8px",fontSize:12}}>
+                    🗑 Clear All Game Cells
                   </button>
                 </div>
               </div>
