@@ -917,7 +917,6 @@ function GridBuilderView(){
   const [parks,setParks]=useState([{id:"pk_1",name:"Complex 1",color:PARK_COLORS[0],fields:["Field 1","Field 2"]}]);
   const [activePkId,setActivePkId]=useState("pk_1");
   const [times,setTimes]=useState(DEFAULT_TIMES);
-  const [day,setDay]=useState("SAT");
   const [grid,setGrid]=useState({SAT:{},SUN:{}});
   const [selCell,setSelCell]=useState(null);
   const [newField,setNewField]=useState("");
@@ -930,11 +929,11 @@ function GridBuilderView(){
   const pk=parks.find(p=>p.id===activePkId)||parks[0];
 
   function ck(pkId,f,t){return `${pkId}¦${f}¦${t}`;}
-  function gc(pkId,f,t){return (grid[day]||{})[ck(pkId,f,t)]||{div:"",type:"open"};}
-  function sc(pkId,f,t,upd){
-    setGrid(prev=>{const dg={...(prev[day]||{})},key=ck(pkId,f,t),cur=dg[key]||{div:"",type:"open"};
+  function gc(d,pkId,f,t){return (grid[d]||{})[ck(pkId,f,t)]||{div:"",type:"open"};}
+  function sc(d,pkId,f,t,upd){
+    setGrid(prev=>{const dg={...(prev[d]||{})},key=ck(pkId,f,t),cur=dg[key]||{div:"",type:"open"};
       dg[key]={...cur,...upd};if(!dg[key].div&&dg[key].type==="open")delete dg[key];
-      return{...prev,[day]:dg};});
+      return{...prev,[d]:dg};});
     setSelCell(null);setDivFilter("");
   }
 
@@ -993,17 +992,6 @@ function GridBuilderView(){
           <span style={{fontSize:11,color:"#94a3b8",marginLeft:10}}>Click any cell to assign a division</span>
         </div>
         <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
-          {/* Day pill toggle */}
-          <div style={{display:"inline-flex",background:"#f1f5f9",borderRadius:20,padding:3,gap:2}}>
-            {["SAT","SUN"].map(d=>(
-              <button key={d} onClick={()=>{setDay(d);setSelCell(null);}}
-                style={{padding:"5px 18px",border:"none",borderRadius:16,fontWeight:800,fontSize:11,
-                  cursor:"pointer",background:day===d?(pk?.color||NAVY):"transparent",
-                  color:day===d?"#fff":"#64748b",transition:"all .15s"}}>
-                {d==="SAT"?"Saturday":"Sunday"}
-              </button>
-            ))}
-          </div>
           <button onClick={()=>setShowSummary(s=>!s)}
             style={Btn(showSummary?"#1e3a5f":"#f1f5f9",showSummary?"#fff":"#475569")}>
             📊 {showSummary?"Hide":"Summary"}
@@ -1154,157 +1142,169 @@ function GridBuilderView(){
             </div>
           )}
 
-          {/* ══ GRID TABLE ══ */}
-          <div style={{overflowX:"auto"}}>
-            <table style={{borderCollapse:"collapse",tableLayout:"fixed"}}>
-              <colgroup>
-                {/* Time col: narrow */}
-                <col style={{width:52}}/>
-                {pk.fields.map((_,i)=><col key={i} style={{width:72}}/>)}
-              </colgroup>
-              <thead>
-                <tr>
-                  <th style={{background:pk.color,color:"rgba(255,255,255,.7)",fontSize:9,
-                    fontWeight:700,textTransform:"uppercase",letterSpacing:.5,padding:"5px 4px",
-                    textAlign:"center",position:"sticky",left:0,zIndex:3}}>
-                    Time
-                  </th>
-                  {pk.fields.map((f,fi)=>(
-                    <th key={fi} style={{background:pk.color,color:"#fff",fontSize:10,fontWeight:700,
-                      padding:"5px 3px",textAlign:"center",whiteSpace:"nowrap",overflow:"hidden",
-                      textOverflow:"ellipsis",maxWidth:72,borderLeft:"1px solid rgba(255,255,255,.15)"}}>
-                      {f}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {times.map((t,ti)=>(
-                  <tr key={t} style={{background:ti%2===0?"#fff":"#fafcff"}}>
-                    {/* Time cell */}
-                    <td style={{padding:"0 4px",height:30,fontWeight:800,fontSize:11,color:"#334155",
-                      borderBottom:"1px solid #edf0f4",borderRight:"2px solid #dde3ea",
-                      textAlign:"center",whiteSpace:"nowrap",
-                      position:"sticky",left:0,zIndex:1,
-                      background:ti%2===0?"#f8fafc":"#f1f5f9"}}>
-                      {tShort(t)}
-                    </td>
-                    {pk.fields.map((f,fi)=>{
-                      const key=ck(pk.id,f,t);
-                      const isSel=selCell===key;
-                      const cell=gc(pk.id,f,t);
-                      const st=SLOT_MAP[cell.type]||SLOT_MAP.open;
-                      const dc=cell.div?getDivColor(cell.div):null;
-                      const isBlk=cell.type==="blocked";
-                      const isEmpty=!cell.div&&cell.type==="open";
-                      const abbr=SLOT_ABBR[cell.type]||"";
-                      // Cell background
-                      const bg=isSel?"#dbeafe":isBlk?"#fecaca":dc?dc.bg:ti%2===0?"#fff":"#fafcff";
-                      return(
-                        <td key={fi}
-                          onClick={()=>{setSelCell(isSel?null:key);if(!isSel)setDivFilter("");}}
-                          style={{borderLeft:"1px solid #e8ecf0",borderBottom:"1px solid #edf0f4",
-                            padding:0,cursor:"pointer",background:bg,height:30,
-                            outline:isSel?`2px solid ${pk.color}`:"none",outlineOffset:-1,
-                            transition:"background .08s",position:"relative",
-                            textAlign:"center",verticalAlign:"middle"}}>
-
-                          {/* Colored top-edge bar when filled */}
-                          {dc&&!isSel&&(
-                            <div style={{position:"absolute",top:0,left:0,right:0,height:3,
-                              background:dc.border,borderRadius:0}}/>
-                          )}
-
-                          {isEmpty?(
-                            <span style={{fontSize:9,color:isSel?pk.color:"#d1d5db",
-                              fontWeight:isSel?700:400}}>{isSel?"▾":"·"}</span>
-                          ):isBlk?(
-                            <span style={{fontSize:9,fontWeight:800,color:"#dc2626",
-                              letterSpacing:.3}}>BLK</span>
-                          ):(
-                            <div style={{paddingTop:3,display:"flex",flexDirection:"column",
-                              alignItems:"center",justifyContent:"center",height:"100%"}}>
-                              <span style={{fontWeight:900,fontSize:11,color:dc?dc.text:"#1e3a5f",
-                                lineHeight:1,overflow:"hidden",textOverflow:"ellipsis",
-                                whiteSpace:"nowrap",maxWidth:66}}>
-                                {cell.div}
-                              </span>
-                              {abbr&&<span style={{fontSize:7,fontWeight:800,color:st.color,
-                                letterSpacing:.3,textTransform:"uppercase",lineHeight:1.5}}>{abbr}</span>}
-                            </div>
-                          )}
-
-                          {/* ── Picker popover ── */}
-                          {isSel&&(
-                            <div onClick={e=>e.stopPropagation()}
-                              style={{position:"absolute",
-                                top:"100%",
-                                left:fi>=pk.fields.length-3?"auto":0,
-                                right:fi>=pk.fields.length-3?0:"auto",
-                                zIndex:80,background:"#fff",
-                                border:`2px solid ${pk.color}`,borderRadius:10,
-                                boxShadow:"0 12px 36px rgba(0,0,0,.18)",
-                                padding:12,minWidth:230,textAlign:"left"}}>
-
-                              <div style={{fontWeight:800,fontSize:10,color:"#94a3b8",
-                                textTransform:"uppercase",letterSpacing:.8,marginBottom:5}}>
-                                Division — {tShort(t)} · {f}
-                              </div>
-
-                              <input value={divFilter} onChange={e=>setDivFilter(e.target.value)}
-                                placeholder="Filter…" autoFocus
-                                style={{...Inp,width:"100%",marginBottom:6}}/>
-
-                              <div style={{display:"flex",flexWrap:"wrap",gap:4,
-                                maxHeight:140,overflowY:"auto",marginBottom:10}}>
-                                {filtDivs.map(d=>{
-                                  const dc2=getDivColor(d);const isSeld=cell.div===d;
-                                  return(
-                                    <span key={d}
-                                      onClick={()=>sc(pk.id,f,t,{div:d,type:cell.type==="open"?"pool":cell.type})}
-                                      style={{padding:"3px 9px",borderRadius:11,fontSize:11,fontWeight:800,
-                                        cursor:"pointer",
-                                        background:isSeld?dc2.border:dc2.bg,
-                                        color:isSeld?"#fff":dc2.text,
-                                        border:`1.5px solid ${dc2.border}`,
-                                        boxShadow:isSeld?`0 0 0 2px ${dc2.border}50`:"none"}}>
-                                      {d}
-                                    </span>
-                                  );
-                                })}
-                              </div>
-
-                              <div style={{fontWeight:800,fontSize:10,color:"#94a3b8",
-                                textTransform:"uppercase",letterSpacing:.8,marginBottom:5}}>Slot Type</div>
-                              <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:10}}>
-                                {SLOT_TYPES.filter(s=>s.id!=="open").map(s=>(
-                                  <span key={s.id} onClick={()=>sc(pk.id,f,t,{type:s.id})}
-                                    style={{padding:"3px 8px",borderRadius:9,fontSize:10,fontWeight:700,
-                                      cursor:"pointer",
-                                      background:cell.type===s.id?s.color:s.bg,
-                                      color:cell.type===s.id?"#fff":s.color,
-                                      border:`1px solid ${s.color}40`}}>
-                                    {s.label}
-                                  </span>
-                                ))}
-                              </div>
-
-                              {cell.div&&(
-                                <button onClick={()=>sc(pk.id,f,t,{div:"",type:"open"})}
-                                  style={Btn("#fef2f2","#dc2626",{width:"100%",padding:"5px",borderRadius:6})}>
-                                  Clear Cell
-                                </button>
-                              )}
-                            </div>
-                          )}
+          {/* ══ GRIDS: SAT then SUN stacked ══ */}
+          {["SAT","SUN"].map(day=>(
+            <div key={day}>
+              {/* Day banner */}
+              <div style={{background:day==="SAT"?"#1e3a5f":"#0f3460",color:"#fff",
+                padding:"5px 12px",display:"flex",alignItems:"center",gap:8,
+                borderTop:day==="SUN"?"3px solid #e2e8f0":"none"}}>
+                <span style={{fontSize:13,fontWeight:900,letterSpacing:.5}}>
+                  {day==="SAT"?"⛅ Saturday":"🌤 Sunday"}
+                </span>
+                <span style={{fontSize:10,opacity:.6,fontWeight:600}}>
+                  — {pk.fields.length} field{pk.fields.length!==1?"s":""}, {times.length} time slot{times.length!==1?"s":""}
+                </span>
+              </div>
+              <div style={{overflowX:"auto"}}>
+                <table style={{borderCollapse:"collapse",tableLayout:"fixed"}}>
+                  <colgroup>
+                    <col style={{width:52}}/>
+                    {pk.fields.map((_,i)=><col key={i} style={{width:72}}/>)}
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th style={{background:pk.color,color:"rgba(255,255,255,.7)",fontSize:9,
+                        fontWeight:700,textTransform:"uppercase",letterSpacing:.5,padding:"5px 4px",
+                        textAlign:"center",position:"sticky",left:0,zIndex:3}}>
+                        Time
+                      </th>
+                      {pk.fields.map((f,fi)=>(
+                        <th key={fi} style={{background:pk.color,color:"#fff",fontSize:10,fontWeight:700,
+                          padding:"5px 3px",textAlign:"center",whiteSpace:"nowrap",overflow:"hidden",
+                          textOverflow:"ellipsis",maxWidth:72,borderLeft:"1px solid rgba(255,255,255,.15)"}}>
+                          {f}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {times.map((t,ti)=>(
+                      <tr key={t} style={{background:ti%2===0?"#fff":"#fafcff"}}>
+                        {/* Time cell */}
+                        <td style={{padding:"0 4px",height:30,fontWeight:800,fontSize:11,color:"#334155",
+                          borderBottom:"1px solid #edf0f4",borderRight:"2px solid #dde3ea",
+                          textAlign:"center",whiteSpace:"nowrap",
+                          position:"sticky",left:0,zIndex:1,
+                          background:ti%2===0?"#f8fafc":"#f1f5f9"}}>
+                          {tShort(t)}
                         </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                        {pk.fields.map((f,fi)=>{
+                          const key=`${day}¦${ck(pk.id,f,t)}`;
+                          const isSel=selCell===key;
+                          const cell=gc(day,pk.id,f,t);
+                          const st=SLOT_MAP[cell.type]||SLOT_MAP.open;
+                          const dc=cell.div?getDivColor(cell.div):null;
+                          const isBlk=cell.type==="blocked";
+                          const isEmpty=!cell.div&&cell.type==="open";
+                          const abbr=SLOT_ABBR[cell.type]||"";
+                          const bg=isSel?"#dbeafe":isBlk?"#fecaca":dc?dc.bg:ti%2===0?"#fff":"#fafcff";
+                          return(
+                            <td key={fi}
+                              onClick={()=>{setSelCell(isSel?null:key);if(!isSel)setDivFilter("");}}
+                              style={{borderLeft:"1px solid #e8ecf0",borderBottom:"1px solid #edf0f4",
+                                padding:0,cursor:"pointer",background:bg,height:30,
+                                outline:isSel?`2px solid ${pk.color}`:"none",outlineOffset:-1,
+                                transition:"background .08s",position:"relative",
+                                textAlign:"center",verticalAlign:"middle"}}>
+
+                              {dc&&!isSel&&(
+                                <div style={{position:"absolute",top:0,left:0,right:0,height:3,
+                                  background:dc.border,borderRadius:0}}/>
+                              )}
+
+                              {isEmpty?(
+                                <span style={{fontSize:9,color:isSel?pk.color:"#d1d5db",
+                                  fontWeight:isSel?700:400}}>{isSel?"▾":"·"}</span>
+                              ):isBlk?(
+                                <span style={{fontSize:9,fontWeight:800,color:"#dc2626",
+                                  letterSpacing:.3}}>BLK</span>
+                              ):(
+                                <div style={{paddingTop:3,display:"flex",flexDirection:"column",
+                                  alignItems:"center",justifyContent:"center",height:"100%"}}>
+                                  <span style={{fontWeight:900,fontSize:11,color:dc?dc.text:"#1e3a5f",
+                                    lineHeight:1,overflow:"hidden",textOverflow:"ellipsis",
+                                    whiteSpace:"nowrap",maxWidth:66}}>
+                                    {cell.div}
+                                  </span>
+                                  {abbr&&<span style={{fontSize:7,fontWeight:800,color:st.color,
+                                    letterSpacing:.3,textTransform:"uppercase",lineHeight:1.5}}>{abbr}</span>}
+                                </div>
+                              )}
+
+                              {/* ── Picker popover ── */}
+                              {isSel&&(
+                                <div onClick={e=>e.stopPropagation()}
+                                  style={{position:"absolute",
+                                    top:"100%",
+                                    left:fi>=pk.fields.length-3?"auto":0,
+                                    right:fi>=pk.fields.length-3?0:"auto",
+                                    zIndex:80,background:"#fff",
+                                    border:`2px solid ${pk.color}`,borderRadius:10,
+                                    boxShadow:"0 12px 36px rgba(0,0,0,.18)",
+                                    padding:12,minWidth:230,textAlign:"left"}}>
+
+                                  <div style={{fontWeight:800,fontSize:10,color:"#94a3b8",
+                                    textTransform:"uppercase",letterSpacing:.8,marginBottom:5}}>
+                                    {day==="SAT"?"Saturday":"Sunday"} — {tShort(t)} · {f}
+                                  </div>
+
+                                  <input value={divFilter} onChange={e=>setDivFilter(e.target.value)}
+                                    placeholder="Filter…" autoFocus
+                                    style={{...Inp,width:"100%",marginBottom:6}}/>
+
+                                  <div style={{display:"flex",flexWrap:"wrap",gap:4,
+                                    maxHeight:140,overflowY:"auto",marginBottom:10}}>
+                                    {filtDivs.map(dv=>{
+                                      const dc2=getDivColor(dv);const isSeld=cell.div===dv;
+                                      return(
+                                        <span key={dv}
+                                          onClick={()=>sc(day,pk.id,f,t,{div:dv,type:cell.type==="open"?"pool":cell.type})}
+                                          style={{padding:"3px 9px",borderRadius:11,fontSize:11,fontWeight:800,
+                                            cursor:"pointer",
+                                            background:isSeld?dc2.border:dc2.bg,
+                                            color:isSeld?"#fff":dc2.text,
+                                            border:`1.5px solid ${dc2.border}`,
+                                            boxShadow:isSeld?`0 0 0 2px ${dc2.border}50`:"none"}}>
+                                          {dv}
+                                        </span>
+                                      );
+                                    })}
+                                  </div>
+
+                                  <div style={{fontWeight:800,fontSize:10,color:"#94a3b8",
+                                    textTransform:"uppercase",letterSpacing:.8,marginBottom:5}}>Slot Type</div>
+                                  <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:10}}>
+                                    {SLOT_TYPES.filter(s=>s.id!=="open").map(s=>(
+                                      <span key={s.id} onClick={()=>sc(day,pk.id,f,t,{type:s.id})}
+                                        style={{padding:"3px 8px",borderRadius:9,fontSize:10,fontWeight:700,
+                                          cursor:"pointer",
+                                          background:cell.type===s.id?s.color:s.bg,
+                                          color:cell.type===s.id?"#fff":s.color,
+                                          border:`1px solid ${s.color}40`}}>
+                                        {s.label}
+                                      </span>
+                                    ))}
+                                  </div>
+
+                                  {cell.div&&(
+                                    <button onClick={()=>sc(day,pk.id,f,t,{div:"",type:"open"})}
+                                      style={Btn("#fef2f2","#dc2626",{width:"100%",padding:"5px",borderRadius:6})}>
+                                      Clear Cell
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
 
           {/* ── Type legend inside the card ── */}
           <div style={{display:"flex",gap:6,flexWrap:"wrap",padding:"6px 12px",
