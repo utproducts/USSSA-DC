@@ -870,6 +870,30 @@ function GameMgrView({games,setGames,teams,readOnly}){
 
 /* ════════════════════ GRID BUILDER ════════════════════ */
 const DIV_CODES=["8u","9AA","9Open","10AA","10Open","11AA","11AAA","12AA","12Open","13AA","13Open","13Maj","14AA","14Open","14AAA","15AA","16AA","Open"];
+
+// Each division gets its own distinct color — age families share a hue, classes shift the shade
+const DIV_COLORS={
+  "8u":    {bg:"#fef9c3",text:"#713f12",border:"#eab308"},   // warm yellow
+  "9AA":   {bg:"#fee2e2",text:"#991b1b",border:"#f87171"},   // red
+  "9Open": {bg:"#fecaca",text:"#7f1d1d",border:"#dc2626"},   // deep red
+  "10AA":  {bg:"#ffedd5",text:"#9a3412",border:"#fb923c"},   // orange
+  "10Open":{bg:"#fed7aa",text:"#7c2d12",border:"#ea580c"},   // deep orange
+  "11AA":  {bg:"#fef08a",text:"#854d0e",border:"#ca8a04"},   // amber
+  "11AAA": {bg:"#fde68a",text:"#78350f",border:"#d97706"},   // deep amber
+  "12AA":  {bg:"#bbf7d0",text:"#14532d",border:"#16a34a"},   // green
+  "12Open":{bg:"#86efac",text:"#14532d",border:"#15803d"},   // deep green
+  "13AA":  {bg:"#a5f3fc",text:"#164e63",border:"#0891b2"},   // cyan
+  "13Open":{bg:"#67e8f9",text:"#155e75",border:"#0e7490"},   // deep cyan
+  "13Maj": {bg:"#bae6fd",text:"#075985",border:"#0284c7"},   // sky blue
+  "14AA":  {bg:"#bfdbfe",text:"#1e3a8a",border:"#2563eb"},   // blue
+  "14Open":{bg:"#93c5fd",text:"#1e40af",border:"#1d4ed8"},   // deep blue
+  "14AAA": {bg:"#c7d2fe",text:"#3730a3",border:"#4f46e5"},   // indigo
+  "15AA":  {bg:"#ddd6fe",text:"#4c1d95",border:"#7c3aed"},   // violet
+  "16AA":  {bg:"#f3e8ff",text:"#6b21a8",border:"#9333ea"},   // purple
+  "Open":  {bg:"#f1f5f9",text:"#334155",border:"#94a3b8"},   // slate
+};
+function getDivColor(div){return DIV_COLORS[div]||{bg:"#e0f2fe",text:"#0369a1",border:"#7dd3fc"};}
+
 const SLOT_TYPES=[
   {id:"pool",  label:"Pool Play",   color:"#1e3a5f", bg:"#eff6ff"},
   {id:"selim", label:"Single Elim", color:"#7c3aed", bg:"#faf5ff"},
@@ -1012,12 +1036,15 @@ function GridBuilderView(){
         <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:14,padding:"10px 14px",
           background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8}}>
           <span style={{fontSize:10,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.8,alignSelf:"center",marginRight:4}}>Slots assigned:</span>
-          {Object.entries(divStats).sort((a,b)=>b[1]-a[1]).map(([div,cnt])=>(
-            <span key={div} style={{fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:20,
-              background:"#eff6ff",color:"#1d4ed8",border:"1px solid #bfdbfe"}}>
-              {div} <span style={{color:"#93c5fd"}}>×{cnt}</span>
-            </span>
-          ))}
+          {Object.entries(divStats).sort((a,b)=>b[1]-a[1]).map(([div,cnt])=>{
+            const dc=getDivColor(div);
+            return(
+              <span key={div} style={{fontSize:11,fontWeight:800,padding:"3px 12px",borderRadius:20,
+                background:dc.bg,color:dc.text,border:`1.5px solid ${dc.border}`}}>
+                {div} <span style={{opacity:.7}}>×{cnt}</span>
+              </span>
+            );
+          })}
         </div>
       )}
 
@@ -1149,25 +1176,41 @@ function GridBuilderView(){
                       const isOpen=selCell===key;
                       const cell=getCell(pk.id,f,t);
                       const st=SLOT_MAP[cell.type]||SLOT_MAP.open;
+                      const dc=cell.div?getDivColor(cell.div):null;
+                      const isBlocked=cell.type==="blocked";
                       const isEmpty=!cell.div&&cell.type==="open";
+                      // Cell bg: blocked=red, has division=div color, open=white
+                      const cellBg=isOpen?"#eff6ff":isBlocked?"#fee2e2":dc?dc.bg:"#fff";
+                      const cellBorder=isOpen?`2px solid ${pk.color}`:dc?`1.5px solid ${dc.border}`:"1px solid #e2e8f0";
                       return(
                         <td key={fi} onClick={()=>setSelCell(isOpen?null:key)}
                           style={{borderLeft:"1px solid #e2e8f0",borderBottom:"1px solid #f1f5f9",
-                            padding:4,textAlign:"center",cursor:"pointer",
-                            background:isOpen?"#eff6ff":st.bg,
-                            outline:isOpen?`2px solid ${pk.color}`:"none",
-                            transition:"all .1s",position:"relative"}}>
+                            padding:3,textAlign:"center",cursor:"pointer",
+                            background:cellBg,transition:"all .1s",position:"relative"}}>
+                          {/* colored left-edge accent bar */}
+                          {dc&&!isOpen&&(
+                            <div style={{position:"absolute",top:0,left:0,bottom:0,width:4,
+                              background:dc.border,borderRadius:"0 0 0 0"}}/>
+                          )}
                           {isEmpty?(
                             <div style={{padding:"10px 4px",color:isOpen?"#2563eb":"#cbd5e1",
                               fontSize:11,fontWeight:isOpen?700:400}}>
                               {isOpen?"▼ select":"— open —"}
                             </div>
+                          ):isBlocked?(
+                            <div style={{padding:"8px 4px"}}>
+                              <div style={{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:.5}}>BLOCKED</div>
+                            </div>
                           ):(
-                            <div style={{padding:"6px 4px"}}>
-                              <div style={{fontWeight:800,fontSize:12,color:st.color}}>{cell.div||"—"}</div>
+                            <div style={{padding:"6px 4px 6px 8px"}}>
+                              <div style={{fontWeight:900,fontSize:13,color:dc?dc.text:"#1e3a5f",lineHeight:1.1}}>
+                                {cell.div||"—"}
+                              </div>
                               {cell.type!=="open"&&cell.type!=="pool"&&(
                                 <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",
-                                  color:st.color,opacity:.7,letterSpacing:.5,marginTop:1}}>
+                                  color:st.color,letterSpacing:.5,marginTop:2,
+                                  background:st.bg,display:"inline-block",padding:"1px 5px",
+                                  borderRadius:3,border:`1px solid ${st.color}40`}}>
                                   {st.label}
                                 </div>
                               )}
@@ -1185,15 +1228,22 @@ function GridBuilderView(){
                                 textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Division</div>
                               <input value={divFilter} onChange={e=>setDivFilter(e.target.value)}
                                 placeholder="Filter…" style={{...F,width:"100%",marginBottom:6,fontSize:11}}/>
-                              <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8,maxHeight:110,overflowY:"auto"}}>
-                                {filteredDivs.map(d=>(
-                                  <span key={d} onClick={()=>setCell(pk.id,f,t,{div:d,type:cell.type==="open"?"pool":cell.type})}
-                                    style={{padding:"3px 8px",borderRadius:12,fontSize:11,fontWeight:700,cursor:"pointer",
-                                      background:cell.div===d?"#1e3a5f":"#f0f4ff",
-                                      color:cell.div===d?"#fff":"#1d4ed8",border:"1px solid #bfdbfe"}}>
-                                    {d}
-                                  </span>
-                                ))}
+                              <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8,maxHeight:120,overflowY:"auto"}}>
+                                {filteredDivs.map(d=>{
+                                  const dc2=getDivColor(d);
+                                  const isSel=cell.div===d;
+                                  return(
+                                    <span key={d} onClick={()=>setCell(pk.id,f,t,{div:d,type:cell.type==="open"?"pool":cell.type})}
+                                      style={{padding:"3px 10px",borderRadius:12,fontSize:11,fontWeight:800,cursor:"pointer",
+                                        background:isSel?dc2.border:dc2.bg,
+                                        color:isSel?"#fff":dc2.text,
+                                        border:`1.5px solid ${dc2.border}`,
+                                        boxShadow:isSel?`0 0 0 2px ${dc2.border}40`:"none",
+                                        transition:"all .1s"}}>
+                                      {d}
+                                    </span>
+                                  );
+                                })}
                               </div>
                               <div style={{fontSize:10,fontWeight:800,color:"#94a3b8",
                                 textTransform:"uppercase",letterSpacing:.8,marginBottom:5}}>Type</div>
