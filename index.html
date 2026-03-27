@@ -911,253 +911,275 @@ function GridBuilderView(){
   const NAVY="#1e3a5f";
   const B=(bg,fg,x={})=>({padding:"6px 13px",background:bg,color:fg,border:"none",borderRadius:5,fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",...x});
   const F={padding:"5px 8px",border:"1px solid #cbd5e1",borderRadius:5,fontSize:12,background:"#fff",color:"#0f172a"};
+  const SLOT_ABBR={pool:"",selim:"SE",gold:"G",silver:"S",bronze:"B",blocked:"✕",open:""};
 
   // ── State ───────────────────────────────────────────────
   const [parks,setParks]=useState([
-    {id:"pk_1",name:"Park 1",color:PARK_COLORS[0],fields:["Field 1","Field 2"]}
+    {id:"pk_1",name:"Complex 1",color:PARK_COLORS[0],fields:["Field 1","Field 2"]}
   ]);
+  const [activePkId,setActivePkId]=useState("pk_1");
   const [times,setTimes]=useState(DEFAULT_TIMES);
-  const [day,setDay]=useState("SAT"); // SAT | SUN
-  // grid: { "SAT|SUN" : { parkId_fieldName_time : {div,type} } }
+  const [day,setDay]=useState("SAT");
   const [grid,setGrid]=useState({SAT:{},SUN:{}});
-  const [selCell,setSelCell]=useState(null); // "pkId|field|time"
-  const [editPark,setEditPark]=useState(null); // park id being edited
-  const [newParkName,setNewParkName]=useState("");
+  const [selCell,setSelCell]=useState(null);
+  const [editPkId,setEditPkId]=useState(null);
   const [newField,setNewField]=useState("");
-  const [showExport,setShowExport]=useState(false);
-  const [divFilter,setDivFilter]=useState(""); // quick filter for division picker
+  const [showSummary,setShowSummary]=useState(false);
+  const [divFilter,setDivFilter]=useState("");
+  const [showAddTime,setShowAddTime]=useState(false);
+  const [customTime,setCustomTime]=useState("07:00");
 
+  const pk=parks.find(p=>p.id===activePkId)||parks[0];
   const dayGrid=grid[day]||{};
 
-  function cellKey(pkId,field,time){return `${pkId}|${field}|${time}`;}
-
+  function cellKey(pkId,field,time){return `${pkId}||${field}||${time}`;}
   function getCell(pkId,field,time){return dayGrid[cellKey(pkId,field,time)]||{div:"",type:"open"};}
-
   function setCell(pkId,field,time,updates){
     const key=cellKey(pkId,field,time);
     setGrid(prev=>{
       const dg={...(prev[day]||{})};
       const cur=dg[key]||{div:"",type:"open"};
       dg[key]={...cur,...updates};
+      if(dg[key].type==="open"&&!dg[key].div)delete dg[key];
       return{...prev,[day]:dg};
     });
     setSelCell(null);
+    setDivFilter("");
   }
 
-  function addPark(){
+  function addComplex(){
     const id=`pk_${Date.now()}`;
     const color=PARK_COLORS[parks.length%PARK_COLORS.length];
-    setParks(p=>[...p,{id,name:`Park ${parks.length+1}`,color,fields:["Field 1","Field 2"]}]);
+    const name=`Complex ${parks.length+1}`;
+    setParks(p=>[...p,{id,name,color,fields:["Field 1","Field 2"]}]);
+    setActivePkId(id);
+    setSelCell(null);
   }
-  function delPark(id){setParks(p=>p.filter(pk=>pk.id!==id));}
+  function delComplex(id){
+    const remaining=parks.filter(p=>p.id!==id);
+    setParks(remaining);
+    if(activePkId===id)setActivePkId(remaining[0]?.id||null);
+  }
   function updPark(id,updates){setParks(p=>p.map(pk=>pk.id===id?{...pk,...updates}:pk));}
-  function addFieldToPark(pkId,name){
-    if(!name.trim())return;
-    updPark(pkId,{fields:[...(parks.find(p=>p.id===pkId)?.fields||[]),name.trim()]});
+  function addField(){
+    if(!newField.trim()||!pk)return;
+    updPark(pk.id,{fields:[...pk.fields,newField.trim()]});
     setNewField("");
   }
-  function delFieldFromPark(pkId,fi){
-    const pk=parks.find(p=>p.id===pkId);
+  function delField(fi){
     if(!pk)return;
-    updPark(pkId,{fields:pk.fields.filter((_,i)=>i!==fi)});
+    updPark(pk.id,{fields:pk.fields.filter((_,i)=>i!==fi)});
   }
 
+  // Convert "HH:MM" → "H:MM AM/PM"
+  function timeTo12(t24){
+    const [h,m]=t24.split(":").map(Number);
+    const ap=h>=12?"PM":"AM", h12=h>12?h-12:h===0?12:h;
+    return `${h12}:${m.toString().padStart(2,"0")} ${ap}`;
+  }
   function addTime(){
-    const last=times[times.length-1]||"8:00 AM";
-    const [t,ap]=last.split(" ");
-    const [h,m]=t.split(":").map(Number);
-    let nh=h+(m===0?2:0), nm=m===0?0:0;
-    const nap=nh>=12?"PM":"AM";
-    const nh12=nh>12?nh-12:nh===0?12:nh;
-    const label=`${nh12}:${nm.toString().padStart(2,"0")} ${nap}`;
-    if(!times.includes(label))setTimes(t=>[...t,label]);
+    const label=timeTo12(customTime);
+    if(!times.includes(label))setTimes(ts=>[...ts,label].sort((a,b)=>{
+      const toM=s=>{const[t,ap]=s.split(" ");const[h,m]=t.split(":").map(Number);return(h%12+(ap==="PM"?12:0))*60+m;};
+      return toM(a)-toM(b);
+    }));
+    setShowAddTime(false);
   }
   function delTime(t){setTimes(ts=>ts.filter(x=>x!==t));}
 
-  // ── Division counts across both days ────────────────────
+  // ── Division totals across all complexes + days ─────────
   const divStats=React.useMemo(()=>{
     const counts={};
     ["SAT","SUN"].forEach(d=>{
-      Object.values(grid[d]||{}).forEach(cell=>{
-        if(cell.div&&cell.type!=="blocked"&&cell.type!=="open"){
-          counts[cell.div]=(counts[cell.div]||0)+1;
-        }
+      Object.values(grid[d]||{}).forEach(c=>{
+        if(c.div&&c.type!=="blocked"&&c.type!=="open")counts[c.div]=(counts[c.div]||0)+1;
       });
     });
     return counts;
   },[grid]);
 
-  // ── Selected cell info ───────────────────────────────────
-  const [selPkId,selField,selTime]=selCell?(selCell.split("|")):[];
-  const selVal=selCell?getCell(selPkId,selField,selTime):{div:"",type:"open"};
-
-  // ── Export summary ──────────────────────────────────────
-  const exportLines=React.useMemo(()=>{
-    return parks.map(pk=>{
-      const rows=["SAT","SUN"].flatMap(d=>
-        times.map(t=>{
-          const cells=pk.fields.map(f=>getCell(pk.id,f,t));
-          return{day:d,time:t,cells};
-        })
-      );
-      return{park:pk,rows};
+  // ── Per-complex slot totals for active park ─────────────
+  const pkDivStats=React.useMemo(()=>{
+    if(!pk)return{};
+    const counts={};
+    ["SAT","SUN"].forEach(d=>{
+      pk.fields.forEach(f=>{
+        times.forEach(t=>{
+          const c=(grid[d]||{})[cellKey(pk.id,f,t)];
+          if(c?.div&&c.type!=="blocked"&&c.type!=="open")counts[c.div]=(counts[c.div]||0)+1;
+        });
+      });
     });
-  },[parks,times,grid,day]);
+    return counts;
+  },[pk,grid,times]);
 
   const filteredDivs=divFilter?DIV_CODES.filter(d=>d.toLowerCase().includes(divFilter.toLowerCase())):DIV_CODES;
 
+  if(!pk&&parks.length===0) return(
+    <div style={{padding:"40px 22px",textAlign:"center"}}>
+      <div style={{fontSize:42,marginBottom:12}}>🏟</div>
+      <div style={{fontSize:16,fontWeight:800,color:NAVY,marginBottom:6}}>No complexes yet</div>
+      <div style={{fontSize:13,color:"#64748b",marginBottom:18}}>Add your first tournament complex to start building the grid</div>
+      <button onClick={addComplex} style={B("#2563eb","#fff",{fontSize:14,padding:"10px 28px"})}>+ Add Complex</button>
+    </div>
+  );
+
   return(
-    <div style={{padding:"18px 22px",maxWidth:1400,margin:"0 auto"}}>
-      {/* ── Header ── */}
-      <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:20,flexWrap:"wrap"}}>
+    <div style={{padding:"14px 18px",maxWidth:1600,margin:"0 auto"}}>
+
+      {/* ── Top bar ── */}
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:14,flexWrap:"wrap"}}>
         <div>
-          <div style={{fontSize:22,fontWeight:900,color:NAVY}}>🗺 Grid Builder</div>
-          <div style={{fontSize:12,color:"#64748b",marginTop:2}}>Plan which divisions play on which fields at each time slot — across all your parks</div>
+          <div style={{fontSize:20,fontWeight:900,color:NAVY}}>🗺 Grid Builder</div>
+          <div style={{fontSize:11,color:"#64748b",marginTop:1}}>Plan divisions per field & time slot across all complexes</div>
         </div>
-        <div style={{marginLeft:"auto",display:"flex",gap:8,flexWrap:"wrap"}}>
-          <button onClick={addPark} style={B("#2563eb","#fff")}>+ Add Park</button>
-          <button onClick={()=>setShowExport(e=>!e)} style={B("#16a34a","#fff")}>{showExport?"▲ Hide":"📊 Summary"}</button>
-        </div>
-      </div>
-
-      {/* ── Day toggle ── */}
-      <div style={{display:"flex",gap:0,marginBottom:18,borderRadius:8,overflow:"hidden",border:"2px solid #e2e8f0",width:"fit-content"}}>
-        {["SAT","SUN"].map(d=>(
-          <button key={d} onClick={()=>setDay(d)}
-            style={{padding:"9px 32px",border:"none",fontWeight:800,fontSize:13,cursor:"pointer",
-              background:day===d?NAVY:"#fff",color:day===d?"#fff":"#64748b",transition:"all .15s"}}>
-            {d==="SAT"?"Saturday":"Sunday"}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Division summary bar ── */}
-      {Object.keys(divStats).length>0&&(
-        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:14,padding:"10px 14px",
-          background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8}}>
-          <span style={{fontSize:10,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.8,alignSelf:"center",marginRight:4}}>Slots assigned:</span>
-          {Object.entries(divStats).sort((a,b)=>b[1]-a[1]).map(([div,cnt])=>{
-            const dc=getDivColor(div);
-            return(
-              <span key={div} style={{fontSize:11,fontWeight:800,padding:"3px 12px",borderRadius:20,
-                background:dc.bg,color:dc.text,border:`1.5px solid ${dc.border}`}}>
-                {div} <span style={{opacity:.7}}>×{cnt}</span>
-              </span>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ── Summary panel ── */}
-      {showExport&&(
-        <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:10,
-          padding:"16px 20px",marginBottom:18}}>
-          <div style={{fontWeight:800,fontSize:14,color:NAVY,marginBottom:12}}>Division Slot Summary (Both Days)</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:24}}>
-            {parks.map(pk=>{
-              const pkCells=["SAT","SUN"].flatMap(d=>
-                pk.fields.flatMap(f=>times.map(t=>getCell(pk.id,f,t)))
-              ).filter(c=>c.div&&c.type!=="open"&&c.type!=="blocked");
-              const pkDiv={};pkCells.forEach(c=>{pkDiv[c.div]=(pkDiv[c.div]||0)+1;});
-              return(
-                <div key={pk.id} style={{minWidth:160}}>
-                  <div style={{fontWeight:700,fontSize:12,color:pk.color,marginBottom:6,borderBottom:`2px solid ${pk.color}`,paddingBottom:4}}>{pk.name}</div>
-                  {Object.keys(pkDiv).length===0
-                    ?<div style={{fontSize:11,color:"#94a3b8"}}>No assignments yet</div>
-                    :Object.entries(pkDiv).map(([d,c])=>(
-                      <div key={d} style={{fontSize:11,display:"flex",justifyContent:"space-between",gap:12,color:"#334155",padding:"2px 0"}}>
-                        <span>{d}</span><span style={{fontWeight:700,color:NAVY}}>{c} slot{c!==1?"s":""}</span>
-                      </div>
-                    ))
-                  }
-                </div>
-              );
-            })}
+        <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          {/* SAT/SUN toggle */}
+          <div style={{display:"flex",borderRadius:7,overflow:"hidden",border:`2px solid ${pk?.color||NAVY}`,flexShrink:0}}>
+            {["SAT","SUN"].map(d=>(
+              <button key={d} onClick={()=>{setDay(d);setSelCell(null);}}
+                style={{padding:"7px 22px",border:"none",fontWeight:800,fontSize:12,cursor:"pointer",
+                  background:day===d?(pk?.color||NAVY):"#fff",
+                  color:day===d?"#fff":"#64748b",transition:"all .15s"}}>
+                {d==="SAT"?"Saturday":"Sunday"}
+              </button>
+            ))}
           </div>
+          <button onClick={()=>setShowSummary(s=>!s)} style={B("#f1f5f9","#475569",{fontSize:11})}>📊 Summary</button>
         </div>
-      )}
-
-      {/* ── Time row header strip ── */}
-      <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
-        <span style={{fontSize:11,fontWeight:700,color:"#64748b"}}>Time slots:</span>
-        {times.map(t=>(
-          <span key={t} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 10px",
-            background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:20,fontSize:11,fontWeight:600,color:"#0284c7"}}>
-            {t}
-            <span onClick={()=>delTime(t)} style={{cursor:"pointer",color:"#94a3b8",marginLeft:2,fontSize:13,lineHeight:1}}>×</span>
-          </span>
-        ))}
-        <button onClick={addTime} style={B("#e0f2fe","#0284c7",{fontSize:11,padding:"3px 10px",borderRadius:20})}>+ Add Time</button>
       </div>
 
-      {/* ── Parks ── */}
-      {parks.length===0&&(
-        <div style={{textAlign:"center",padding:"60px 20px",color:"#94a3b8",border:"2px dashed #e2e8f0",borderRadius:12}}>
-          <div style={{fontSize:36,marginBottom:8}}>🏟</div>
-          <div style={{fontSize:15,fontWeight:700,marginBottom:4}}>No parks yet</div>
-          <div style={{fontSize:12}}>Click "Add Park" to get started</div>
+      {/* ── Complex tabs (like Excel sheet tabs) ── */}
+      <div style={{display:"flex",alignItems:"flex-end",gap:0,marginBottom:0,overflowX:"auto",
+        borderBottom:`2px solid ${pk?.color||NAVY}`,paddingBottom:0,flexShrink:0}}>
+        {parks.map((p,pi)=>{
+          const isActive=p.id===activePkId;
+          return(
+            <div key={p.id} onClick={()=>{setActivePkId(p.id);setSelCell(null);setNewField("");}}
+              style={{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",
+                cursor:"pointer",fontWeight:isActive?800:600,fontSize:12,
+                whiteSpace:"nowrap",userSelect:"none",transition:"all .15s",
+                background:isActive?p.color:"#f1f5f9",
+                color:isActive?"#fff":"#64748b",
+                borderRadius:"8px 8px 0 0",
+                border:isActive?`2px solid ${p.color}`:"2px solid #e2e8f0",
+                borderBottom:isActive?"none":"2px solid #e2e8f0",
+                marginRight:2,marginBottom:isActive?-2:0,
+                boxShadow:isActive?"0 -2px 8px rgba(0,0,0,.1)":"none"}}>
+              {editPkId===p.id?(
+                <input value={p.name} onClick={e=>e.stopPropagation()}
+                  onChange={e=>updPark(p.id,{name:e.target.value})}
+                  onBlur={()=>setEditPkId(null)}
+                  onKeyDown={e=>e.key==="Enter"&&setEditPkId(null)}
+                  autoFocus
+                  style={{border:"none",background:"transparent",fontWeight:800,
+                    color:isActive?"#fff":"#1e3a5f",width:120,outline:"none",fontSize:12}}/>
+              ):(
+                <span onDoubleClick={e=>{e.stopPropagation();setEditPkId(p.id);}}
+                  title="Double-click to rename">{p.name}</span>
+              )}
+              <span style={{fontSize:10,opacity:.7}}>{p.fields.length}f</span>
+              <span onClick={e=>{e.stopPropagation();delComplex(p.id);}}
+                style={{fontSize:13,opacity:.6,cursor:"pointer",marginLeft:2,lineHeight:1}}
+                title="Remove complex">×</span>
+            </div>
+          );
+        })}
+        {/* Add complex tab */}
+        <div onClick={addComplex}
+          style={{display:"flex",alignItems:"center",gap:5,padding:"8px 14px",cursor:"pointer",
+            fontWeight:700,fontSize:12,color:"#2563eb",whiteSpace:"nowrap",
+            background:"#eff6ff",borderRadius:"8px 8px 0 0",
+            border:"2px solid #bfdbfe",borderBottom:"2px solid #e2e8f0",marginLeft:4}}>
+          + Add Complex
         </div>
-      )}
+      </div>
 
-      {parks.map((pk,pki)=>(
-        <div key={pk.id} style={{marginBottom:24,border:`2px solid ${pk.color}`,borderRadius:12,overflow:"hidden",boxShadow:"0 2px 10px rgba(0,0,0,.06)"}}>
-          {/* Park header */}
-          <div style={{background:pk.color,padding:"10px 16px",display:"flex",alignItems:"center",gap:10}}>
-            {editPark===pk.id?(
-              <input value={pk.name} onChange={e=>updPark(pk.id,{name:e.target.value})}
-                onBlur={()=>setEditPark(null)} onKeyDown={e=>e.key==="Enter"&&setEditPark(null)}
-                autoFocus style={{...F,background:"rgba(255,255,255,.15)",color:"#fff",
-                  border:"1px solid rgba(255,255,255,.3)",fontWeight:700,fontSize:14,flex:1,maxWidth:260}}/>
-            ):(
-              <span onClick={()=>setEditPark(pk.id)}
-                style={{fontWeight:800,fontSize:15,color:"#fff",cursor:"pointer",flex:1}}
-                title="Click to rename">{pk.name} ✏️</span>
-            )}
-            <span style={{fontSize:11,color:"rgba(255,255,255,.7)",fontWeight:500}}>
-              {pk.fields.length} field{pk.fields.length!==1?"s":""} · {times.length} time slots
-            </span>
-            {/* color picker */}
-            <input type="color" value={pk.color}
-              onChange={e=>updPark(pk.id,{color:e.target.value})}
-              style={{width:26,height:26,border:"none",borderRadius:4,cursor:"pointer",background:"none",padding:0}}
-              title="Change park color"/>
-            <button onClick={()=>delPark(pk.id)}
-              style={{...B("rgba(255,255,255,.15)","#fff",{padding:"4px 10px",fontSize:11})}}>✕ Remove</button>
-          </div>
+      {pk&&(
+        <div style={{border:`2px solid ${pk.color}`,borderTop:"none",borderRadius:"0 0 10px 10px",
+          background:"#fff",boxShadow:"0 4px 12px rgba(0,0,0,.07)"}}>
 
-          {/* Fields manager */}
-          <div style={{background:"#f8fafc",borderBottom:"1px solid #e2e8f0",padding:"8px 14px",
-            display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          {/* ── Complex toolbar ── */}
+          <div style={{background:"#f8fafc",borderBottom:"1px solid #e2e8f0",
+            padding:"8px 14px",display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            {/* Color picker */}
+            <input type="color" value={pk.color} onChange={e=>updPark(pk.id,{color:e.target.value})}
+              style={{width:24,height:24,border:"none",borderRadius:4,cursor:"pointer",padding:0}}
+              title="Complex color"/>
+            <span style={{fontSize:11,fontWeight:700,color:"#64748b",marginRight:4}}>Fields:</span>
             {pk.fields.map((f,fi)=>(
-              <span key={fi} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"4px 10px",
-                background:"#fff",border:`1px solid ${pk.color}40`,borderRadius:20,fontSize:11,
+              <span key={fi} style={{display:"inline-flex",alignItems:"center",gap:3,padding:"3px 8px",
+                background:"#fff",border:`1.5px solid ${pk.color}50`,borderRadius:16,fontSize:11,
                 fontWeight:600,color:pk.color}}>
                 {f}
-                <span onClick={()=>delFieldFromPark(pk.id,fi)}
-                  style={{cursor:"pointer",color:"#94a3b8",marginLeft:2}}>×</span>
+                <span onClick={()=>delField(fi)} style={{cursor:"pointer",color:"#94a3b8",fontSize:12}}>×</span>
               </span>
             ))}
             <input value={newField} onChange={e=>setNewField(e.target.value)}
-              onKeyDown={e=>e.key==="Enter"&&addFieldToPark(pk.id,newField)}
-              placeholder="New field name…"
-              style={{...F,width:130,fontSize:11}}/>
-            <button onClick={()=>addFieldToPark(pk.id,newField)}
-              style={B(pk.color,"#fff",{fontSize:11,padding:"4px 10px"})}>+ Add Field</button>
+              onKeyDown={e=>e.key==="Enter"&&addField()}
+              placeholder="Field name…" style={{...F,width:110,fontSize:11,padding:"3px 8px"}}/>
+            <button onClick={addField} style={B(pk.color,"#fff",{fontSize:11,padding:"4px 10px"})}>+ Add</button>
+            <div style={{marginLeft:"auto",display:"flex",gap:6,alignItems:"center"}}>
+              <span style={{fontSize:11,fontWeight:700,color:"#64748b"}}>Times:</span>
+              {times.map(t=>(
+                <span key={t} style={{display:"inline-flex",alignItems:"center",gap:3,padding:"2px 8px",
+                  background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:14,fontSize:10,
+                  fontWeight:600,color:"#0284c7"}}>
+                  {t}
+                  <span onClick={()=>delTime(t)} style={{cursor:"pointer",color:"#94a3b8",fontSize:11}}>×</span>
+                </span>
+              ))}
+              {showAddTime?(
+                <span style={{display:"inline-flex",alignItems:"center",gap:4}}>
+                  <input type="time" value={customTime} onChange={e=>setCustomTime(e.target.value)}
+                    style={{...F,padding:"2px 6px",fontSize:11,width:90}}/>
+                  <button onClick={addTime} style={B("#0284c7","#fff",{fontSize:10,padding:"2px 8px"})}>Add</button>
+                  <button onClick={()=>setShowAddTime(false)} style={B("#f1f5f9","#64748b",{fontSize:10,padding:"2px 8px"})}>✕</button>
+                </span>
+              ):(
+                <button onClick={()=>setShowAddTime(true)}
+                  style={B("#e0f2fe","#0284c7",{fontSize:10,padding:"2px 10px",borderRadius:14})}>+ Time</button>
+              )}
+            </div>
           </div>
 
-          {/* Grid table */}
+          {/* ── Division summary bar for this complex ── */}
+          {Object.keys(pkDivStats).length>0&&(
+            <div style={{display:"flex",flexWrap:"wrap",gap:5,padding:"6px 14px",
+              borderBottom:"1px solid #f1f5f9",background:"#fafafa"}}>
+              <span style={{fontSize:9,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",
+                letterSpacing:.8,alignSelf:"center",marginRight:2}}>This complex:</span>
+              {Object.entries(pkDivStats).sort((a,b)=>b[1]-a[1]).map(([div,cnt])=>{
+                const dc=getDivColor(div);
+                return(
+                  <span key={div} style={{fontSize:10,fontWeight:800,padding:"2px 9px",borderRadius:14,
+                    background:dc.bg,color:dc.text,border:`1px solid ${dc.border}`}}>
+                    {div} <span style={{opacity:.65}}>×{cnt}</span>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ── Grid table ── */}
           <div style={{overflowX:"auto"}}>
-            <table style={{borderCollapse:"collapse",width:"100%",fontSize:12}}>
+            <table style={{borderCollapse:"collapse",fontSize:11,tableLayout:"fixed"}}>
+              <colgroup>
+                <col style={{width:72}}/>
+                {pk.fields.map((_,fi)=><col key={fi} style={{width:88}}/>)}
+              </colgroup>
               <thead>
                 <tr>
-                  <th style={{background:pk.color,color:"#fff",padding:"8px 12px",textAlign:"left",
-                    minWidth:90,position:"sticky",left:0,zIndex:2,fontWeight:700,fontSize:11}}>
+                  <th style={{background:pk.color,color:"#fff",padding:"6px 8px",textAlign:"left",
+                    position:"sticky",left:0,zIndex:3,fontWeight:700,fontSize:10,
+                    letterSpacing:.5,textTransform:"uppercase"}}>
                     Time
                   </th>
                   {pk.fields.map((f,fi)=>(
-                    <th key={fi} style={{background:pk.color,color:"#fff",padding:"8px 10px",
-                      textAlign:"center",minWidth:140,borderLeft:"1px solid rgba(255,255,255,.2)",
-                      fontWeight:700,fontSize:11}}>
+                    <th key={fi} style={{background:pk.color,color:"#fff",padding:"6px 4px",
+                      textAlign:"center",borderLeft:"1px solid rgba(255,255,255,.2)",
+                      fontWeight:700,fontSize:10,overflow:"hidden",textOverflow:"ellipsis",
+                      whiteSpace:"nowrap",maxWidth:88}}>
                       {f}
                     </th>
                   ))}
@@ -1165,10 +1187,11 @@ function GridBuilderView(){
               </thead>
               <tbody>
                 {times.map((t,ti)=>(
-                  <tr key={t} style={{background:ti%2===0?"#fff":"#fafafa"}}>
-                    <td style={{padding:"8px 12px",fontWeight:700,fontSize:12,color:NAVY,
+                  <tr key={t}>
+                    <td style={{padding:"4px 8px",fontWeight:700,fontSize:11,color:NAVY,
                       borderBottom:"1px solid #f1f5f9",borderRight:"2px solid #e2e8f0",
-                      position:"sticky",left:0,background:ti%2===0?"#fff":"#fafafa",zIndex:1}}>
+                      position:"sticky",left:0,zIndex:1,whiteSpace:"nowrap",
+                      background:ti%2===0?"#fff":"#fafafa"}}>
                       {t}
                     </td>
                     {pk.fields.map((f,fi)=>{
@@ -1179,86 +1202,84 @@ function GridBuilderView(){
                       const dc=cell.div?getDivColor(cell.div):null;
                       const isBlocked=cell.type==="blocked";
                       const isEmpty=!cell.div&&cell.type==="open";
-                      // Cell bg: blocked=red, has division=div color, open=white
-                      const cellBg=isOpen?"#eff6ff":isBlocked?"#fee2e2":dc?dc.bg:"#fff";
-                      const cellBorder=isOpen?`2px solid ${pk.color}`:dc?`1.5px solid ${dc.border}`:"1px solid #e2e8f0";
+                      const cellBg=isOpen?"#dbeafe":isBlocked?"#fee2e2":dc?dc.bg:ti%2===0?"#fff":"#fafafa";
+                      const abbr=SLOT_ABBR[cell.type]||"";
                       return(
-                        <td key={fi} onClick={()=>setSelCell(isOpen?null:key)}
+                        <td key={fi} onClick={()=>{setSelCell(isOpen?null:key);if(!isOpen)setDivFilter("");}}
                           style={{borderLeft:"1px solid #e2e8f0",borderBottom:"1px solid #f1f5f9",
-                            padding:3,textAlign:"center",cursor:"pointer",
-                            background:cellBg,transition:"all .1s",position:"relative"}}>
-                          {/* colored left-edge accent bar */}
-                          {dc&&!isOpen&&(
-                            <div style={{position:"absolute",top:0,left:0,bottom:0,width:4,
-                              background:dc.border,borderRadius:"0 0 0 0"}}/>
-                          )}
+                            padding:0,textAlign:"center",cursor:"pointer",background:cellBg,
+                            outline:isOpen?`2px solid ${pk.color}`:"none",
+                            outlineOffset:-1,transition:"background .1s",position:"relative",
+                            height:36}}>
                           {isEmpty?(
-                            <div style={{padding:"10px 4px",color:isOpen?"#2563eb":"#cbd5e1",
-                              fontSize:11,fontWeight:isOpen?700:400}}>
-                              {isOpen?"▼ select":"— open —"}
+                            <div style={{height:"100%",display:"flex",alignItems:"center",justifyContent:"center",
+                              color:isOpen?pk.color:"#d1d5db",fontSize:10,fontWeight:isOpen?700:400}}>
+                              {isOpen?"▼":"·"}
                             </div>
                           ):isBlocked?(
-                            <div style={{padding:"8px 4px"}}>
-                              <div style={{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:.5}}>BLOCKED</div>
+                            <div style={{height:"100%",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                              <span style={{fontSize:9,fontWeight:800,color:"#dc2626"}}>BLOCKED</span>
                             </div>
                           ):(
-                            <div style={{padding:"6px 4px 6px 8px"}}>
-                              <div style={{fontWeight:900,fontSize:13,color:dc?dc.text:"#1e3a5f",lineHeight:1.1}}>
-                                {cell.div||"—"}
-                              </div>
-                              {cell.type!=="open"&&cell.type!=="pool"&&(
-                                <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",
-                                  color:st.color,letterSpacing:.5,marginTop:2,
-                                  background:st.bg,display:"inline-block",padding:"1px 5px",
-                                  borderRadius:3,border:`1px solid ${st.color}40`}}>
-                                  {st.label}
-                                </div>
+                            <div style={{height:"100%",display:"flex",flexDirection:"column",
+                              alignItems:"center",justifyContent:"center",padding:"2px 3px",
+                              borderLeft:`3px solid ${dc?.border||"transparent"}`}}>
+                              <span style={{fontWeight:900,fontSize:12,color:dc?dc.text:"#1e3a5f",lineHeight:1,
+                                overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:78}}>
+                                {cell.div}
+                              </span>
+                              {abbr&&(
+                                <span style={{fontSize:8,fontWeight:800,color:st.color,letterSpacing:.3,
+                                  marginTop:1,textTransform:"uppercase"}}>{abbr}</span>
                               )}
                             </div>
                           )}
 
-                          {/* Inline picker — shown when cell is selected */}
+                          {/* ── Cell picker popover ── */}
                           {isOpen&&(
                             <div onClick={e=>e.stopPropagation()}
-                              style={{position:"absolute",top:"100%",left:0,zIndex:50,
-                                background:"#fff",border:"1.5px solid #2563eb",borderRadius:8,
-                                boxShadow:"0 8px 24px rgba(0,0,0,.15)",padding:10,minWidth:200,
-                                textAlign:"left"}}>
-                              <div style={{fontSize:10,fontWeight:800,color:"#94a3b8",
-                                textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Division</div>
+                              style={{position:"absolute",top:"100%",left:fi>pk.fields.length-4?undefined:0,
+                                right:fi>pk.fields.length-4?0:undefined,
+                                zIndex:60,background:"#fff",border:`2px solid ${pk.color}`,
+                                borderRadius:9,boxShadow:"0 10px 32px rgba(0,0,0,.18)",
+                                padding:12,minWidth:220,textAlign:"left"}}>
+                              <div style={{fontSize:9,fontWeight:800,color:"#94a3b8",
+                                textTransform:"uppercase",letterSpacing:.8,marginBottom:5}}>Division</div>
                               <input value={divFilter} onChange={e=>setDivFilter(e.target.value)}
-                                placeholder="Filter…" style={{...F,width:"100%",marginBottom:6,fontSize:11}}/>
-                              <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8,maxHeight:120,overflowY:"auto"}}>
+                                placeholder="Filter divisions…" autoFocus
+                                style={{...F,width:"100%",marginBottom:6,fontSize:11,padding:"4px 7px"}}/>
+                              <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:10,
+                                maxHeight:130,overflowY:"auto"}}>
                                 {filteredDivs.map(d=>{
                                   const dc2=getDivColor(d);
                                   const isSel=cell.div===d;
                                   return(
                                     <span key={d} onClick={()=>setCell(pk.id,f,t,{div:d,type:cell.type==="open"?"pool":cell.type})}
-                                      style={{padding:"3px 10px",borderRadius:12,fontSize:11,fontWeight:800,cursor:"pointer",
-                                        background:isSel?dc2.border:dc2.bg,
-                                        color:isSel?"#fff":dc2.text,
-                                        border:`1.5px solid ${dc2.border}`,
-                                        boxShadow:isSel?`0 0 0 2px ${dc2.border}40`:"none",
+                                      style={{padding:"3px 9px",borderRadius:11,fontSize:11,fontWeight:800,
+                                        cursor:"pointer",background:isSel?dc2.border:dc2.bg,
+                                        color:isSel?"#fff":dc2.text,border:`1.5px solid ${dc2.border}`,
+                                        boxShadow:isSel?`0 0 0 2px ${dc2.border}50`:"none",
                                         transition:"all .1s"}}>
                                       {d}
                                     </span>
                                   );
                                 })}
                               </div>
-                              <div style={{fontSize:10,fontWeight:800,color:"#94a3b8",
-                                textTransform:"uppercase",letterSpacing:.8,marginBottom:5}}>Type</div>
-                              <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
+                              <div style={{fontSize:9,fontWeight:800,color:"#94a3b8",
+                                textTransform:"uppercase",letterSpacing:.8,marginBottom:5}}>Slot Type</div>
+                              <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:10}}>
                                 {SLOT_TYPES.filter(s=>s.id!=="open").map(s=>(
                                   <span key={s.id} onClick={()=>setCell(pk.id,f,t,{type:s.id})}
-                                    style={{padding:"3px 8px",borderRadius:12,fontSize:10,fontWeight:700,cursor:"pointer",
-                                      background:cell.type===s.id?s.color:s.bg,
-                                      color:cell.type===s.id?"#fff":s.color,border:`1px solid ${s.color}40`}}>
+                                    style={{padding:"3px 8px",borderRadius:10,fontSize:10,fontWeight:700,
+                                      cursor:"pointer",background:cell.type===s.id?s.color:s.bg,
+                                      color:cell.type===s.id?"#fff":s.color,
+                                      border:`1px solid ${s.color}40`}}>
                                     {s.label}
                                   </span>
                                 ))}
                               </div>
                               <button onClick={()=>setCell(pk.id,f,t,{div:"",type:"open"})}
-                                style={B("#fee2e2","#dc2626",{fontSize:10,padding:"3px 10px",width:"100%"})}>
+                                style={B("#fef2f2","#dc2626",{fontSize:10,padding:"4px 10px",width:"100%",borderRadius:6})}>
                                 Clear Cell
                               </button>
                             </div>
@@ -1272,16 +1293,76 @@ function GridBuilderView(){
             </table>
           </div>
         </div>
-      ))}
+      )}
 
-      {/* ── Quick legend ── */}
-      <div style={{display:"flex",gap:10,flexWrap:"wrap",marginTop:8}}>
+      {/* ── Summary panel (all complexes) ── */}
+      {showSummary&&(
+        <div style={{marginTop:16,background:"#f8fafc",border:"1px solid #e2e8f0",
+          borderRadius:10,padding:"14px 18px"}}>
+          <div style={{fontWeight:800,fontSize:13,color:NAVY,marginBottom:12}}>
+            📊 All Complexes — Division Slot Summary (SAT + SUN)
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:20}}>
+            {parks.map(p=>{
+              const pStats={};
+              ["SAT","SUN"].forEach(d=>{
+                p.fields.forEach(f=>{
+                  times.forEach(t=>{
+                    const c=(grid[d]||{})[cellKey(p.id,f,t)];
+                    if(c?.div&&c.type!=="blocked"&&c.type!=="open")pStats[c.div]=(pStats[c.div]||0)+1;
+                  });
+                });
+              });
+              return(
+                <div key={p.id} style={{minWidth:150}}>
+                  <div style={{fontWeight:800,fontSize:12,color:p.color,marginBottom:6,
+                    borderBottom:`2px solid ${p.color}`,paddingBottom:3}}>{p.name}</div>
+                  {Object.keys(pStats).length===0
+                    ?<div style={{fontSize:11,color:"#94a3b8"}}>No assignments</div>
+                    :Object.entries(pStats).sort((a,b)=>b[1]-a[1]).map(([d,c])=>{
+                      const dc=getDivColor(d);
+                      return(
+                        <div key={d} style={{display:"flex",alignItems:"center",gap:6,padding:"2px 0"}}>
+                          <span style={{fontSize:10,fontWeight:800,padding:"1px 7px",borderRadius:10,
+                            background:dc.bg,color:dc.text,border:`1px solid ${dc.border}`}}>{d}</span>
+                          <span style={{fontSize:11,color:"#64748b",fontWeight:600}}>{c} slot{c!==1?"s":""}</span>
+                        </div>
+                      );
+                    })
+                  }
+                </div>
+              );
+            })}
+          </div>
+          {/* Grand total */}
+          {Object.keys(divStats).length>0&&(
+            <div style={{marginTop:14,paddingTop:12,borderTop:"1px solid #e2e8f0"}}>
+              <div style={{fontWeight:800,fontSize:11,color:NAVY,marginBottom:8}}>Event Total (All Complexes)</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                {Object.entries(divStats).sort((a,b)=>b[1]-a[1]).map(([div,cnt])=>{
+                  const dc=getDivColor(div);
+                  return(
+                    <span key={div} style={{fontSize:11,fontWeight:800,padding:"3px 12px",borderRadius:20,
+                      background:dc.bg,color:dc.text,border:`1.5px solid ${dc.border}`}}>
+                      {div} <span style={{opacity:.7}}>×{cnt}</span>
+                    </span>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Legend ── */}
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:12,alignItems:"center"}}>
+        <span style={{fontSize:10,color:"#94a3b8",fontWeight:700}}>Types:</span>
         {SLOT_TYPES.filter(s=>s.id!=="open").map(s=>(
-          <span key={s.id} style={{display:"inline-flex",alignItems:"center",gap:5,
-            padding:"4px 10px",borderRadius:20,fontSize:10,fontWeight:700,
+          <span key={s.id} style={{display:"inline-flex",alignItems:"center",gap:4,
+            padding:"3px 9px",borderRadius:14,fontSize:10,fontWeight:700,
             background:s.bg,color:s.color,border:`1px solid ${s.color}40`}}>
-            <span style={{width:8,height:8,borderRadius:"50%",background:s.color,display:"inline-block"}}/>
-            {s.label}
+            <span style={{width:6,height:6,borderRadius:"50%",background:s.color,display:"inline-block"}}/>
+            {s.label}{SLOT_ABBR[s.id]?` (${SLOT_ABBR[s.id]})`:""}
           </span>
         ))}
       </div>
