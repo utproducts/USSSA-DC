@@ -886,6 +886,8 @@ function LayoutView({games,setGames,teams}){
   const [d1End,setD1End]=useState("19:00");
   const [remStart,setRemStart]=useState("07:00");
   const [remEnd,setRemEnd]=useState("19:00");
+  const [evtStart,setEvtStart]=useState(new Date().toISOString().slice(0,10));
+  const [evtEnd,setEvtEnd]=useState(new Date().toISOString().slice(0,10));
   const [startRow,setStartRow]=useState("1");
   const [timeVar,setTimeVar]=useState("5");
   const [timeAct,setTimeAct]=useState("increase");
@@ -905,9 +907,19 @@ function LayoutView({games,setGames,teams}){
   const dayGroups=[...new Set(rows.map(r=>r.date))].sort();
 
   function submitFieldData(){
-    const len=parseInt(gl);const base=new Date();const r=[];let n=1;
-    let cur=toMins(d1Start),end=toMins(d1End);
-    while(cur<=end){r.push({id:`r_${Date.now()}_${n}`,num:n++,date:fmtISO(base),time:toLabel(cur),cells:{}});cur+=len;}
+    const len=parseInt(gl);
+    // Build one slot row per game time per event day
+    const days=[];
+    const s=new Date(evtStart+'T12:00:00');
+    const e=new Date(evtEnd+'T12:00:00');
+    if(isNaN(s)||isNaN(e)){alert("Please set valid Event Start and End dates.");return;}
+    for(let d=new Date(s);d<=e;d.setDate(d.getDate()+1)) days.push(fmtISO(new Date(d)));
+    if(!days.length)days.push(fmtISO(new Date()));
+    const r=[];let n=1;
+    days.forEach((date,di)=>{
+      let cur=toMins(di===0?d1Start:remStart),endMin=toMins(di===0?d1End:remEnd);
+      while(cur<=endMin){r.push({id:`r_${Date.now()}_${n}`,num:n++,date,time:toLabel(cur),cells:{}});cur+=len;}
+    });
     setRows(r);
   }
   function setResetTimes(){
@@ -988,6 +1000,37 @@ function LayoutView({games,setGames,teams}){
                 {[
                   ["# Fields",<select value={nf} onChange={e=>setNf(+e.target.value)} style={F}>{Array.from({length:50},(_,i)=><option key={i+1}>{i+1}</option>)}</select>],
                   ["Game Time Length",<select value={gl} onChange={e=>setGl(e.target.value)} style={F}><option value="60">1 hour</option><option value="75">1 hr 15 min</option><option value="90">1 hr 30 min</option><option value="105">1 hr 45 min</option><option value="120">2 hours</option></select>],
+                ].map(([lbl,ctrl])=>(
+                  <div key={lbl} style={{display:"flex",alignItems:"center",gap:10}}>
+                    <span style={{fontSize:12,fontWeight:600,color:"#475569",minWidth:145,whiteSpace:"nowrap"}}>{lbl}</span>
+                    {ctrl}
+                  </div>
+                ))}
+                {/* Event date range */}
+                <div style={{marginTop:4,padding:"10px 12px",background:"#f0f9ff",border:"1.5px solid #bae6fd",borderRadius:7}}>
+                  <div style={{fontSize:10,fontWeight:800,color:"#0284c7",textTransform:"uppercase",letterSpacing:.8,marginBottom:8}}>📅 Event Dates</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                    {[
+                      ["Start Date",evtStart,setEvtStart],
+                      ["End Date",evtEnd,setEvtEnd],
+                    ].map(([lbl,val,setter])=>(
+                      <div key={lbl} style={{display:"flex",alignItems:"center",gap:10}}>
+                        <span style={{fontSize:12,fontWeight:600,color:"#475569",minWidth:72}}>{lbl}</span>
+                        <input type="date" value={val} onChange={e=>setter(e.target.value)}
+                          style={{...F,color:"#0f172a",fontWeight:600,letterSpacing:.3}}/>
+                      </div>
+                    ))}
+                  </div>
+                  {evtStart&&evtEnd&&evtEnd>=evtStart&&(
+                    <div style={{fontSize:11,color:"#0284c7",marginTop:6}}>
+                      {(()=>{
+                        const days=Math.round((new Date(evtEnd+'T12:00:00')-new Date(evtStart+'T12:00:00'))/(86400000))+1;
+                        return `${days} day${days!==1?"s":""}`;
+                      })()}
+                    </div>
+                  )}
+                </div>
+                {[
                   ["Time Range (Day 1)",<div style={{display:"flex",gap:5,alignItems:"center"}}><input type="time" value={d1Start} onChange={e=>setD1Start(e.target.value)} style={{...F,width:92}}/><span style={{color:"#94a3b8",fontSize:11}}>to</span><input type="time" value={d1End} onChange={e=>setD1End(e.target.value)} style={{...F,width:92}}/></div>],
                   ["Remaining Days",<div style={{display:"flex",gap:5,alignItems:"center"}}><input type="time" value={remStart} onChange={e=>setRemStart(e.target.value)} style={{...F,width:92}}/><span style={{color:"#94a3b8",fontSize:11}}>to</span><input type="time" value={remEnd} onChange={e=>setRemEnd(e.target.value)} style={{...F,width:92}}/></div>],
                 ].map(([lbl,ctrl])=>(
