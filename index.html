@@ -1074,18 +1074,14 @@ function LayoutView({games,setGames,teams}){
                       const isSel=teamPick.includes(t.id);
                       return(
                         <div key={t.id} onClick={()=>{
-                          setTeamPick(prev=>{
-                            if(prev.includes(t.id))return prev.filter(x=>x!==t.id);
-                            const next=[...prev,t.id];
-                            if(next.length===2){
-                              // Create the game
-                              const gameId=`gx_${Date.now()}`;
-                              const num=`G${games.length+1}`;
-                              setGames(pg=>[...pg,{id:gameId,num,pool:gamePool,date:"",time:"",field:"",t1:next[0],t2:next[1],s1:null,s2:null,status:"scheduled"}]);
-                              return [];
-                            }
-                            return next;
-                          });
+                          if(teamPick.includes(t.id)){setTeamPick(teamPick.filter(x=>x!==t.id));return;}
+                          if(teamPick.length===0){setTeamPick([t.id]);return;}
+                          // Second pick — create game immediately
+                          const t1id=teamPick[0],t2id=t.id;
+                          const gameId=`gx_${Date.now()}`;
+                          const num=`G${games.length+1}`;
+                          setGames(pg=>[...pg,{id:gameId,num,pool:gamePool,date:"",time:"",field:"",t1:t1id,t2:t2id,s1:null,s2:null,status:"scheduled"}]);
+                          setTeamPick([]);
                         }} style={{
                           padding:"6px 10px",borderRadius:6,cursor:"pointer",userSelect:"none",fontSize:12,fontWeight:600,
                           border:isSel?"2px solid #2563eb":"1px solid #e2e8f0",
