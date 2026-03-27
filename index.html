@@ -4834,6 +4834,7 @@ function Dashboard({events,onSelect,onNav}){
   const [seasonF,setSeasonF]=useState("all");
   const [directorF,setDirectorF]=useState("all");
   const [statureF,setStatureF]=useState("all");
+  const [evTab,setEvTab]=useState("active");
   const getYear=d=>{const m=d.match(/\d{4}/);return m?m[0]:null;};
   const seasons=[...new Set(events.map(e=>getYear(e.date)).filter(Boolean))].sort((a,b)=>b-a);
   const directors=[...new Set(events.map(e=>e.director).filter(Boolean))].sort();
@@ -4844,18 +4845,21 @@ function Dashboard({events,onSelect,onNav}){
     (directorF==="all"||e.director===directorF)&&
     (statureF==="all"||e.stature===statureF)
   );
+  const tabShown=shown.filter(e=>evTab==="all"||(evTab==="active"?e.status!=="complete":e.status==="complete"));
   const totalTeams=shown.reduce((a,ev)=>a+ev.divisions.reduce((b,d)=>b+(d.numTeams||0),0),0);
+  const TABS=[{id:"active",label:"Upcoming / Active",ico:"⏳",count:shown.filter(e=>e.status!=="complete").length},{id:"past",label:"Past Events",ico:"✅",count:shown.filter(e=>e.status==="complete").length},{id:"all",label:"All Events",ico:"📅",count:shown.length}];
+  const tabBase={padding:"8px 18px",fontSize:12,fontWeight:700,cursor:"pointer",border:"none",borderRadius:"6px 6px 0 0",transition:"background .15s"};
   return(
     <div>
       <div className="g4 mb4">
         <div className="stat-card"><div className="stat-ico" style={{background:"#fde8e8"}}>📅</div><div><div className="stat-val">{shown.length}</div><div className="stat-lbl">Total Events</div></div></div>
-        <div className="stat-card"><div className="stat-ico" style={{background:"#d6eaf8"}}>⏳</div><div><div className="stat-val">{shown.filter(e=>e.status==="upcoming").length}</div><div className="stat-lbl">Upcoming</div></div></div>
+        <div className="stat-card"><div className="stat-ico" style={{background:"#d6eaf8"}}>⏳</div><div><div className="stat-val">{shown.filter(e=>e.status!=="complete").length}</div><div className="stat-lbl">Upcoming / Active</div></div></div>
         <div className="stat-card"><div className="stat-ico" style={{background:"#d5f5e3"}}>✅</div><div><div className="stat-val">{shown.filter(e=>e.status==="complete").length}</div><div className="stat-lbl">Completed</div></div></div>
         <div className="stat-card"><div className="stat-ico" style={{background:"#fef5e7"}}>👥</div><div><div className="stat-val">{totalTeams}</div><div className="stat-lbl">Total Teams</div></div></div>
       </div>
       <div className="card">
         <div className="card-hd">
-          <span className="card-title">Event Information — {shown.length} of {events.length} Results</span>
+          <span className="card-title">Event Information — {tabShown.length} of {events.length} Results</span>
           <div className="flex-w gap-2">
             <select value={seasonF} onChange={e=>setSeasonF(e.target.value)}>
               <option value="all">All Seasons</option>
@@ -4876,13 +4880,16 @@ function Dashboard({events,onSelect,onNav}){
             <button className="btn btn-primary btn-sm" onClick={()=>onNav("create")}>+ Create New Event</button>
           </div>
         </div>
+        <div style={{display:"flex",gap:0,padding:"0 16px",background:"#f8fafc",borderBottom:"2px solid #e2e8f0"}}>
+          {TABS.map(t=><button key={t.id} onClick={()=>setEvTab(t.id)} style={{...tabBase,background:evTab===t.id?"#fff":"transparent",color:evTab===t.id?"#1e3a5f":"#64748b",borderBottom:evTab===t.id?"2px solid #1e3a5f":"2px solid transparent",marginBottom:"-2px"}}>{t.ico} {t.label} <span style={{background:evTab===t.id?"#1e3a5f":"#e2e8f0",color:evTab===t.id?"#fff":"#64748b",borderRadius:10,padding:"1px 7px",fontSize:11,marginLeft:4,fontWeight:700}}>{t.count}</span></button>)}
+        </div>
         <div className="tbl-scroll">
           <table>
             <thead><tr>
               <th style={{width:14}}></th><th>Event ID</th><th>State</th><th>Start Date</th>
               <th>Event Name</th><th># Div</th><th>Teams</th><th>Stature</th><th>Director</th><th>Status</th><th style={{width:90}}>Actions</th>
             </tr></thead>
-            <tbody>{shown.map(ev=>(
+            <tbody>{tabShown.map(ev=>(
               <tr key={ev.id} onClick={()=>onSelect(ev)} style={{cursor:"pointer"}}>
                 <td style={{paddingLeft:12}}><div style={{width:8,height:8,borderRadius:"50%",background:ev.status==="complete"?"var(--green)":ev.status==="live"?"var(--red)":"var(--blue)"}}/></td>
                 <td className="fw7 t-sm">{ev.evid}</td>
