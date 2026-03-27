@@ -1433,6 +1433,7 @@ function LayoutView({games:propGames,setGames,teams:propTeams}){
   const [showNames,setShowNames]=useState(false);
   const [teamPick,setTeamPick]=useState([]);
   const [gamePool,setGamePool]=useState("A");
+  const [halfFill,setHalfFill]=useState(null); // {rowId,fi,t1Id} — cell waiting for 2nd team drag
   const [selAge,setSelAge]=useState(null);
 
   const fields=fieldNames.slice(0,nf);
@@ -1799,6 +1800,7 @@ function LayoutView({games:propGames,setGames,teams:propTeams}){
   function updRow(id,k,v){setRows(prev=>prev.map(r=>r.id===id?{...r,[k]:v}:r));}
   function clickCell(rowId,fi){
     const row=rows.find(r=>r.id===rowId);const cur=row?.cells[fi];
+    // Moving a picked-up game (from the ↩ icon)
     if(picked){
       if(!cur||cur==="blocked"){
         setRows(prev=>prev.map(r=>r.id===rowId?{...r,cells:{...r.cells,[fi]:picked}}:r));
@@ -1811,9 +1813,12 @@ function LayoutView({games:propGames,setGames,teams:propTeams}){
       }
       return;
     }
-    if(!cur){setRows(prev=>prev.map(r=>r.id===rowId?{...r,cells:{...r.cells,[fi]:"blocked"}}:r));}
+    // Toggle block on empty cells; cancel halfFill on that cell if set
+    if(!cur){
+      if(halfFill&&halfFill.rowId===rowId&&halfFill.fi===fi){setHalfFill(null);return;}
+      setRows(prev=>prev.map(r=>r.id===rowId?{...r,cells:{...r.cells,[fi]:"blocked"}}:r));
+    }
     else if(cur==="blocked"){setRows(prev=>prev.map(r=>{if(r.id!==rowId)return r;const c={...r.cells};delete c[fi];return{...r,cells:c};}));}
-    else{setRows(prev=>prev.map(r=>{if(r.id!==rowId)return r;const c={...r.cells};delete c[fi];return{...r,cells:c};}));}
   }
 
   // Style helpers
@@ -2045,29 +2050,34 @@ function LayoutView({games:propGames,setGames,teams:propTeams}){
             {selAge&&(
               <div style={{padding:"14px 16px"}}>
 
-                {/* Step indicator */}
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-                  <div style={{display:"flex",alignItems:"center",gap:6,
-                    padding:"8px 14px",borderRadius:8,flex:1,
-                    background:sel1?"#eff6ff":"#f8fafc",
-                    border:sel1?"1.5px solid #93c5fd":"1.5px dashed #cbd5e1"}}>
-                    <span style={{fontSize:18}}>{sel1?"✅":"1️⃣"}</span>
-                    <div>
-                      <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>{sel1?"Team 1 selected":"Step 1"}</div>
-                      <div style={{fontSize:12,fontWeight:700,color:sel1?"#1d4ed8":"#64748b"}}>{sel1?sel1.name:"Click a team below"}</div>
-                    </div>
-                    {sel1&&<button onClick={()=>setTeamPick([])} style={{marginLeft:"auto",fontSize:11,padding:"2px 8px",background:"none",border:"1px solid #93c5fd",borderRadius:4,cursor:"pointer",color:"#64748b"}}>✕</button>}
+                {/* Drag instruction banner */}
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14,
+                  padding:"9px 14px",borderRadius:8,background:"#eff6ff",border:"1.5px dashed #93c5fd"}}>
+                  <span style={{fontSize:18}}>👆</span>
+                  <div style={{fontSize:12,color:"#1d4ed8",fontWeight:600,lineHeight:1.4}}>
+                    <strong>Drag</strong> a team onto any open slot to start a matchup —
+                    then drag a <strong>second team</strong> onto the same slot to complete it.
                   </div>
-                  <span style={{fontSize:18,color:"#cbd5e1"}}>→</span>
-                  <div style={{display:"flex",alignItems:"center",gap:6,
-                    padding:"8px 14px",borderRadius:8,flex:1,
-                    background:"#f8fafc",border:"1.5px dashed #cbd5e1",opacity:sel1?1:.45}}>
-                    <span style={{fontSize:18}}>2️⃣</span>
-                    <div>
-                      <div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.5}}>Step 2</div>
-                      <div style={{fontSize:12,fontWeight:700,color:"#64748b"}}>{sel1?"Click the opponent":"Pick Team 1 first"}</div>
-                    </div>
-                  </div>
+                  {halfFill&&(
+                    <button onClick={()=>setHalfFill(null)}
+                      style={{marginLeft:"auto",fontSize:11,padding:"3px 9px",background:"none",
+                        border:"1px solid #93c5fd",borderRadius:4,cursor:"pointer",color:"#dc2626",whiteSpace:"nowrap"}}>
+                      ✕ Cancel
+                    </button>
+                  )}
+                </div>
+
+                {/* Pool selector */}
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+                  <span style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.5}}>Pool:</span>
+                  {["A","B","C","D","E","F","Open"].map(p=>(
+                    <button key={p} onClick={()=>setGamePool(p)}
+                      style={{padding:"3px 11px",borderRadius:6,border:gamePool===p?"2px solid #2563eb":"1px solid #d1d5db",
+                        background:gamePool===p?"#eff6ff":"#fff",color:gamePool===p?"#1d4ed8":"#374151",
+                        fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                      {p}
+                    </button>
+                  ))}
                 </div>
 
                 {/* Teams grouped by division */}
@@ -2079,29 +2089,23 @@ function LayoutView({games:propGames,setGames,teams:propTeams}){
                     </div>
                     <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
                       {ageTeams.filter(t=>t.cls===cls).map((t,ti)=>{
-                        const isSel=teamPick[0]===t.id;
+                        const isHalf1=halfFill&&halfFill.t1Id===t.id;
                         const seed=(t.pts||0)+(t.pr||0);
                         return(
-                          <div key={t.id} onClick={()=>{
-                            if(isSel){setTeamPick([]);return;}
-                            if(teamPick.length===0){setTeamPick([t.id]);return;}
-                            if(t.id===teamPick[0])return;
-                            const gameId=`gx_${Date.now()}`;
-                            const num=`G${games.length+1}`;
-                            setGames(pg=>[...pg,{id:gameId,num,pool:gamePool,division:cls,date:"",time:"",field:"",t1:teamPick[0],t2:t.id,s1:null,s2:null,status:"scheduled"}]);
-                            setTeamPick([]);
-                          }} style={{
-                            padding:"7px 12px",borderRadius:8,cursor:"pointer",userSelect:"none",
-                            border:isSel?"2px solid #2563eb":"1.5px solid #e2e8f0",
-                            background:isSel?"#dbeafe":teamPick.length>0&&!isSel?"#f0fdf4":"#fff",
-                            color:isSel?"#1d4ed8":"#0f172a",fontSize:13,fontWeight:600,
-                            boxShadow:isSel?"0 0 0 3px rgba(37,99,235,.15)":"0 1px 3px rgba(0,0,0,.06)",
-                            transform:isSel?"scale(1.03)":"scale(1)",transition:"all .12s",
-                            display:"flex",alignItems:"center",gap:7
-                          }}>
+                          <div key={t.id}
+                            draggable="true"
+                            onDragStart={e=>{e.dataTransfer.setData("teamId",t.id);e.dataTransfer.setData("teamCls",cls);e.dataTransfer.effectAllowed="copy";}}
+                            style={{
+                              padding:"7px 12px",borderRadius:8,cursor:"grab",userSelect:"none",
+                              border:isHalf1?"2px solid #2563eb":"1.5px solid #e2e8f0",
+                              background:isHalf1?"#dbeafe":"#fff",
+                              color:isHalf1?"#1d4ed8":"#0f172a",fontSize:13,fontWeight:600,
+                              boxShadow:isHalf1?"0 0 0 3px rgba(37,99,235,.15)":"0 1px 3px rgba(0,0,0,.06)",
+                              transition:"all .12s",display:"flex",alignItems:"center",gap:7
+                            }}>
                             {/* Seed rank badge */}
                             <span style={{width:20,height:20,borderRadius:"50%",
-                              background:isSel?"#1d4ed8":"#1e3a5f",color:"#fff",
+                              background:isHalf1?"#1d4ed8":"#1e3a5f",color:"#fff",
                               fontSize:9,fontWeight:900,display:"flex",alignItems:"center",
                               justifyContent:"center",flexShrink:0}}>{ti+1}</span>
                             <span>{t.name}</span>
@@ -2116,62 +2120,22 @@ function LayoutView({games:propGames,setGames,teams:propTeams}){
                     </div>
                   </div>
                 ))}
-
-                {/* Pool selector */}
-                <div style={{display:"flex",alignItems:"center",gap:10,marginTop:10,paddingTop:12,borderTop:"1px solid #f1f5f9"}}>
-                  <span style={{fontSize:12,fontWeight:700,color:"#475569"}}>Pool for new games:</span>
-                  {["A","B","C","D","E","F","Open"].map(p=>(
-                    <button key={p} onClick={()=>setGamePool(p)}
-                      style={{padding:"4px 12px",borderRadius:6,border:gamePool===p?"2px solid #2563eb":"1px solid #d1d5db",
-                        background:gamePool===p?"#eff6ff":"#fff",color:gamePool===p?"#1d4ed8":"#374151",
-                        fontWeight:700,fontSize:12,cursor:"pointer"}}>
-                      {p}
-                    </button>
-                  ))}
-                </div>
               </div>
             )}
           </div>
         );
       })()}
 
-      {/* ══ Unscheduled Games ══ */}
-      {unscheduled.length>0&&(
-        <div className="card mb4">
-          <div className="card-hd">
-            <span className="card-title">Unscheduled Games</span>
-            <span style={{fontSize:12,color:"#94a3b8",marginLeft:6,fontWeight:400}}>{unscheduled.length} remaining</span>
-            {picked&&<button onClick={()=>setPicked(null)} style={{marginLeft:"auto",...B("#fff","#dc2626",{border:"1.5px solid #fca5a5",padding:"4px 12px"})}}>✕ Cancel Selection</button>}
-          </div>
-          <div className="card-body" style={{display:"flex",flexWrap:"wrap",gap:6,maxHeight:160,overflowY:"auto"}}>
-            {unscheduled.map(g=>{
-              const isSel=picked===g.id;
-              const t1=tByIdFrom(g.t1,teams),t2=tByIdFrom(g.t2,teams);
-              return(
-                <div key={g.id} onClick={()=>setPicked(isSel?null:g.id)} style={{
-                  padding:"8px 11px",borderRadius:7,cursor:"pointer",userSelect:"none",minWidth:100,
-                  border:isSel?"2px solid #2563eb":"1px solid #e2e8f0",
-                  background:isSel?"#eff6ff":"#f8fafc",
-                  boxShadow:isSel?"0 0 0 3px rgba(37,99,235,.12)":"0 1px 2px rgba(0,0,0,.04)",
-                  transform:isSel?"translateY(-1px)":"none",transition:"all .1s"}}>
-                  <div style={{fontWeight:800,fontSize:13,color:isSel?"#1d4ed8":"#0f172a"}}>{g.num}</div>
-                  {showNames&&<div style={{fontSize:10,color:"#64748b",marginTop:1,lineHeight:1.3}}>{t1?.name?.split(" ").slice(-1)[0]||"TBD"} vs {t2?.name?.split(" ").slice(-1)[0]||"TBD"}</div>}
-                  {g.pool&&<span style={{fontSize:9,color:"#2563eb",fontWeight:700,display:"block",marginTop:2}}>Pool {g.pool}</span>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
+      {/* Picked-game move banner (only shows when moving a placed game via ↩ icon) */}
       {picked&&pickedGame&&(
         <div style={{background:"#eff6ff",border:"2px solid #93c5fd",borderRadius:8,padding:"10px 16px",
           marginBottom:12,display:"flex",alignItems:"center",gap:10,boxShadow:"0 2px 8px rgba(37,99,235,.1)"}}>
           <span style={{fontSize:22}}>✋</span>
           <div>
-            <strong style={{color:"#1d4ed8",fontSize:13}}>Game {pickedGame.num} selected</strong>
-            <span style={{fontSize:12,color:"#475569",marginLeft:8}}>Click any open cell to place it · click selected game again to deselect</span>
+            <strong style={{color:"#1d4ed8",fontSize:13}}>Moving {pickedGame.num}</strong>
+            <span style={{fontSize:12,color:"#475569",marginLeft:8}}>Click any open slot to drop it</span>
           </div>
+          <button onClick={()=>setPicked(null)} style={{marginLeft:"auto",...B("#fff","#dc2626",{border:"1.5px solid #fca5a5",padding:"4px 12px"})}}>✕ Cancel</button>
         </div>
       )}
 
@@ -2252,18 +2216,43 @@ function LayoutView({games:propGames,setGames,teams:propTeams}){
                           const game=val&&val!=="blocked"?games.find(g=>g.id===val):null;
                           const isBlocked=val==="blocked";
                           const canPlace=!!picked&&!isBlocked&&!game;
+                          const isHalfThis=halfFill&&halfFill.rowId===row.id&&halfFill.fi===fi;
                           const t1n=game&&showNames?tByIdFrom(game.t1,teams)?.name?.split(" ").slice(-1)[0]||"?":null;
                           const t2n=game&&showNames?tByIdFrom(game.t2,teams)?.name?.split(" ").slice(-1)[0]||"?":null;
                           const [hBg,hBdr,tintEven,tintOdd,accentText,accentBorder]=getFC(fi);
                           let cellBg=ri%2===0?tintEven:tintOdd;
                           if(isBlocked)cellBg="#fee2e2";
+                          else if(isHalfThis)cellBg="#eff6ff";
                           else if(canPlace)cellBg=tintEven;
                           else if(game)cellBg=ri%2===0?tintEven:tintOdd;
                           return(
                             <td key={fi} onClick={()=>clickCell(row.id,fi)}
+                              onDragOver={e=>{if(!game&&!isBlocked){e.preventDefault();e.dataTransfer.dropEffect="copy";}}}
+                              onDrop={e=>{
+                                e.preventDefault();
+                                const teamId=e.dataTransfer.getData("teamId");
+                                const teamCls=e.dataTransfer.getData("teamCls");
+                                if(!teamId||game||isBlocked)return;
+                                if(isHalfThis){
+                                  // Second team — complete the matchup
+                                  if(teamId===halfFill.t1Id)return;
+                                  const gameId=`gx_${Date.now()}`;
+                                  const num=`G${games.length+1}`;
+                                  const cls=teams.find(t=>t.id===halfFill.t1Id)?.cls||teamCls||"";
+                                  setGames(pg=>[...pg,{id:gameId,num,pool:gamePool,division:cls,
+                                    date:row.date,time:row.time,field:fieldLabel,
+                                    t1:halfFill.t1Id,t2:teamId,s1:null,s2:null,status:"scheduled"}]);
+                                  setRows(prev=>prev.map(r=>r.id===row.id?{...r,cells:{...r.cells,[fi]:gameId}}:r));
+                                  setHalfFill(null);
+                                }else{
+                                  // First team — set halfFill
+                                  setHalfFill({rowId:row.id,fi,t1Id:teamId});
+                                }
+                              }}
                               style={{borderLeft:`3px solid ${hBdr}`,borderBottom:"1px solid #e2e8f0",
                                 padding:3,textAlign:"center",verticalAlign:"middle",
-                                minWidth:130,background:cellBg,cursor:"pointer",transition:"background .1s"}}>
+                                minWidth:130,background:cellBg,cursor:"pointer",transition:"background .1s",
+                                outline:isHalfThis?"2px dashed #2563eb":"none"}}>
                               {game?(
                                 <div style={{padding:"5px 4px"}}>
                                   <div style={{fontWeight:800,fontSize:13,color:hBg,lineHeight:1}}>{game.num}</div>
@@ -2285,15 +2274,24 @@ function LayoutView({games:propGames,setGames,teams:propTeams}){
                                   <div style={{display:"flex",justifyContent:"center",gap:10,marginTop:4}}>
                                     <span style={{color:"#16a34a",fontSize:13,fontWeight:700}}>✓</span>
                                     <span onClick={e=>{e.stopPropagation();setPicked(val);setRows(prev=>prev.map(r=>{if(r.id!==row.id)return r;const c={...r.cells};delete c[fi];return{...r,cells:c};}));}}
-                                      title="Unassign & pick up" style={{color:"#f59e0b",fontSize:13,cursor:"pointer"}}>↩</span>
-                                    <span onClick={e=>{e.stopPropagation();clickCell(row.id,fi);}} title="Remove"
+                                      title="Pick up & move" style={{color:"#f59e0b",fontSize:13,cursor:"pointer"}}>↩</span>
+                                    <span onClick={e=>{e.stopPropagation();setRows(prev=>prev.map(r=>{if(r.id!==row.id)return r;const c={...r.cells};delete c[fi];return{...r,cells:c};}));}} title="Remove"
                                       style={{color:"#dc2626",fontSize:13,cursor:"pointer"}}>✕</span>
                                   </div>
                                 </div>
                               ):isBlocked?(
                                 <div style={{padding:"8px 4px",background:"#fee2e2"}}>
                                   <div style={{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:.5}}>BLOCKED</div>
-                                  <div style={{fontSize:11,color:"#fca5a5",marginTop:2,cursor:"pointer"}}>click to unblock</div>
+                                  <div style={{fontSize:11,color:"#fca5a5",marginTop:2}}>click to unblock</div>
+                                </div>
+                              ):isHalfThis?(
+                                <div style={{padding:"6px 4px"}}>
+                                  <div style={{fontSize:10,fontWeight:800,color:"#1d4ed8",marginBottom:2}}>
+                                    {teams.find(t=>t.id===halfFill.t1Id)?.name?.split(" ").slice(-1)[0]||"Team 1"}
+                                  </div>
+                                  <div style={{fontSize:9,color:"#2563eb",fontWeight:600}}>drop 2nd team ↓</div>
+                                  <div onClick={e=>{e.stopPropagation();setHalfFill(null);}}
+                                    style={{fontSize:9,color:"#dc2626",cursor:"pointer",marginTop:2}}>✕ cancel</div>
                                 </div>
                               ):(
                                 <div style={{padding:"8px 4px"}}>
@@ -2302,7 +2300,7 @@ function LayoutView({games:propGames,setGames,teams:propTeams}){
                                   ):(
                                     <>
                                       <div style={{fontSize:10,fontWeight:700,color:accentText,marginBottom:2}}>{fieldLabel}</div>
-                                      <div style={{fontSize:9,color:"#94a3b8"}}>open slot</div>
+                                      <div style={{fontSize:9,color:"#94a3b8"}}>drag teams here</div>
                                     </>
                                   )}
                                 </div>
