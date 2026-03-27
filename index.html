@@ -1514,6 +1514,8 @@ function LayoutView({games:propGames,setGames,teams:propTeams}){
 
     for(const sheetName of wb.SheetNames){
       if(sheetName.toLowerCase()==='requests')continue;
+      // Derive short age-group label from sheet name: "9u-12u Pool Play" → "9u-12u"
+      const ageLabel=sheetName.replace(/\s*(pool\s*play|bracket|schedule)\s*/gi,'').trim()||sheetName;
       const sheet=wb.Sheets[sheetName];
       const data=XLSX.utils.sheet_to_json(sheet,{header:1,defval:null,raw:true});
       let curDay=null, sectionFields=[];
@@ -1555,7 +1557,7 @@ function LayoutView({games:propGames,setGames,teams:propTeams}){
             const [t1n,t2n]=parsed;
             const t1id=getOrMakeTeam(t1n), t2id=getOrMakeTeam(t2n);
             const gameId=`g_xl_${gameNum}`;
-            newGames.push({id:gameId,num:`G${gameNum}`,pool:'A',date:dateStr,time:timeStr,field:name,
+            newGames.push({id:gameId,num:`G${gameNum}`,pool:'A',division:ageLabel,date:dateStr,time:timeStr,field:name,
               t1:t1id,t2:t2id,s1:null,s2:null,status:'scheduled'});
             gameNum++;
             gridRow.cells[gIdx]=gameId;
@@ -2123,8 +2125,14 @@ function LayoutView({games:propGames,setGames,teams:propTeams}){
                                       <span style={{fontWeight:600}}>{t2n}</span>
                                     </div>
                                   )}
-                                  {game.pool&&<span style={{fontSize:9,background:accentBorder,color:hBg,borderRadius:3,
-                                    padding:"1px 5px",fontWeight:700,display:"inline-block",marginTop:2}}>Pool {game.pool}</span>}
+                                  {(game.division||game.pool)&&(
+                                    <div style={{display:"flex",gap:3,justifyContent:"center",flexWrap:"wrap",marginTop:2}}>
+                                      {game.division&&<span style={{fontSize:9,background:"rgba(0,0,0,.18)",color:"#fff",borderRadius:3,
+                                        padding:"1px 5px",fontWeight:800,display:"inline-block"}}>{game.division}</span>}
+                                      {game.pool&&<span style={{fontSize:9,background:accentBorder,color:hBg,borderRadius:3,
+                                        padding:"1px 5px",fontWeight:700,display:"inline-block"}}>Pool {game.pool}</span>}
+                                    </div>
+                                  )}
                                   <div style={{display:"flex",justifyContent:"center",gap:10,marginTop:4}}>
                                     <span style={{color:"#16a34a",fontSize:13,fontWeight:700}}>✓</span>
                                     <span onClick={e=>{e.stopPropagation();setPicked(val);setRows(prev=>prev.map(r=>{if(r.id!==row.id)return r;const c={...r.cells};delete c[fi];return{...r,cells:c};}));}}
