@@ -1393,17 +1393,22 @@ function GridBuilderView(){
 }
 
 /* ════════════════════ SCHEDULE BUILDER (formerly Layout Builder) ════════════════════ */
-function LayoutView({games:propGames,setGames,teams:propTeams}){
+function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedCtx}){
   // Imported games/teams layers — local state, avoids parent-batching race condition
   const [xlGames,setXlGames]=useState([]);
   const [xlTeams,setXlTeams]=useState([]);
   // Merge: imported games replace prop games when present
   const games=React.useMemo(()=>xlGames.length?xlGames:propGames,[propGames,xlGames]);
   const teams=React.useMemo(()=>{
+    if(schedCtx&&schedCtx.teams&&schedCtx.teams.length>0){
+      if(!xlTeams.length)return schedCtx.teams;
+      const existIds=new Set(schedCtx.teams.map(t=>t.id));
+      return [...schedCtx.teams,...xlTeams.filter(t=>!existIds.has(t.id))];
+    }
     if(!xlTeams.length)return propTeams;
     const existIds=new Set(propTeams.map(t=>t.id));
     return [...propTeams,...xlTeams.filter(t=>!existIds.has(t.id))];
-  },[propTeams,xlTeams]);
+  },[propTeams,xlTeams,schedCtx]);
   const fmtISO=d=>{const y=d.getFullYear(),m=(d.getMonth()+1).toString().padStart(2,'0'),dd=d.getDate().toString().padStart(2,'0');return`${y}-${m}-${dd}`;};
   const toMins=t=>{const[h,mn]=t.split(":").map(Number);return h*60+mn;};
   const toLabel=m=>{const h=Math.floor(m/60),mn=m%60,ap=h>=12?"PM":"AM",h12=h>12?h-12:h===0?12:h;return`${h12}:${mn.toString().padStart(2,"0")} ${ap}`;};
@@ -1882,6 +1887,12 @@ function LayoutView({games:propGames,setGames,teams:propTeams}){
 
   return(
     <div>
+      {schedCtx&&<div style={{background:"#dbeafe",border:"1px solid #93c5fd",borderRadius:8,padding:"12px 16px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div style={{fontSize:13,fontWeight:700,color:"#1e40af"}}>
+          📋 Scheduling from: <span style={{fontWeight:900}}>{schedCtx.evName}</span> • <span style={{fontWeight:900}}>{schedCtx.divLabel}</span> • {schedCtx.teams.length} teams
+        </div>
+        <button className="btn btn-secondary btn-sm" onClick={()=>setSchedCtx(null)} style={{padding:"3px 12px",fontSize:11}}>✕ Clear</button>
+      </div>}
       {/* ══ Settings Panel ══ */}
       <div className="card mb4">
         <div className="card-hd" style={{background:"linear-gradient(135deg,#1e3a5f,#2563eb)"}}>
@@ -4280,206 +4291,267 @@ function FlightView({flight,divId,divCode,eventParks}){
 }
 
 /* ════════════════════ EVENT DETAIL ════════════════════ */
-function EventDetailView({ev,onBack,onNav}){
+function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
   const divisions=(ev.divisions||[]).map(normDiv);
   const firstId=divisions.length>0?divisions[0].id:null;
-  const [divId,setDivId]=useState(firstId);
+  const [activeDivId,setActiveDivId]=useState(firstId);
+  const [evTab,setEvTab]=useState("roster");
+  const [dirDivId,setDirDivId]=useState(firstId);
   const [flightId,setFlightId]=useState(null);
-  const [evTab,setEvTab]=useState("director");
   const [pubTab,setPubTab]=useState("standings");
   const [pubDivId,setPubDivId]=useState(firstId);
-  const [divTeams,setDivTeams]=useState({});
-  const [teamSearch,setTeamSearch]=useState("");
-  const [addDivId,setAddDivId]=useState(firstId);
-
-  const div=divisions.find(d=>d.id===divId)||divisions[0]||null;
-  const flights=div?div.flights:[];
-  const flight=(flightId?flights.find(f=>f.id===flightId):null)||(flights.length>0?flights[0]:null);
-  const pubDivNorm=divisions.find(d=>d.id===pubDivId)||divisions[0];
-  const pubDivKey=pubDivNorm?pubDivNorm.id:"";
-  const pubTeams=teamDB(pubDivKey);
-  const pubGames=poolGamesDB(pubDivKey);
   const [pubBg,setPubBg]=useState(()=>bracketGamesDB(firstId||""));
+  const [teamSearch,setTeamSearch]=useState("");
+  const [showAdd,setShowAdd]=useState(false);
+  const [actionTeamId,setActionTeamId]=useState(null);
+  const [schedMsg,setSchedMsg]=useState("");
 
-  const activeDivId=addDivId||firstId||"";
-  const activeDivLabel=(divisions.find(d=>d.id===activeDivId)||divisions[0]||{label:"Division"}).label;
-  const currentTeams=divTeams[activeDivId]||[];
-  const searchResults=teamSearch.length>1?ALL_TEAMS.filter(t=>t.name.toLowerCase().includes(teamSearch.toLowerCase())).slice(0,10):[];
+  const rosterKey=String(ev.id)+"_"+(activeDivId||"");
+  const divRoster=evRosters[rosterKey]||[];
+  const activeDivObj=divisions.find(d=>d.id===activeDivId)||divisions[0]||null;
+  const dirDiv=divisions.find(d=>d.id===dirDivId)||divisions[0]||null;
+  const dirFlights=dirDiv?dirDiv.flights:[];
+  const dirFlight=(flightId?dirFlights.find(f=>f.id===flightId):null)||(dirFlights.length>0?dirFlights[0]:null);
+  const pubDivNorm=divisions.find(d=>d.id===pubDivId)||divisions[0];
+  const pubTeams=teamDB(pubDivNorm?pubDivNorm.id:"");
+  const pubGames=poolGamesDB(pubDivNorm?pubDivNorm.id:"");
+  const searchResults=teamSearch.length>1?ALL_TEAMS.filter(t=>t.name.toLowerCase().includes(teamSearch.toLowerCase())).slice(0,12):[];
   const totalTeams=divisions.reduce((a,d)=>a+d.numTeams,0);
+  const paidCount=divRoster.filter(t=>t.payStatus==="Paid").length;
+  const approvedCount=divRoster.filter(t=>t.entryStatus==="Approved").length;
+  const totalEntryDue=divRoster.reduce((a,t)=>a+(parseFloat(t.entryFee)||0)+(parseFloat(t.gateFee)||0),0);
+  const totalPaid=divRoster.filter(t=>t.payStatus==="Paid").reduce((a,t)=>a+(parseFloat(t.entryFee)||0)+(parseFloat(t.gateFee)||0),0);
+  const totalOwed=totalEntryDue-totalPaid;
+  const ENTRY_STATUSES=["Approved","Pending","Hold","Waitlist"];
+  const PAY_STATUSES=["Paid","Partial Paid","Not Paid"];
+  const inStyle={width:"100%",padding:"3px 6px",border:"1px solid #ddd",borderRadius:4,fontSize:12,boxSizing:"border-box"};
 
-  function addTeam(dId,team){
-    setDivTeams(p=>({...p,[dId]:[...((p[dId]||[]).filter(t=>t.id!==team.id)),team]}));
+  function updateRoster(fn){setEvRosters(p=>({...p,[rosterKey]:fn(p[rosterKey]||[])}));}
+  function addTeam(team){
+    const already=(evRosters[rosterKey]||[]).some(t=>t.id===team.id);
+    if(already)return;
+    updateRoster(prev=>[...prev,{...team,entryStatus:"Approved",payStatus:"Not Paid",entryFee:"",gateFee:"",notes:""}]);
+    setTeamSearch("");
   }
-  function removeTeam(dId,teamId){
-    setDivTeams(p=>({...p,[dId]:(p[dId]||[]).filter(t=>t.id!==teamId)}));
+  function removeTeam(teamId){updateRoster(prev=>prev.filter(t=>t.id!==teamId));}
+  function setField(teamId,field,val){updateRoster(prev=>prev.map(t=>t.id===teamId?{...t,[field]:val}:t));}
+  function handleSchedule(){
+    if(divRoster.length===0){setSchedMsg("Add teams to this division first before opening Schedule Builder.");return;}
+    setSchedMsg("");
+    if(onSchedule)onSchedule({evId:ev.id,evName:ev.name,divId:activeDivId,divLabel:activeDivObj?activeDivObj.label:"Division",teams:divRoster});
   }
-  function goSchedule(){if(onNav)onNav("s-layout");}
 
   return(
-    <div>
-      {/* ── Top bar ── */}
+    <div onClick={()=>setActionTeamId(null)}>
       <div className="flex-b mb4">
         <button className="btn btn-secondary btn-sm" onClick={onBack}>← Back to Events</button>
         <div className="flex-c gap-3">
-          <button className="btn btn-primary btn-sm" onClick={goSchedule}>📋 Open Schedule Builder</button>
+          <button className="btn btn-primary btn-sm" onClick={e=>{e.stopPropagation();handleSchedule();}}>📅 Schedule in Builder →</button>
           <Ev_StatusBadge status={ev.status}/>
         </div>
       </div>
-
-      {/* ── Event info card ── */}
       <div className="card mb4">
         <div className="card-body" style={{padding:"14px 20px"}}>
-          <div className="flex-b">
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:20,fontWeight:900,color:"var(--navy)",marginBottom:4}}>{ev.name}</div>
-              <div className="t-sm t-gray">📍 {ev.loc} · 📅 {ev.date} · {ev.stature}{ev.director?` · Director: ${ev.director}`:""}</div>
-              <div style={{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}>
-                {ev.format?<span className="badge b-blue">{ev.format}</span>:null}
-                <span className="badge b-gray">{divisions.length} Division{divisions.length!==1?"s":""}</span>
-                <span className="badge b-gray">{totalTeams} Teams</span>
-                {ev.lwc?<span className="badge b-gold">{ev.lwc==="open"?"Open for Entries":ev.lwc==="waitlist"?"Wait List":ev.lwc==="closed"?"Closed":"On Hold"}</span>:null}
-                {ev.minGames?<span className="badge b-gray">Min {ev.minGames} Games</span>:null}
-              </div>
-            </div>
+          <div style={{fontSize:20,fontWeight:900,color:"var(--navy)",marginBottom:4}}>{ev.name}</div>
+          <div className="t-sm t-gray">📍 {ev.loc} · 📅 {ev.date} · {ev.stature}{ev.director?` · Director: ${ev.director}`:""}</div>
+          <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}>
+            {ev.format?<span className="badge b-blue">{ev.format}</span>:null}
+            <span className="badge b-gray">{divisions.length} Division{divisions.length!==1?"s":""}</span>
+            <span className="badge b-gray">{totalTeams} Teams</span>
+            {ev.lwc?<span className="badge b-gold">{ev.lwc==="open"?"Open for Entries":ev.lwc==="waitlist"?"Wait List":ev.lwc==="closed"?"Closed":"On Hold"}</span>:null}
           </div>
         </div>
       </div>
-
-      {/* ── Tab bar ── */}
       <div className="tabs" style={{marginBottom:16}}>
-        <div className={`tab ${evTab==="director"?"active":""}`} onClick={()=>setEvTab("director")}>🔧 Director</div>
-        <div className={`tab ${evTab==="teams"?"active":""}`} onClick={()=>setEvTab("teams")}>👥 Teams</div>
+        <div className={`tab ${evTab==="roster"?"active":""}`} onClick={()=>setEvTab("roster")}>👥 Team Roster</div>
+        <div className={`tab ${evTab==="director"?"active":""}`} onClick={()=>setEvTab("director")}>🔧 Director Tools</div>
         <div className={`tab ${evTab==="public"?"active":""}`} onClick={()=>setEvTab("public")}>👁 Public View</div>
       </div>
-
-      {/* ── Director tab ── */}
-      {evTab==="director"?(
-        divisions.length===0?(
-          <div className="card"><div className="card-body" style={{textAlign:"center",padding:48,color:"var(--gray)"}}>No divisions configured for this event.</div></div>
-        ):(
-          <div>
-            <div className="div-pills">
-              {divisions.map(d=>(
-                <div key={d.id} className={`div-pill ${divId===d.id?"dp-on":"dp-off"}`}
-                  onClick={()=>{setDivId(d.id);setFlightId(null)}}>
-                  {d.label}<span style={{fontSize:10,opacity:.65,marginLeft:4}}>({d.numTeams}t)</span>
+      {evTab==="roster"?(
+        <div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16,alignItems:"center"}}>
+            {divisions.map(d=>{
+              const dk=String(ev.id)+"_"+d.id;
+              const cnt=(evRosters[dk]||[]).length;
+              return(
+                <div key={d.id} className={`div-pill ${activeDivId===d.id?"dp-on":"dp-off"}`}
+                  onClick={e=>{e.stopPropagation();setActiveDivId(d.id);setActionTeamId(null);setTeamSearch("");setSchedMsg("");}}>
+                  {d.label}<span style={{fontSize:10,opacity:.65,marginLeft:4}}>{cnt>0?"("+cnt+" rostered)":"("+d.numTeams+"t)"}</span>
                 </div>
-              ))}
+              );
+            })}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:16}}>
+            <div className="stat-card"><div className="stat-ico" style={{background:"#dbeafe"}}>👥</div><div><div className="stat-val">{divRoster.length}</div><div className="stat-lbl">Rostered</div></div></div>
+            <div className="stat-card"><div className="stat-ico" style={{background:"#dcfce7"}}>✓</div><div><div className="stat-val">{approvedCount}</div><div className="stat-lbl">Approved</div></div></div>
+            <div className="stat-card"><div className="stat-ico" style={{background:"#d1fae5"}}>💰</div><div><div className="stat-val">{paidCount}</div><div className="stat-lbl">Paid</div></div></div>
+            <div className="stat-card"><div className="stat-ico" style={{background:"#fef9c3"}}>$</div><div><div className="stat-val">{"$"+totalPaid.toFixed(0)}</div><div className="stat-lbl">Collected</div></div></div>
+            <div className="stat-card"><div className="stat-ico" style={{background:"#fee2e2"}}>!</div><div><div className="stat-val" style={{color:totalOwed>0?"var(--red)":"var(--green)"}}>{"$"+totalOwed.toFixed(0)}</div><div className="stat-lbl">Balance Due</div></div></div>
+          </div>
+          <div className="card">
+            <div className="card-hd">
+              <span className="card-title">Teams — {activeDivObj?activeDivObj.label:"Division"}</span>
+              <div className="flex-c gap-2">
+                {schedMsg?<span style={{fontSize:12,color:"var(--red)",fontWeight:600}}>⚠ {schedMsg}</span>:null}
+                <button className="btn btn-primary btn-sm" onClick={e=>{e.stopPropagation();setShowAdd(!showAdd);setTeamSearch("");}}>➕ Add Team</button>
+                <button className="btn btn-secondary btn-sm" onClick={e=>{e.stopPropagation();handleSchedule();}}>📅 Schedule Builder →</button>
+              </div>
             </div>
-            {div?(
-              flights.length>0?(
-                <div>
-                  <div className="fl-tabs">
-                    {flights.map(f=>(
-                      <div key={f.id}
-                        className={`fl-tab ${(!flightId&&f===flights[0])||flightId===f.id?"on":""} ${f.live?"fl-live":""}`}
-                        onClick={()=>setFlightId(f.id)}>
-                        {f.type==="pool"?"🔵":"🏆"} {f.name}
-                        <span style={{marginLeft:6,fontSize:10,opacity:.6}}>{f.status}</span>
-                      </div>
-                    ))}
-                    <div className="fl-tab fl-add" style={{color:"var(--green)",borderColor:"var(--green)"}}>+ Add Pool Flight</div>
-                    <div className="fl-tab fl-add" style={{color:"var(--gold)",borderColor:"var(--gold)"}}>+ Add Bracket Flight</div>
+            {showAdd?(
+              <div style={{padding:"12px 18px",background:"#f0f7ff",borderBottom:"1px solid #d0e4f8"}} onClick={e=>e.stopPropagation()}>
+                <input style={{width:"100%",padding:"9px 12px",border:"1px solid #cdd5df",borderRadius:6,fontSize:13,boxSizing:"border-box"}}
+                  placeholder="🔍 Search teams to add (type 2+ chars)..."
+                  value={teamSearch}
+                  onChange={e=>setTeamSearch(e.target.value)}/>
+                {searchResults.length>0?(
+                  <div style={{border:"1px solid #e2e8f0",borderRadius:6,marginTop:6,background:"#fff",maxHeight:220,overflowY:"auto",boxShadow:"0 4px 12px rgba(0,0,0,.1)"}}>
+                    {searchResults.map(t=>{
+                      const already=divRoster.some(x=>x.id===t.id);
+                      return(
+                        <div key={t.id} style={{padding:"9px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #f0f4f8",fontSize:13}}>
+                          <div><span style={{fontWeight:700}}>{t.name}</span><span style={{color:"var(--gray)",marginLeft:8,fontSize:11}}>{t.city}, {t.state} · {t.cls}</span></div>
+                          {already?<span style={{fontSize:11,color:"var(--green)",fontWeight:700}}>✓ Added</span>:<button className="btn btn-primary btn-sm" style={{padding:"3px 12px",fontSize:11}} onClick={()=>addTeam(t)}>+ Add</button>}
+                        </div>
+                      );
+                    })}
                   </div>
-                  {flight?<FlightView flight={flight} divId={divId} divCode={div.code} eventParks={ev.parks||[]}/>:null}
+                ):null}
+              </div>
+            ):null}
+            <div className="tbl-scroll">
+              {divRoster.length===0?(
+                <div style={{textAlign:"center",padding:"44px 20px",color:"var(--gray)"}}>
+                  <div style={{fontSize:36,marginBottom:8}}>👥</div>
+                  <div style={{fontSize:15,fontWeight:700,color:"var(--navy)",marginBottom:6}}>No Teams Rostered</div>
+                  <div style={{fontSize:13}}>Click <strong>➕ Add Team</strong> to add teams to <strong>{activeDivObj?activeDivObj.label:"this division"}</strong>.</div>
                 </div>
               ):(
-                <div className="card" style={{marginTop:16}}>
-                  <div className="card-body" style={{textAlign:"center",padding:"40px 24px"}}>
-                    <div style={{fontSize:44,marginBottom:12}}>📋</div>
-                    <div style={{fontSize:17,fontWeight:800,color:"var(--navy)",marginBottom:8}}>No Flights Configured for {div.label}</div>
-                    <div style={{fontSize:13,color:"var(--gray)",maxWidth:420,margin:"0 auto 24px"}}>Add a pool flight or bracket to set up scheduling, or jump directly into Schedule Builder.</div>
-                    <div style={{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap"}}>
-                      <button className="btn btn-primary btn-sm">+ Add Pool Flight</button>
-                      <button className="btn btn-secondary btn-sm">+ Add Bracket Flight</button>
-                      <button className="btn btn-secondary btn-sm" onClick={goSchedule}>📋 Open Schedule Builder</button>
-                    </div>
-                  </div>
+                <table>
+                  <thead><tr>
+                    <th style={{width:30,textAlign:"center"}}>#</th>
+                    <th>Team Name</th>
+                    <th>Class</th>
+                    <th>City, ST</th>
+                    <th style={{width:130}}>Entry Status</th>
+                    <th style={{width:130}}>Payment</th>
+                    <th style={{width:90}}>Entry Fee</th>
+                    <th style={{width:90}}>Gate Fee</th>
+                    <th style={{width:80}}>Total Due</th>
+                    <th style={{width:110}}>Actions</th>
+                  </tr></thead>
+                  <tbody>{divRoster.map((t,i)=>{
+                    const total=(parseFloat(t.entryFee)||0)+(parseFloat(t.gateFee)||0);
+                    const totalStr=total>0?"$"+total.toFixed(0):"—";
+                    const isOpen=actionTeamId===t.id;
+                    const entryClr=t.entryStatus==="Approved"?"var(--green)":t.entryStatus==="Pending"?"#b45309":"var(--red)";
+                    const payClr=t.payStatus==="Paid"?"var(--green)":t.payStatus==="Partial Paid"?"#b45309":"var(--red)";
+                    return(
+                      <tr key={t.id} style={{background:i%2===0?"#f9fbfc":"#fff"}}>
+                        <td style={{textAlign:"center",fontWeight:700,color:"var(--gray)",fontSize:12}}>{i+1}</td>
+                        <td style={{fontWeight:700,fontSize:13}}>{t.name}</td>
+                        <td><span className="badge b-blue" style={{fontSize:10}}>{t.cls}</span></td>
+                        <td className="t-sm t-gray">{t.city}, {t.state}</td>
+                        <td>
+                          <select style={{fontSize:11,padding:"3px 6px",borderRadius:4,border:"1px solid #ddd",color:entryClr,fontWeight:700,background:"#fff",width:"100%"}}
+                            value={t.entryStatus} onChange={e=>setField(t.id,"entryStatus",e.target.value)}>
+                            {ENTRY_STATUSES.map(s=><option key={s} value={s}>{s}</option>)}
+                          </select>
+                        </td>
+                        <td>
+                          <select style={{fontSize:11,padding:"3px 6px",borderRadius:4,border:"1px solid #ddd",color:payClr,fontWeight:700,background:"#fff",width:"100%"}}
+                            value={t.payStatus} onChange={e=>setField(t.id,"payStatus",e.target.value)}>
+                            {PAY_STATUSES.map(s=><option key={s} value={s}>{s}</option>)}
+                          </select>
+                        </td>
+                        <td><input type="number" min="0" step="25" style={inStyle} placeholder="$0" value={t.entryFee} onChange={e=>setField(t.id,"entryFee",e.target.value)}/></td>
+                        <td><input type="number" min="0" step="25" style={inStyle} placeholder="$0" value={t.gateFee} onChange={e=>setField(t.id,"gateFee",e.target.value)}/></td>
+                        <td style={{fontWeight:700,fontSize:12,textAlign:"right",paddingRight:8,color:t.payStatus==="Paid"?"var(--green)":"var(--navy)"}}>{totalStr}</td>
+                        <td style={{position:"relative"}} onClick={e=>e.stopPropagation()}>
+                          <button className="btn btn-secondary btn-sm" style={{fontSize:11,padding:"3px 10px",width:"100%"}}
+                            onClick={()=>setActionTeamId(isOpen?null:t.id)}>
+                            Actions ▾
+                          </button>
+                          {isOpen?(
+                            <div style={{position:"absolute",right:0,top:"100%",zIndex:200,background:"#fff",border:"1px solid #e2e8f0",borderRadius:8,boxShadow:"0 6px 20px rgba(0,0,0,.15)",minWidth:190,padding:"4px 0"}}>
+                              <div style={{padding:"7px 14px",fontSize:11,fontWeight:700,color:"var(--gray)",textTransform:"uppercase",letterSpacing:.5,borderBottom:"1px solid #f0f4f8"}}>Entry Status</div>
+                              <div style={{padding:"7px 14px",fontSize:13,cursor:"pointer",color:"var(--green)",fontWeight:600}} onClick={()=>{setField(t.id,"entryStatus","Approved");setActionTeamId(null);}}>✓ Set Approved</div>
+                              <div style={{padding:"7px 14px",fontSize:13,cursor:"pointer"}} onClick={()=>{setField(t.id,"entryStatus","Pending");setActionTeamId(null);}}>⏳ Set Pending</div>
+                              <div style={{padding:"7px 14px",fontSize:13,cursor:"pointer"}} onClick={()=>{setField(t.id,"entryStatus","Hold");setActionTeamId(null);}}>⏸ Place on Hold</div>
+                              <div style={{padding:"7px 14px",fontSize:11,fontWeight:700,color:"var(--gray)",textTransform:"uppercase",letterSpacing:.5,borderBottom:"1px solid #f0f4f8",borderTop:"1px solid #f0f4f8",marginTop:2}}>Payment</div>
+                              <div style={{padding:"7px 14px",fontSize:13,cursor:"pointer",color:"var(--green)",fontWeight:600}} onClick={()=>{setField(t.id,"payStatus","Paid");setActionTeamId(null);}}>💰 Mark as Paid</div>
+                              <div style={{padding:"7px 14px",fontSize:13,cursor:"pointer"}} onClick={()=>{setField(t.id,"payStatus","Partial Paid");setActionTeamId(null);}}>💳 Partial Paid</div>
+                              <div style={{padding:"7px 14px",fontSize:13,cursor:"pointer"}} onClick={()=>{setField(t.id,"payStatus","Not Paid");setActionTeamId(null);}}>⚪ Not Paid</div>
+                              <div style={{height:1,background:"#f0f4f8",margin:"4px 0"}}></div>
+                              <div style={{padding:"7px 14px",fontSize:13,cursor:"pointer",color:"var(--red)",fontWeight:600}} onClick={()=>{removeTeam(t.id);setActionTeamId(null);}}>✕ Remove Team</div>
+                            </div>
+                          ):null}
+                        </td>
+                      </tr>
+                    );
+                  })}</tbody>
+                </table>
+              )}
+            </div>
+            {divRoster.length>0?(
+              <div style={{padding:"12px 18px",borderTop:"1px solid #eee",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#fafbfc"}}>
+                <div style={{fontSize:12,color:"var(--gray)"}}>
+                  {divRoster.length} teams · {approvedCount} approved · {paidCount} paid · <strong>${totalPaid.toFixed(0)}</strong> collected · <strong style={{color:totalOwed>0?"var(--red)":"inherit"}}>${totalOwed.toFixed(0)}</strong> balance due
                 </div>
-              )
+                <button className="btn btn-primary btn-sm" onClick={e=>{e.stopPropagation();handleSchedule();}}>📅 Schedule This Division in Builder →</button>
+              </div>
             ):null}
           </div>
-        )
+        </div>
       ):(
-        evTab==="teams"?(
-          /* ── Teams tab ── */
-          <div style={{display:"grid",gridTemplateColumns:"240px 1fr",gap:16,alignItems:"start"}}>
-            <div className="card">
-              <div className="card-hd"><span className="card-title">Divisions</span></div>
-              <div style={{padding:"6px 0"}}>
-                {divisions.map(d=>(
-                  <div key={d.id} onClick={()=>setAddDivId(d.id)}
-                    style={{padding:"10px 16px",cursor:"pointer",background:addDivId===d.id?"var(--blue-l)":"transparent",borderLeft:addDivId===d.id?"3px solid var(--blue)":"3px solid transparent",display:"flex",justifyContent:"space-between",alignItems:"center",transition:"background .15s"}}>
-                    <span style={{fontWeight:600,fontSize:13}}>{d.label}</span>
-                    <span className="badge b-gray" style={{fontSize:10}}>{(divTeams[d.id]||[]).length} teams</span>
-                  </div>
-                ))}
-              </div>
-              <div style={{padding:"12px 16px",borderTop:"1px solid #eee"}}>
-                <button className="btn btn-primary btn-sm" style={{width:"100%"}} onClick={goSchedule}>📋 Schedule This Event</button>
-              </div>
-            </div>
-            <div className="card">
-              <div className="card-hd">
-                <span className="card-title">Teams — {activeDivLabel}</span>
-                <span className="badge b-blue" style={{fontSize:11}}>{currentTeams.length} registered</span>
-              </div>
-              <div className="card-body">
-                <div style={{marginBottom:14,position:"relative"}}>
-                  <input
-                    style={{width:"100%",padding:"9px 12px",border:"1px solid #cdd5df",borderRadius:6,fontSize:13,boxSizing:"border-box",outline:"none"}}
-                    placeholder="🔍 Search teams to add..."
-                    value={teamSearch}
-                    onChange={e=>setTeamSearch(e.target.value)}/>
-                  {searchResults.length>0?(
-                    <div style={{position:"absolute",left:0,right:0,top:"100%",zIndex:50,background:"#fff",border:"1px solid #e2e8f0",borderRadius:6,boxShadow:"0 4px 14px rgba(0,0,0,.12)",maxHeight:240,overflowY:"auto"}}>
-                      {searchResults.map(t=>{
-                        const already=currentTeams.some(x=>x.id===t.id);
-                        return(
-                          <div key={t.id} style={{padding:"9px 14px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #f0f4f8",fontSize:13,background:"#fff"}}>
-                            <div>
-                              <span style={{fontWeight:700}}>{t.name}</span>
-                              <span style={{color:"var(--gray)",marginLeft:8,fontSize:11}}>{t.city}, {t.state} · {t.cls}</span>
-                            </div>
-                            {already?<span style={{fontSize:11,color:"var(--green)",fontWeight:700}}>✓ Added</span>:<button className="btn btn-primary btn-sm" style={{padding:"3px 12px",fontSize:11}} onClick={()=>{addTeam(activeDivId,t);setTeamSearch("");}}>+ Add</button>}
-                          </div>
-                        );
-                      })}
+        evTab==="director"?(
+          <div>
+            {divisions.length===0?(
+              <div className="card"><div className="card-body" style={{textAlign:"center",padding:48,color:"var(--gray)"}}>No divisions configured for this event.</div></div>
+            ):(
+              <div>
+                <div className="div-pills">
+                  {divisions.map(d=>(
+                    <div key={d.id} className={`div-pill ${dirDivId===d.id?"dp-on":"dp-off"}`}
+                      onClick={()=>{setDirDivId(d.id);setFlightId(null);}}>
+                      {d.label}<span style={{fontSize:10,opacity:.65,marginLeft:4}}>({d.numTeams}t)</span>
                     </div>
-                  ):null}
+                  ))}
                 </div>
-                {currentTeams.length===0?(
-                  <div style={{textAlign:"center",padding:"32px 0",color:"var(--gray)",fontSize:13}}>
-                    <div style={{fontSize:32,marginBottom:8}}>👥</div>
-                    No teams added yet. Search above to register teams for this division.
-                  </div>
-                ):(
-                  <div>
-                    <div style={{display:"grid",gridTemplateColumns:"auto 1fr auto auto",gap:"6px 12px",alignItems:"center",fontSize:12,fontWeight:700,color:"var(--gray)",padding:"0 8px 6px",textTransform:"uppercase",letterSpacing:.5,borderBottom:"1px solid #eee",marginBottom:6}}>
-                      <span>#</span><span>Team</span><span>Class</span><span></span>
-                    </div>
-                    {currentTeams.map((t,i)=>(
-                      <div key={t.id} style={{display:"grid",gridTemplateColumns:"auto 1fr auto auto",gap:"6px 12px",alignItems:"center",padding:"8px 8px",background:i%2===0?"#f8fafc":"#fff",borderRadius:5,marginBottom:2}}>
-                        <span style={{fontWeight:700,fontSize:12,color:"var(--gray)",width:20,textAlign:"center"}}>{i+1}</span>
-                        <div>
-                          <div style={{fontWeight:700,fontSize:13}}>{t.name}</div>
-                          <div style={{fontSize:11,color:"var(--gray)"}}>{t.city}, {t.state}</div>
-                        </div>
-                        <span className="badge b-blue" style={{fontSize:10}}>{t.cls}</span>
-                        <button onClick={()=>removeTeam(activeDivId,t.id)} title="Remove team"
-                          style={{background:"none",border:"1px solid #fca5a5",borderRadius:4,cursor:"pointer",color:"var(--red)",fontSize:14,lineHeight:1,padding:"2px 7px",fontWeight:700}}>✕</button>
+                {dirDiv?(
+                  dirFlights.length>0?(
+                    <div>
+                      <div className="fl-tabs">
+                        {dirFlights.map(f=>(
+                          <div key={f.id}
+                            className={`fl-tab ${(!flightId&&f===dirFlights[0])||flightId===f.id?"on":""} ${f.live?"fl-live":""}`}
+                            onClick={()=>setFlightId(f.id)}>
+                            {f.type==="pool"?"🔵":"🏆"} {f.name}
+                            <span style={{marginLeft:6,fontSize:10,opacity:.6}}>{f.status}</span>
+                          </div>
+                        ))}
+                        <div className="fl-tab fl-add" style={{color:"var(--green)",borderColor:"var(--green)"}}>+ Add Pool Flight</div>
+                        <div className="fl-tab fl-add" style={{color:"var(--gold)",borderColor:"var(--gold)"}}>+ Add Bracket Flight</div>
                       </div>
-                    ))}
-                    <div style={{marginTop:12,paddingTop:12,borderTop:"1px solid #eee",display:"flex",gap:10,justifyContent:"flex-end"}}>
-                      <button className="btn btn-primary btn-sm" onClick={goSchedule}>📋 Schedule These Teams</button>
+                      {dirFlight?<FlightView flight={dirFlight} divId={dirDivId} divCode={dirDiv.code} eventParks={ev.parks||[]}/>:null}
                     </div>
-                  </div>
-                )}
+                  ):(
+                    <div className="card" style={{marginTop:16}}>
+                      <div className="card-body" style={{textAlign:"center",padding:"36px 24px"}}>
+                        <div style={{fontSize:40,marginBottom:10}}>📋</div>
+                        <div style={{fontSize:16,fontWeight:700,color:"var(--navy)",marginBottom:8}}>No Flights Configured for {dirDiv.label}</div>
+                        <div style={{fontSize:13,color:"var(--gray)",maxWidth:420,margin:"0 auto 20px"}}>Add a flight here, or go to the <strong>Team Roster</strong> tab and use <strong>Schedule Builder →</strong> to schedule directly.</div>
+                        <div style={{display:"flex",gap:12,justifyContent:"center"}}>
+                          <button className="btn btn-primary btn-sm">+ Add Pool Flight</button>
+                          <button className="btn btn-secondary btn-sm">+ Add Bracket Flight</button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                ):null}
               </div>
-            </div>
+            )}
           </div>
         ):(
-          /* ── Public View tab ── */
           <div style={{background:"#fff",borderRadius:12,overflow:"hidden",boxShadow:"var(--sh-lg)"}}>
             <div className="pub-header">
               <div className="pub-ename">{ev.name}</div>
@@ -4487,7 +4559,7 @@ function EventDetailView({ev,onBack,onNav}){
               <div className="pub-divs">
                 {divisions.map(d=>(
                   <div key={d.id} className={`pub-div ${pubDivId===d.id?"on":""}`}
-                    onClick={()=>{setPubDivId(d.id);setPubBg(bracketGamesDB(d.id))}}>
+                    onClick={()=>{setPubDivId(d.id);setPubBg(bracketGamesDB(d.id));}}>
                     {d.label}
                   </div>
                 ))}
@@ -4924,6 +4996,8 @@ function App(){
   const [events,setEvents]=useState(EVENTS_DB);
   const [allGames,setAllGames]=useState([...PG8,...PG9,...PG12]);
   const [allBracketGames,setAllBracketGames]=useState([...BG8,...BG9]);
+  const [evRosters,setEvRosters]=useState({});
+  const [schedCtx,setSchedCtx]=useState(null);
   const [dbStatus,setDbStatus]=useState('connecting');
   const [liveDiv,setLiveDiv]=useState({status:'idle',updatedAt:null});
   useEffect(()=>{
@@ -4962,6 +5036,7 @@ function App(){
   },[]);
   function nav(id){setView(id);if(id==="events")setSelEv(null)}
   function selectEvent(ev){setSelEv(ev);setView("event-detail")}
+  function handleSchedule(ctx){setSchedCtx(ctx);nav("s-layout");}
   const title=()=>{
     if(view==="event-detail"&&selEv)return selEv.name;
     if(view==="create")return "Create New Event";
@@ -5010,11 +5085,11 @@ function App(){
         </div>
         <div className="content">
           {view==="events"&&<Dashboard events={events} onSelect={selectEvent} onNav={nav}/>}
-          {view==="event-detail"&&selEv&&<EventDetailView ev={selEv} onBack={()=>nav("events")} onNav={nav}/>}
+          {view==="event-detail"&&selEv&&<EventDetailView ev={selEv} onBack={()=>nav("events")} onNav={nav} evRosters={evRosters} setEvRosters={setEvRosters} onSchedule={handleSchedule}/>}
           {view==="create"&&<CreateEventView/>}
           {view==="s-game-mgr"&&<GameMgrView games={allGames} setGames={setAllGames} teams={ALL_TEAMS}/>}
           {view==="s-grid"&&<GridBuilderView/>}
-          {view==="s-layout"&&<LayoutView games={allGames} setGames={setAllGames} teams={ALL_TEAMS}/>}
+          {view==="s-layout"&&<LayoutView games={allGames} setGames={setAllGames} teams={ALL_TEAMS} schedCtx={schedCtx} setSchedCtx={setSchedCtx}/>}
           {view==="s-bracket"&&<BracketView bGames={allBracketGames} setBGames={setAllBracketGames} teams={ALL_TEAMS} games={allGames} editable={true}/>}
           {view==="s-standings"&&<StandingsView teams={ALL_TEAMS} games={allGames}/>}
           {view==="s-seeds"&&<SeedsView teams={ALL_TEAMS}/>}
