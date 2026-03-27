@@ -1497,6 +1497,7 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
   const [maxGames,setMaxGames]=useState(2);    // max pool play games per team
   const [dropAlert,setDropAlert]=useState(null); // {msg,type} for inline validation alert
   const [selAge,setSelAge]=useState(null);
+  const [selCell,setSelCell]=useState(null); // "rowId|fi" — selected grid cell for Block Selected
 
   const fields=fieldNames.slice(0,nf);
   const assignedIds=new Set(rows.flatMap(r=>Object.values(r.cells)).filter(v=>v!=="blocked"));
@@ -2107,7 +2108,7 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
                     {showHomeAway?"✓ Home/Away ON":"🏠 Show Home / Away"}
                   </button>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                    <button onClick={()=>{if(!selCell)return;const pts=selCell.split('¦');sc(pts[0],pts[1],pts[2],pts[3],{type:"blocked",div:"",div:""});}} style={{...B(selCell?"#1d4ed8":"#94a3b8","#fff"),padding:"8px",fontSize:11}} title={selCell?"Block selected cell":"Select a cell first"}>🔒 Block Selected</button>
+                    <button onClick={()=>{if(!selCell)return;const[rId,fiStr]=selCell.split('|');const fi=parseInt(fiStr);setRows(prev=>prev.map(r=>r.id===rId?{...r,cells:{...r.cells,[fi]:"blocked"}}:r));setSelCell(null);}} style={{...B(selCell?"#1d4ed8":"#94a3b8","#fff"),padding:"8px",fontSize:11}} title={selCell?"Block selected cell":"Select a cell first"}>🔒 Block Selected</button>
                     <button onClick={clearAllBlocked} style={{...B("#64748b","#fff"),padding:"8px",fontSize:11}}>✕ Clear Blocked</button>
                   </div>
                   <button onClick={clearGameCells} style={{...B("#d97706","#fff"),width:"100%",padding:"8px",fontSize:12}}>
@@ -2375,7 +2376,7 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
                           else if(canPlace)cellBg=tintEven;
                           else if(game)cellBg=ri%2===0?tintEven:tintOdd;
                           return(
-                            <td key={fi} onClick={()=>clickCell(row.id,fi)}
+                            <td key={fi} onClick={()=>{setSelCell(row.id+'|'+fi);clickCell(row.id,fi);}}
                               onDragOver={e=>{if(!game&&!isBlocked){e.preventDefault();e.dataTransfer.dropEffect="copy";}}}
                               onDrop={e=>{
                                 e.preventDefault();
