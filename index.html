@@ -4412,21 +4412,15 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
   const [searchState,setSearchState]=useState(ev.state||"FL");
   const [hasSearched,setHasSearched]=useState(false);
   function runTeamSearch(){
-    if(!activeDivAge||!sb)return;
+    if(!activeDivAge)return;
     setLoadingTeams(true);setUsssaTeams([]);setHasSearched(true);
     const go=async()=>{
       try{
-        let q=sb.from("usssa_registrations")
-          .select("team_name,manager_name,manager_email,manager_phone,team_city,team_state,entry_status,payment_status,division")
-          .ilike("division",activeDivAge+"%")
-          .order("team_name",{ascending:true})
-          .limit(400);
-        if(searchState&&searchState!=="all")q=q.eq("team_state",searchState);
-        const{data,error}=await q;
-        if(error)throw error;
-        const seen=new Set();
-        const deduped=(data||[]).filter(t=>{if(seen.has(t.team_name))return false;seen.add(t.team_name);return true;});
-        setUsssaTeams(deduped);
+        const url='https://usssa-poller.chad-157.workers.dev/teams-search?age='+encodeURIComponent(activeDivAge)+'&state='+encodeURIComponent(searchState||'all');
+        const r=await fetch(url);
+        const json=await r.json();
+        if(json.status!=='ok')throw new Error(json.message||'Error');
+        setUsssaTeams(json.teams||[]);
       }catch(e){console.warn("USSSA search:",e.message);setUsssaTeams([]);}
       finally{setLoadingTeams(false);}
     };
