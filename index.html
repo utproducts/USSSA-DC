@@ -1606,6 +1606,12 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
   const [maxGames,setMaxGames]=useState(2);    // max pool play games per team
   const [dropAlert,setDropAlert]=useState(null); // {msg,type} for inline validation alert
   const [selAge,setSelAge]=useState(null);
+  // Auto-select the first age group when teams arrive from event context
+  useEffect(()=>{
+    if(!teams||!teams.length)return;
+    const ages=[...new Set(teams.map(t=>parseInt(t.cls)||0))].filter(Boolean).sort((a,b)=>a-b);
+    if(ages.length)setSelAge(prev=>prev||ages[0]);
+  },[teams]);
   const [selCell,setSelCell]=useState(null); // "rowId|fi" — selected grid cell for Block Selected
   const [gridBuiltMsg,setGridBuiltMsg]=useState(""); // toast after Build Grid
   const [fieldPickModal,setFieldPickModal]=useState(null); // {fi} — which field column is being renamed
@@ -2341,8 +2347,21 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
 
             {/* No age selected */}
             {!selAge&&(
-              <div style={{padding:"28px 16px",textAlign:"center",color:"#94a3b8",fontSize:13}}>
-                ↑ Pick an age group above to see teams
+              <div style={{padding:"16px",display:"flex",flexWrap:"wrap",gap:6}}>
+                {teams.length>0
+                  ?[...new Set(teams.map(t=>t.cls))].sort().map(cls=>{
+                      const dc=getDivColor(cls);
+                      const cnt=teams.filter(t=>t.cls===cls).length;
+                      return(
+                        <span key={cls} onClick={()=>setSelAge(parseInt(cls)||null)}
+                          style={{fontSize:12,fontWeight:800,padding:"4px 12px",borderRadius:14,cursor:"pointer",
+                            background:dc.bg,color:dc.text,border:`1.5px solid ${dc.border}`}}>
+                          {cls} <span style={{opacity:.7,fontWeight:600}}>· {cnt}</span>
+                        </span>
+                      );
+                    })
+                  :<span style={{color:"#94a3b8",fontSize:13}}>↑ Pick an age group above to see teams</span>
+                }
               </div>
             )}
 
