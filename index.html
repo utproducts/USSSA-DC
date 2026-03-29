@@ -5443,6 +5443,79 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule,onGr
   const [searchState,setSearchState]=useState(ev.state||"FL");
   const [hasSearched,setHasSearched]=useState(false);
   const [movingTeamId,setMovingTeamId]=useState(null);
+  const [syncStatus,setSyncStatus]=useState('idle');
+  const [syncMsg,setSyncMsg]=useState('');
+  const [showImport,setShowImport]=useState(false);
+  const [importText,setImportText]=useState('');
+  const [importErr,setImportErr]=useState('');
+  const [importOk,setImportOk]=useState('');
+  function parseDivClass(lbl){const m=(lbl||'').match(/^(\d+)(.*)/);if(!m)return'';const s=m[2].toUpperCase().trim();if(s.startsWith('OP')||s==='O'||s==='0P')return'open';if(s==='AAA')return'aaa';if(s==='AA')return'aa';if(s==='A')return'a';return s.toLowerCase();}
+  function teamMatchesDiv(t,divLbl){const divAge=parseInt(((divLbl||'').match(/^(\d+)/)||['','0'])[1]);const divCls=parseDivClass(divLbl);const tCls=(t.cls||'').toUpperCase();const tAge=parseInt((tCls.match(/(\d+)/)||['','0'])[1]);if(tAge!==divAge)return false;if(divCls==='open')return tCls.includes('OPEN')||tCls.includes('OP');if(divCls==='aaa')return tCls.includes('AAA');if(divCls==='aa')return tCls.includes('AA')&&!tCls.includes('AAA');if(divCls==='a')return(tCls.endsWith(' A')||tCls.endsWith('A')||tCls.includes(' A '))&&!tCls.includes('AA');return false;}
+  async function syncFromUSSSA(){
+    if(syncStatus==='loading')return;
+    setSyncStatus('loading');setSyncMsg('Fetching teams from USSSA…');
+    try{
+      const evState=ev.state||'FL';
+      const evId=String(ev.evid||ev.id);
+      const ageSet=new Set();
+      divisions.forEach(d=>{const m=(d.label||'').match(/^(\d+)/);if(m)ageSet.add(parseInt(m[1]));});
+      const ages=[...ageSet];
+      if(!ages.length){setSyncStatus('error');setSyncMsg('No age-group divisions found on this event.');return;}
+      const allTeams=[];
+      for(const age of ages){
+        const url='https://usssa-poller.chad-157.workers.dev/teams-search?age='+age+'&state='+encodeURIComponent(evState);
+        const r=await fetch(url);const j=await r.json();
+        if(j.status==='ok'&&j.teams)allTeams.push(...j.teams);
+      }
+      if(!allTeams.length){setSyncStatus('error');setSyncMsg('No teams returned from USSSA for this state/age range.');return;}
+      const kvTeams=[];const newRosters={};
+      for(const d of divisions){
+        const dk=String(ev.id)+'_'+d.id;
+        if(evRosters[dk]&&evRosters[dk].length)continue;
+        const matched=allTeams.filter(t=>teamMatchesDiv(t,d.label));
+        if(!matched.length)continue;
+        const divKv=matched.map(t=>({team_id:t.id||'',team_name:t.name||'',division:d.label,team_city:t.city||'',team_state:t.state||evState,manager_name:t.manager_name||'',manager_email:t.manager_email||'',manager_phone:t.manager_phone||'',entry_status:'Approved',payment_status:'Not Paid',num_players:0}));
+        kvTeams.push(...divKv);
+        newRosters[dk]=divKv.map(t=>({id:'us_'+evId+'_'+(t.team_name||'').replace(/\W+/g,'_'),name:t.team_name,city:t.team_city,state:t.team_state,cls:d.label,coach:t.manager_name,email:t.manager_email,phone:t.manager_phone,entryStatus:'Approved',payStatus:'Not Paid',entryFee:'',gateFee:'',discount:'',notes:''}));
+      }
+      if(!kvTeams.length){setSyncStatus('error');setSyncMsg('Teams were found but none matched the event\'s division labels. Try importing via JSON instead.');return;}
+      const sr=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams/seed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_id:evId,teams:kvTeams})});
+      await sr.json();
+      setEvRosters(p=>({...p,...newRosters}));
+      setSyncStatus('done');
+      setSyncMsg('✅ Synced '+kvTeams.length+' USSSA-registered teams across '+Object.keys(newRosters).length+' divisions. Note: these are all USSSA-registered teams for these ages in '+evState+', not event-specific entries — remove teams that did not enter this event.');
+    }catch(e){setSyncStatus('error');setSyncMsg('Sync failed: '+e.message);}
+  }
+  async function importFromJson(){
+    setImportErr('');setImportOk('');
+    let parsed;
+    try{parsed=JSON.parse(importText.trim());}catch(e){setImportErr('Invalid JSON: '+e.message);return;}
+    if(!Array.isArray(parsed)){setImportErr('Expected a JSON array of team objects.');return;}
+    if(!parsed.length){setImportErr('Array is empty — nothing to import.');return;}
+    const first=parsed[0];
+    if(!first.team_name&&!first.TeamName&&!first.name){setImportErr('Team objects must have a "team_name" field.');return;}
+    const evId=String(ev.evid||ev.id);
+    const kvTeams=parsed.map(t=>({team_id:String(t.team_id||t.TeamID||t.id||''),team_name:t.team_name||t.TeamName||t.name||'',division:t.division||t.Division||t.cls||t.ClassName||'',team_city:t.team_city||t.City||t.city||'',team_state:t.team_state||t.State||t.state||ev.state||'',manager_name:t.manager_name||t.ManagerName||t.manager||'',manager_email:t.manager_email||t.ManagerEmail||t.email||'',manager_phone:t.manager_phone||t.ManagerPhone||t.phone||'',entry_status:t.entry_status||t.EntryStatus||'Approved',payment_status:t.payment_status||t.PaymentStatus||'Not Paid',num_players:t.num_players||t.numPlayers||0}));
+    try{
+      const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams/seed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_id:evId,teams:kvTeams})});
+      const j=await r.json();
+      if(j.status!=='ok'&&!j.seeded)throw new Error(j.error||'Seed returned error');
+      const byDiv={};
+      for(const t of kvTeams){const dl=(t.division||'').trim();if(!byDiv[dl])byDiv[dl]=[];byDiv[dl].push(t);}
+      setEvRosters(p=>{
+        const next={...p};
+        for(const d of divisions){
+          const k=String(ev.id)+'_'+d.id;
+          const divTeams=byDiv[d.label]||[];if(!divTeams.length)continue;
+          next[k]=divTeams.map(t=>({id:'us_'+evId+'_'+(t.team_name||'').replace(/\W+/g,'_'),name:t.team_name,city:t.team_city,state:t.team_state,cls:d.label,coach:t.manager_name,email:t.manager_email,phone:t.manager_phone,entryStatus:t.entry_status==='Approved'?'Approved':t.entry_status==='Pending'?'Pending':'Approved',payStatus:t.payment_status==='Paid'?'Paid':(t.payment_status||'').toLowerCase().includes('partial')?'Partial Paid':'Not Paid',entryFee:'',gateFee:'',discount:'',notes:''}));
+        }
+        return next;
+      });
+      setImportOk('✅ Imported '+kvTeams.length+' teams into event '+evId+'. This roster has been saved to the cloud.');
+      setImportText('');
+      setTimeout(()=>setShowImport(false),2200);
+    }catch(e){setImportErr('Import failed: '+e.message);}
+  }
   function runTeamSearch(){
     if(!activeDivAge)return;
     setLoadingTeams(true);setUsssaTeams([]);setHasSearched(true);
@@ -5686,16 +5759,25 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule,onGr
               <span className="card-title">👥 {activeDivObj?activeDivObj.label:"Division"} — Teams in Event ({divRoster.length}{activeDivObj?" / "+activeDivObj.numTeams+"t":""})</span>
               <div className="flex-c gap-2">
                 {schedMsg?<span style={{fontSize:12,color:"var(--red)",fontWeight:600}}>⚠ {schedMsg}</span>:null}
+                <button className="btn btn-secondary btn-sm" onClick={()=>{setShowImport(true);setImportText('');setImportErr('');setImportOk('');}}
+                  style={{display:"flex",alignItems:"center",gap:4,fontSize:11}}>
+                  📥 Import JSON
+                </button>
+                <button className="btn btn-secondary btn-sm" onClick={syncFromUSSSA} disabled={syncStatus==='loading'}
+                  style={{display:"flex",alignItems:"center",gap:4,fontSize:11}}>
+                  {syncStatus==='loading'?'⟳ Syncing…':'🔄 Sync USSSA'}
+                </button>
                 <button className="btn btn-green btn-sm" onClick={e=>{e.stopPropagation();setShowAdd(true);setUsssaTeams([]);setHasSearched(false);setTeamSearch("");}}
                   style={{display:"flex",alignItems:"center",gap:5,fontWeight:700}}>
                   ➕ Add Team
                 </button>
               </div>
             </div>
+            {syncMsg&&<div style={{padding:"8px 18px",fontSize:12,borderTop:"1px solid #e2e8f0",background:syncStatus==='done'?"#f0fdf4":syncStatus==='error'?"#fef2f2":"#fffbeb",color:syncStatus==='done'?"#166534":syncStatus==='error'?"#dc2626":"#92400e",lineHeight:1.5}}>{syncMsg}</div>}
             <div className="tbl-scroll">
               {divRoster.length===0?(
                 <div style={{padding:"18px 18px 8px",color:"var(--gray)",fontSize:13,textAlign:"center",borderBottom:"1px solid #f0f4f8"}}>
-                  No teams entered yet. Add teams from the list below.
+                  No teams entered yet. Use "🔄 Sync USSSA" to auto-load teams, "📥 Import JSON" to import from USSSA DC, or "➕ Add Team" to add individually.
                 </div>
               ):(
                 <table>
@@ -5904,6 +5986,32 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule,onGr
                       })}</tbody>
                     </table>
                   )}
+                </div>
+              </div>
+            </div>
+          )}
+          {/* ── IMPORT JSON MODAL ── */}
+          {showImport&&(
+            <div style={{position:"fixed",inset:0,zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.55)"}} onClick={()=>setShowImport(false)}>
+              <div style={{background:"#fff",borderRadius:12,boxShadow:"0 8px 40px rgba(0,0,0,.25)",width:"min(680px,95vw)",maxHeight:"85vh",display:"flex",flexDirection:"column",overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+                <div style={{background:"#1e3a5f",color:"#fff",padding:"14px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+                  <span style={{fontWeight:700,fontSize:15}}>📥 Import Teams from USSSA DC Export</span>
+                  <button onClick={()=>setShowImport(false)} style={{background:"transparent",border:"none",color:"#fff",fontSize:20,cursor:"pointer",lineHeight:1}}>✕</button>
+                </div>
+                <div style={{padding:"16px 20px",overflowY:"auto"}}>
+                  <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#92400e",lineHeight:1.6}}>
+                    <strong>How to get this data:</strong> Log into <strong>dc.usssa.com</strong> → open the event → export/copy the team list as JSON → paste it below. The JSON should be an array of team objects with <code>team_name</code>, <code>division</code>, <code>manager_email</code>, etc. The data will be saved to the cloud so it loads every time.
+                  </div>
+                  <div style={{fontSize:11,fontWeight:700,color:"var(--gray)",marginBottom:6}}>Paste JSON team array:</div>
+                  <textarea value={importText} onChange={e=>setImportText(e.target.value)}
+                    placeholder={'[\n  {\n    "team_name": "My Team 14U",\n    "division": "14AA",\n    "team_city": "Tampa",\n    "team_state": "FL",\n    "manager_name": "Coach Name",\n    "manager_email": "coach@email.com",\n    "manager_phone": "8005551234",\n    "entry_status": "Approved",\n    "payment_status": "Not Paid"\n  },\n  ...\n]'}
+                    style={{width:"100%",height:260,padding:"10px",border:"1px solid #ddd",borderRadius:8,fontSize:11,fontFamily:"monospace",boxSizing:"border-box",resize:"vertical"}}/>
+                  {importErr&&<div style={{marginTop:8,padding:"8px 12px",background:"#fef2f2",color:"#dc2626",borderRadius:6,fontSize:12,fontWeight:600}}>{importErr}</div>}
+                  {importOk&&<div style={{marginTop:8,padding:"8px 12px",background:"#dcfce7",color:"#166534",borderRadius:6,fontSize:12,fontWeight:600}}>{importOk}</div>}
+                  <div style={{display:"flex",gap:10,marginTop:14,justifyContent:"flex-end"}}>
+                    <button className="btn btn-secondary btn-sm" onClick={()=>setShowImport(false)}>Cancel</button>
+                    <button className="btn btn-primary btn-sm" onClick={importFromJson} disabled={!importText.trim()} style={{fontWeight:700}}>📥 Import Teams</button>
+                  </div>
                 </div>
               </div>
             </div>
