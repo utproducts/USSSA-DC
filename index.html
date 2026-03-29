@@ -961,7 +961,7 @@ const SLOT_MAP=Object.fromEntries(SLOT_TYPES.map(s=>[s.id,s]));
 const DEFAULT_TIMES=["8:00 AM","10:00 AM","12:00 PM","2:00 PM","4:00 PM","6:00 PM"];
 const PARK_COLORS=["#1e3a5f","#14532d","#4c1d95","#7c2d12","#164e63","#713f12","#881337","#134e4a"];
 
-function GridBuilderView({gridCtx,setGridCtx,onSendToSchedule}){
+function GridBuilderView({gridCtx,setGridCtx,onSendToSchedule,events,evRosters}){
   const NAVY="#1e3a5f";
   const Btn=(bg,fg,x={})=>({padding:"5px 12px",background:bg,color:fg,border:"none",borderRadius:5,fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",...x});
   const Inp={padding:"4px 7px",border:"1px solid #cbd5e1",borderRadius:5,fontSize:11,background:"#fff",color:"#0f172a"};
@@ -1046,10 +1046,36 @@ function GridBuilderView({gridCtx,setGridCtx,onSendToSchedule}){
   return(
     <div style={{padding:"12px 16px",maxWidth:"100%"}}>
 
+      {/* ══ Event selector (shown when arriving directly from sidebar with no context) ══ */}
+      {!gridCtx&&events&&events.length>0&&(
+        <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:8,padding:"12px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+          <span style={{fontSize:13,fontWeight:700,color:"#92400e"}}>🗺 Select an event to build a grid for:</span>
+          <select
+            defaultValue=""
+            onChange={e=>{
+              const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);
+              if(!ev||!setGridCtx)return;
+              const divs=(ev.divisions||[]).map(d=>d.label||d.id||d);
+              const totalTeams=(ev.divisions||[]).reduce((s,d)=>{
+                const rk=String(ev.id)+"_"+(d.id||d.label||d);
+                return s+((evRosters&&evRosters[rk])||[]).length;
+              },0)||ev.numTeams||0;
+              setGridCtx({evId:String(ev.id),evName:ev.name,divisions:divs,totalTeams,assignedParks:null});
+            }}
+            style={{padding:"5px 10px",borderRadius:6,border:"1px solid #fcd34d",fontSize:13,background:"#fff",minWidth:220,cursor:"pointer"}}>
+            <option value="">— Choose event —</option>
+            {(events||[]).filter(ev=>ev.status!=="complete").map(ev=>(
+              <option key={ev.id} value={String(ev.id)}>{ev.name}{ev.date?` (${ev.date})`:""}</option>
+            ))}
+          </select>
+          <span style={{fontSize:11,color:"#78350f"}}>Or just use the grid freely — select an event later</span>
+        </div>
+      )}
+
       {/* ══ Event context banner ══ */}
       {gridCtx&&<div style={{background:"#dbeafe",border:"1px solid #93c5fd",borderRadius:8,padding:"12px 16px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div style={{fontSize:13,fontWeight:700,color:"#1e40af"}}>
-          🗺 Building grid for: <span style={{fontWeight:900}}>{gridCtx.evName}</span> · <span style={{fontWeight:900}}>{gridCtx.divisions.length} divisions</span> · {gridCtx.totalTeams} teams
+          🗺 Building grid for: <span style={{fontWeight:900}}>{gridCtx.evName}</span> · <span style={{fontWeight:900}}>{gridCtx.divisions?.length||0} divisions</span> · {gridCtx.totalTeams} teams
         </div>
         <button className="btn btn-secondary btn-sm" onClick={()=>setGridCtx&&setGridCtx(null)} style={{padding:"3px 12px",fontSize:11}}>✕ Clear</button>
       </div>}
@@ -1489,7 +1515,7 @@ function GridBuilderView({gridCtx,setGridCtx,onSendToSchedule}){
 }
 
 /* ════════════════════ SCHEDULE BUILDER (formerly Layout Builder) ════════════════════ */
-function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedCtx}){
+function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedCtx,events,evRosters}){
   // Imported games/teams layers — local state, avoids parent-batching race condition
   const [xlGames,setXlGames]=useState([]);
   const [xlTeams,setXlTeams]=useState([]);
@@ -2003,6 +2029,32 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
 
   return(
     <div>
+      {/* ══ Event selector (shown when arriving directly from sidebar with no context) ══ */}
+      {!schedCtx&&events&&events.length>0&&(
+        <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:8,padding:"12px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+          <span style={{fontSize:13,fontWeight:700,color:"#92400e"}}>📋 Select an event to schedule for:</span>
+          <select
+            defaultValue=""
+            onChange={e=>{
+              const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);
+              if(!ev||!setSchedCtx)return;
+              // Gather all teams across all divisions for this event
+              const allTeams=(ev.divisions||[]).flatMap(d=>{
+                const rk=String(ev.id)+"_"+(d.id||d.label||d);
+                return((evRosters&&evRosters[rk])||[]);
+              });
+              setSchedCtx({evId:String(ev.id),evName:ev.name,divLabel:"All Divisions",teams:allTeams.length?allTeams:propTeams});
+            }}
+            style={{padding:"5px 10px",borderRadius:6,border:"1px solid #fcd34d",fontSize:13,background:"#fff",minWidth:220,cursor:"pointer"}}>
+            <option value="">— Choose event —</option>
+            {(events||[]).filter(ev=>ev.status!=="complete").map(ev=>(
+              <option key={ev.id} value={String(ev.id)}>{ev.name}{ev.date?` (${ev.date})`:""}</option>
+            ))}
+          </select>
+          <span style={{fontSize:11,color:"#78350f"}}>Or build a schedule freely and link an event later</span>
+        </div>
+      )}
+
       {schedCtx?.fieldData&&<div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"12px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
         <div style={{fontSize:13,fontWeight:700,color:"#166534",display:"flex",alignItems:"center",gap:8}}>
           <span style={{fontSize:16}}>🗺</span>
@@ -6806,8 +6858,8 @@ function App(){
           {view==="event-detail"&&selEv&&<EventDetailView ev={selEv} onBack={()=>nav("events")} onNav={nav} evRosters={evRosters} setEvRosters={setEvRosters} onSchedule={handleSchedule} onGrid={handleGrid} fieldAssignments={evFieldAssignments[selEv?.id]||[]} setFieldAssignments={fa=>setEvFieldAssignments(prev=>({...prev,[selEv.id]:fa}))}/>}
           {view==="create"&&<CreateEventView/>}
           {view==="s-game-mgr"&&<GameMgrView games={allGames} setGames={setAllGames} teams={ALL_TEAMS}/>}
-          {view==="s-grid"&&<GridBuilderView gridCtx={gridCtx} setGridCtx={setGridCtx} onSendToSchedule={handleSendToSchedule}/>}
-          {view==="s-layout"&&<LayoutView games={allGames} setGames={setAllGames} teams={ALL_TEAMS} schedCtx={schedCtx} setSchedCtx={setSchedCtx}/>}
+          {view==="s-grid"&&<GridBuilderView gridCtx={gridCtx} setGridCtx={setGridCtx} onSendToSchedule={handleSendToSchedule} events={events} evRosters={evRosters}/>}
+          {view==="s-layout"&&<LayoutView games={allGames} setGames={setAllGames} teams={ALL_TEAMS} schedCtx={schedCtx} setSchedCtx={setSchedCtx} events={events} evRosters={evRosters}/>}
           {view==="s-bracket"&&<BracketView bGames={allBracketGames} setBGames={setAllBracketGames} teams={ALL_TEAMS} games={allGames} editable={true}/>}
           {view==="s-standings"&&<StandingsView teams={ALL_TEAMS} games={allGames}/>}
           {view==="s-seeds"&&<SeedsView teams={ALL_TEAMS}/>}
