@@ -4419,6 +4419,8 @@ function ContactToolsCard({ev,evRosters}){
   const [subject,setSubject]=useState("");
   const [body,setBody]=useState("");
   const [sent,setSent]=useState(false);
+  const [sending,setSending]=useState(false);
+  const [sentError,setSentError]=useState("");
   const divisions=React.useMemo(()=>(ev?.divisions||[]).map(normDiv),[ev]);
   const allTeams=React.useMemo(()=>divisions.flatMap(d=>evRosters[String(ev?.id||"")+"_"+d.id]||[]),[divisions,evRosters,ev]);
   const divisionTeams=React.useMemo(()=>[...selDivIds].flatMap(divId=>evRosters[String(ev?.id||"")+"_"+divId]||[]),[selDivIds,evRosters,ev]);
@@ -4431,7 +4433,35 @@ function ContactToolsCard({ev,evRosters}){
   const smsLen=(subject+body).length;
   const smsOver=smsLen>80;
   const canSend=!!(body.trim()&&targetTeams.length>0);
-  function handleSend(method){if(!canSend)return;setSent(method);setTimeout(()=>setSent(false),3000);}
+  async function handleSend(method){
+    if(!canSend||sending)return;
+    if(method!=="email"){setSent(method);setTimeout(()=>setSent(false),3000);return;}
+    setSending(true);setSentError("");
+    const recipients=targetTeams.map(t=>({
+      email:t.email||t.manager_email||"",
+      name:t.manager||t.manager_name||t.name||"",
+      team_name:t.name||"",
+      type:"coach"
+    })).filter(r=>r.email);
+    if(!recipients.length){setSentError("No email addresses found for selected teams.");setSending(false);return;}
+    try{
+      const res=await fetch("https://email-sender.chad-157.workers.dev/send-campaign",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          name:"Event: "+(ev?.name||"Tournament")+" — "+(new Date().toLocaleDateString()),
+          recipients,
+          subject:subject||(ev?.name+" Update"),
+          html:"<p>"+body.replace(/\n/g,"<br/>")+"</p>",
+          from_id:"usssa",
+          audience_type:"coaches"
+        })
+      });
+      if(!res.ok){const t=await res.text();throw new Error(t||res.statusText);}
+      setSent("email");setTimeout(()=>setSent(false),4000);
+    }catch(e){setSentError(e.message||"Send failed");}
+    setSending(false);
+  }
   function toggleDiv(id){setSelDivIds(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});}
   const btnLabel=scope==="tournament"?"All Teams":scope==="division"?"Division":"Team";
   return(
@@ -4440,8 +4470,8 @@ function ContactToolsCard({ev,evRosters}){
       <div style={{background:NAVY,color:"#fff",padding:"11px 18px",display:"flex",alignItems:"center",gap:8}}>
         <span style={{fontSize:16}}>📬</span>
         <strong style={{fontSize:14,letterSpacing:.3}}>Contact Tools</strong>
-        <span style={{marginLeft:"auto",fontSize:11,background:"rgba(255,255,255,0.15)",borderRadius:12,padding:"2px 10px",letterSpacing:.3}}>
-          SendGrid Integration Pending
+        <span style={{marginLeft:"auto",fontSize:11,background:"rgba(34,197,94,0.25)",borderRadius:12,padding:"2px 10px",letterSpacing:.3,color:"#86efac",fontWeight:700}}>
+          ● SendGrid Live
         </span>
       </div>
       <div style={{padding:"16px 18px"}}>
@@ -4565,18 +4595,19 @@ function ContactToolsCard({ev,evRosters}){
               <span style={{color:"#94a3b8"}}>Select recipient(s) above to continue</span>
             )}
           </div>
-          <button onClick={()=>handleSend("email")} disabled={!canSend}
+          <button onClick={()=>handleSend("email")} disabled={!canSend||sending}
             style={{display:"flex",alignItems:"center",gap:6,padding:"9px 18px",borderRadius:7,border:"none",
-              background:canSend?"#2563eb":"#e2e8f0",color:canSend?"#fff":"#94a3b8",
-              cursor:canSend?"pointer":"not-allowed",fontWeight:700,fontSize:13,transition:"all .15s"}}>
-            📧 Email {btnLabel}
+              background:canSend&&!sending?"#2563eb":"#e2e8f0",color:canSend&&!sending?"#fff":"#94a3b8",
+              cursor:canSend&&!sending?"pointer":"not-allowed",fontWeight:700,fontSize:13,transition:"all .15s"}}>
+            {sending?"⏳ Sending…":"📧 Email "+btnLabel}
           </button>
-          <button onClick={()=>handleSend("text")} disabled={!canSend}
+          <button onClick={()=>handleSend("text")} disabled={!canSend||sending}
             style={{display:"flex",alignItems:"center",gap:6,padding:"9px 18px",borderRadius:7,border:"none",
-              background:canSend?"#16a34a":"#e2e8f0",color:canSend?"#fff":"#94a3b8",
-              cursor:canSend?"pointer":"not-allowed",fontWeight:700,fontSize:13,transition:"all .15s"}}>
+              background:canSend&&!sending?"#16a34a":"#e2e8f0",color:canSend&&!sending?"#fff":"#94a3b8",
+              cursor:canSend&&!sending?"pointer":"not-allowed",fontWeight:700,fontSize:13,transition:"all .15s"}}>
             💬 Text {btnLabel}
           </button>
+          {sentError&&<div style={{color:"#dc2626",fontSize:12,marginTop:4,width:"100%"}}>⚠️ {sentError}</div>}
         </div>
       </div>
     </React.Fragment>
@@ -5351,6 +5382,10 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule,onGr
               <span className="card-title">👥 {activeDivObj?activeDivObj.label:"Division"} — Teams in Event ({divRoster.length}{activeDivObj?" / "+activeDivObj.numTeams+"t":""})</span>
               <div className="flex-c gap-2">
                 {schedMsg?<span style={{fontSize:12,color:"var(--red)",fontWeight:600}}>⚠ {schedMsg}</span>:null}
+                <button className="btn btn-green btn-sm" onClick={e=>{e.stopPropagation();setShowAdd(true);setUsssaTeams([]);setHasSearched(false);setTeamSearch("");}}
+                  style={{display:"flex",alignItems:"center",gap:5,fontWeight:700}}>
+                  ➕ Add Team
+                </button>
               </div>
             </div>
             <div className="tbl-scroll">
@@ -5470,73 +5505,105 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule,onGr
             </div>
           </div>
           <div className="card" style={{marginTop:12,overflow:"hidden"}}>
-          <ContactToolsCard ev={ev} evRosters={evRosters}/>
-            <div className="card-hd" style={{flexWrap:"wrap",gap:8}}>
-              <div>
-                <span className="card-title">➕ Search &amp; Add Teams — {activeDivObj?activeDivObj.label:""}</span>
-                {hasSearched&&usssaTeams.length>0?(<span style={{marginLeft:8,fontSize:11,background:"#dcfce7",color:"#15803d",borderRadius:10,padding:"2px 8px",fontWeight:700}}>● {usssaTeams.length} found in USSSA</span>):null}
-              </div>
-              <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
-                <select value={searchState} onChange={e=>setSearchState(e.target.value)} style={{padding:"5px 8px",border:"1px solid #ddd",borderRadius:5,fontSize:12}}>
-                  <option value="all">All States</option>
-                  {ALL_STATES.map(s=><option key={s} value={s}>{s}</option>)}
-                </select>
-                <input style={{padding:"5px 10px",border:"1px solid #ddd",borderRadius:5,fontSize:12,width:180}} placeholder="🔍 Filter by name..." value={teamSearch} onChange={e=>setTeamSearch(e.target.value)}/>
-                <button className="btn btn-primary btn-sm" onClick={e=>{e.stopPropagation();runTeamSearch();}} style={{fontSize:12,padding:"5px 14px"}}>🔍 Search USSSA</button>
-              </div>
-            </div>
-            {!hasSearched&&!loadingTeams?(
-              <div style={{padding:"10px 18px",background:"#eff6ff",borderBottom:"1px solid #bfdbfe",fontSize:12,color:"#1e40af"}}>
-                Select a state and click <strong>Search USSSA</strong> to find teams not yet in this event. Results search across all USSSA team registrations.
-              </div>
-            ):null}
-            <div style={{maxHeight:380,overflowY:"auto"}}>
-              {loadingTeams?(
-                <div style={{textAlign:"center",padding:"32px 20px",color:"var(--gray)",fontSize:13}}>⟳ Searching USSSA database…</div>
-              ):hasSearched&&browseable.length===0&&!loadingTeams?(
-                <div style={{textAlign:"center",padding:"28px 20px",color:"var(--gray)",fontSize:13}}>{usssaTeams.length>0?"All found teams are already in this event.":"No teams found. Try a different state or search term."}</div>
-              ):hasSearched?(
-                <table>
-                  <thead><tr>
-                    <th style={{width:30}}>#</th>
-                    <th>Team Name</th>
-                    <th>Class / Division</th>
-                    <th>City, ST</th>
-                    <th style={{width:100}}>USSSA Entry</th>
-                    <th style={{width:100}}>USSSA Pay</th>
-                    <th style={{width:90,textAlign:"center"}}>Action</th>
-                  </tr></thead>
-                  <tbody>{browseable.map((t,i)=>{
-                    const tid=t.id||usssaId(t);
-                    const inR=rosterIds.has(tid);
-                    const nm=t.name||t.team_name||"";
-                    const cy=t.city||t.team_city||"";
-                    const st=t.state||t.team_state||"";
-                    const cl=t.cls||activeDivObj?.label||"";
-                    const es=t.entry_status||"";
-                    const ps=t.payment_status||"";
-                    const esBg=es==="Approved"?"#dcfce7":es==="Pending"?"#fef3c7":"#fee2e2";
-                    const esClr=es==="Approved"?"#15803d":es==="Pending"?"#92400e":"#dc2626";
-                    const psBg=ps==="Paid"?"#dcfce7":ps.toLowerCase().includes("partial")?"#fef3c7":"#f1f5f9";
-                    const psClr=ps==="Paid"?"#15803d":ps.toLowerCase().includes("partial")?"#92400e":"#64748b";
-                    return(
-                      <tr key={tid} style={{background:inR?"#f0fdf4":i%2===0?"#f9fbfc":"#fff"}}>
-                        <td style={{textAlign:"center",fontSize:12,color:"var(--gray)",fontWeight:700}}>{i+1}</td>
-                        <td style={{fontWeight:700,fontSize:13}}>{nm}</td>
-                        <td><span className="badge b-blue" style={{fontSize:10}}>{cl}</span></td>
-                        <td className="t-sm t-gray">{cy}{cy&&st?", ":""}{st}</td>
-                        <td>{es?(<span style={{fontSize:10,fontWeight:700,background:esBg,color:esClr,borderRadius:10,padding:"2px 8px"}}>{es}</span>):(<span style={{fontSize:11,color:"#aaa"}}>—</span>)}</td>
-                        <td>{ps?(<span style={{fontSize:10,fontWeight:700,background:psBg,color:psClr,borderRadius:10,padding:"2px 8px"}}>{ps}</span>):(<span style={{fontSize:11,color:"#aaa"}}>—</span>)}</td>
-                        <td style={{textAlign:"center"}}>
-                          {inR?(<span style={{fontSize:11,color:"var(--green)",fontWeight:700}}>✓ Added</span>):(<button className="btn btn-primary btn-sm" style={{fontSize:11,padding:"3px 10px"}} onClick={e=>{e.stopPropagation();addTeam(t);}}>+ Add</button>)}
-                        </td>
-                      </tr>
-                    );
-                  })}</tbody>
-                </table>
-              ):null}
-            </div>
+            <ContactToolsCard ev={ev} evRosters={evRosters}/>
           </div>
+          {/* ── ADD TEAM MODAL ── */}
+          {showAdd&&(
+            <div style={{position:"fixed",inset:0,zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.55)"}} onClick={()=>setShowAdd(false)}>
+              <div style={{background:"#fff",borderRadius:12,boxShadow:"0 8px 40px rgba(0,0,0,.25)",width:"min(820px,95vw)",maxHeight:"85vh",display:"flex",flexDirection:"column",overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+                {/* Modal header */}
+                <div style={{background:"#1e3a5f",color:"#fff",padding:"14px 20px",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+                  <span style={{fontSize:18}}>➕</span>
+                  <strong style={{fontSize:15}}>Add Team — {activeDivObj?activeDivObj.label:"Division"}</strong>
+                  {hasSearched&&usssaTeams.length>0&&(
+                    <span style={{marginLeft:4,fontSize:11,background:"rgba(34,197,94,0.3)",borderRadius:10,padding:"2px 8px",color:"#86efac",fontWeight:700}}>● {usssaTeams.length} found</span>
+                  )}
+                  <button onClick={()=>setShowAdd(false)} style={{marginLeft:"auto",background:"rgba(255,255,255,0.15)",border:"none",color:"#fff",borderRadius:6,padding:"4px 12px",cursor:"pointer",fontSize:13,fontWeight:700}}>✕ Close</button>
+                </div>
+                {/* Search filters */}
+                <div style={{padding:"14px 18px",borderBottom:"1px solid #e2e8f0",display:"flex",gap:10,alignItems:"flex-end",flexWrap:"wrap",flexShrink:0,background:"#f8fafc"}}>
+                  <div>
+                    <div style={{fontSize:11,fontWeight:700,color:"#64748b",marginBottom:4}}>State</div>
+                    <select value={searchState} onChange={e=>setSearchState(e.target.value)} style={{padding:"6px 10px",border:"1px solid #ddd",borderRadius:6,fontSize:13,minWidth:120}}>
+                      <option value="all">All States</option>
+                      {ALL_STATES.map(s=><option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div style={{flex:1,minWidth:160}}>
+                    <div style={{fontSize:11,fontWeight:700,color:"#64748b",marginBottom:4}}>Filter by Name</div>
+                    <input style={{padding:"6px 10px",border:"1px solid #ddd",borderRadius:6,fontSize:13,width:"100%"}} placeholder="🔍 Team name..." value={teamSearch} onChange={e=>setTeamSearch(e.target.value)}/>
+                  </div>
+                  <button className="btn btn-primary" onClick={e=>{e.stopPropagation();runTeamSearch();}} style={{padding:"7px 20px",fontWeight:700,fontSize:13,height:35}}>🔍 Search USSSA</button>
+                </div>
+                {/* Results */}
+                <div style={{overflowY:"auto",flex:1}}>
+                  {!hasSearched&&!loadingTeams?(
+                    <div style={{padding:"24px 20px",background:"#eff6ff",borderBottom:"1px solid #bfdbfe",fontSize:13,color:"#1e40af",textAlign:"center"}}>
+                      Choose a state and click <strong>Search USSSA</strong> to find available teams.
+                    </div>
+                  ):loadingTeams?(
+                    <div style={{textAlign:"center",padding:"40px 20px",color:"#64748b",fontSize:14}}>⟳ Searching USSSA database…</div>
+                  ):hasSearched&&browseable.length===0?(
+                    <div style={{textAlign:"center",padding:"36px 20px",color:"#64748b",fontSize:13}}>{usssaTeams.length>0?"All found teams are already in this event.":"No teams found. Try a different state or name."}</div>
+                  ):(
+                    <table style={{width:"100%",borderCollapse:"collapse"}}>
+                      <thead style={{background:"#f1f5f9",position:"sticky",top:0}}>
+                        <tr>
+                          <th style={{padding:"8px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase"}}>#</th>
+                          <th style={{padding:"8px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase"}}>Team</th>
+                          <th style={{padding:"8px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase"}}>Class</th>
+                          <th style={{padding:"8px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase"}}>Location</th>
+                          <th style={{padding:"8px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase"}}>Contact</th>
+                          <th style={{padding:"8px 12px",textAlign:"left",fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase"}}>Status</th>
+                          <th style={{padding:"8px 12px",textAlign:"center",fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase"}}>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>{browseable.map((t,i)=>{
+                        const tid=t.id||usssaId(t);
+                        const inR=rosterIds.has(tid);
+                        const nm=t.name||t.team_name||"";
+                        const cy=t.city||t.team_city||"";
+                        const st=t.state||t.team_state||"";
+                        const cl=t.cls||activeDivObj?.label||"";
+                        const es=t.entry_status||"";
+                        const ps=t.payment_status||"";
+                        const mgr=t.manager_name||t.manager||"";
+                        const mgrEmail=t.manager_email||t.email||"";
+                        const mgrPhone=t.manager_phone||t.phone||"";
+                        const esBg=es==="Approved"?"#dcfce7":es==="Pending"?"#fef3c7":"#fee2e2";
+                        const esClr=es==="Approved"?"#15803d":es==="Pending"?"#92400e":"#dc2626";
+                        return(
+                          <tr key={tid} style={{background:inR?"#f0fdf4":i%2===0?"#f8fafc":"#fff",borderBottom:"1px solid #f0f4f8"}}>
+                            <td style={{padding:"9px 12px",textAlign:"center",fontSize:12,color:"#94a3b8",fontWeight:700}}>{i+1}</td>
+                            <td style={{padding:"9px 12px",fontWeight:700,fontSize:13}}>{nm}</td>
+                            <td style={{padding:"9px 12px"}}><span className="badge b-blue" style={{fontSize:10}}>{cl}</span></td>
+                            <td style={{padding:"9px 12px",fontSize:12,color:"#64748b"}}>{cy}{cy&&st?", ":""}{st}</td>
+                            <td style={{padding:"9px 12px",fontSize:11,color:"#374151"}}>
+                              {mgr&&<div style={{fontWeight:600}}>{mgr}</div>}
+                              {mgrEmail&&<div style={{color:"#2563eb"}}>{mgrEmail}</div>}
+                              {mgrPhone&&<div style={{color:"#16a34a"}}>{mgrPhone}</div>}
+                              {!mgr&&!mgrEmail&&!mgrPhone&&<span style={{color:"#aaa"}}>—</span>}
+                            </td>
+                            <td style={{padding:"9px 12px"}}>
+                              {es?(<span style={{fontSize:10,fontWeight:700,background:esBg,color:esClr,borderRadius:10,padding:"2px 8px"}}>{es}</span>):(<span style={{fontSize:11,color:"#aaa"}}>—</span>)}
+                            </td>
+                            <td style={{padding:"9px 12px",textAlign:"center"}}>
+                              {inR?(<span style={{fontSize:11,color:"#16a34a",fontWeight:700}}>✓ Added</span>):(
+                                <button style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:6,padding:"5px 14px",fontWeight:700,fontSize:12,cursor:"pointer"}}
+                                  onClick={e=>{e.stopPropagation();addTeam(t);}}>
+                                  + Add
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}</tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       ):(
         evTab==="director"?(
