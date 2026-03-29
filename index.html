@@ -961,14 +961,18 @@ const SLOT_MAP=Object.fromEntries(SLOT_TYPES.map(s=>[s.id,s]));
 const DEFAULT_TIMES=["8:00 AM","10:00 AM","12:00 PM","2:00 PM","4:00 PM","6:00 PM"];
 const PARK_COLORS=["#1e3a5f","#14532d","#4c1d95","#7c2d12","#164e63","#713f12","#881337","#134e4a"];
 
-function GridBuilderView(){
+function GridBuilderView({gridCtx,setGridCtx,onSendToSchedule}){
   const NAVY="#1e3a5f";
   const Btn=(bg,fg,x={})=>({padding:"5px 12px",background:bg,color:fg,border:"none",borderRadius:5,fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",...x});
   const Inp={padding:"4px 7px",border:"1px solid #cbd5e1",borderRadius:5,fontSize:11,background:"#fff",color:"#0f172a"};
   const SLOT_ABBR={pool:"",selim:"SE",gold:"G",silver:"S",bronze:"B",blocked:"—",open:""};
 
   // ── State ──────────────────────────────────────────────
-  const [parks,setParks]=useState([{id:"pk_1",name:"Complex 1",color:PARK_COLORS[0],fields:["Field 1","Field 2"]}]);
+  const initParks=React.useMemo(()=>{
+    if(gridCtx&&gridCtx.assignedParks&&gridCtx.assignedParks.length>0) return gridCtx.assignedParks;
+    return [{id:"pk_1",name:"Complex 1",color:PARK_COLORS[0],fields:["Field 1","Field 2"]}];
+  },[]);
+  const [parks,setParks]=useState(initParks);
   const [activePkId,setActivePkId]=useState("pk_1");
   const [times,setTimes]=useState(DEFAULT_TIMES);
   const [grid,setGrid]=useState({SAT:{},SUN:{}});
@@ -1025,7 +1029,8 @@ function GridBuilderView(){
     return c;
   },[pk,grid,times]);
 
-  const filtDivs=divFilter?DIV_CODES.filter(d=>d.toLowerCase().includes(divFilter.toLowerCase())):DIV_CODES;
+  const _divPool=(gridCtx&&gridCtx.divisions&&gridCtx.divisions.length)?gridCtx.divisions:DIV_CODES;
+  const filtDivs=divFilter?_divPool.filter(d=>d.toLowerCase().includes(divFilter.toLowerCase())):_divPool;
 
   if(parks.length===0) return(
     <div style={{padding:"60px 22px",textAlign:"center"}}>
@@ -1039,6 +1044,14 @@ function GridBuilderView(){
   return(
     <div style={{padding:"12px 16px",maxWidth:"100%"}}>
 
+      {/* ══ Event context banner ══ */}
+      {gridCtx&&<div style={{background:"#dbeafe",border:"1px solid #93c5fd",borderRadius:8,padding:"12px 16px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div style={{fontSize:13,fontWeight:700,color:"#1e40af"}}>
+          🗺 Building grid for: <span style={{fontWeight:900}}>{gridCtx.evName}</span> · <span style={{fontWeight:900}}>{gridCtx.divisions.length} divisions</span> · {gridCtx.totalTeams} teams
+        </div>
+        <button className="btn btn-secondary btn-sm" onClick={()=>setGridCtx&&setGridCtx(null)} style={{padding:"3px 12px",fontSize:11}}>✕ Clear</button>
+      </div>}
+
       {/* ══ Header row ══ */}
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,flexWrap:"wrap"}}>
         <div>
@@ -1050,6 +1063,17 @@ function GridBuilderView(){
             style={Btn(showSummary?"#1e3a5f":"#f1f5f9",showSummary?"#fff":"#475569")}>
             📊 {showSummary?"Hide":"Summary"}
           </button>
+          {onSendToSchedule&&(
+            <button
+              onClick={()=>{
+                const fieldNames=[];
+                parks.forEach(pk=>{pk.fields.forEach(f=>{fieldNames.push(parks.length>1?`${pk.name} - ${f}`:f);});});
+                onSendToSchedule({parks,fieldNames,nf:fieldNames.length,gridState:grid,times,evName:gridCtx?.evName});
+              }}
+              style={Btn("#16a34a","#fff",{fontSize:12,padding:"6px 14px",boxShadow:"0 2px 8px rgba(22,163,74,.2)"})}>
+              📅 Send to Schedule Builder →
+            </button>
+          )}
         </div>
       </div>
 
@@ -1474,7 +1498,7 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
     for(let i=1;i<=5;i++){const d=new Date(base);d.setDate(d.getDate()+i);r.push({id:`r${n}`,num:n++,date:fmtISO(d),time:"7:00 AM",cells:{}});}
     return r;
   }
-  const [nf,setNf]=useState(2);
+  const [nf,setNf]=useState(()=>schedCtx?.fieldData?.nf||2);
   const [gl,setGl]=useState("60");
   const [d1Start,setD1Start]=useState("08:00");
   const [d1End,setD1End]=useState("19:00");
@@ -1486,7 +1510,14 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
   const [timeVar,setTimeVar]=useState("5");
   const [timeAct,setTimeAct]=useState("increase");
   const [coverage,setCoverage]=useState("day_chosen");
-  const [fieldNames,setFieldNames]=useState(Array.from({length:50},(_,i)=>FIELD_OPTS[i]||`Field ${i+1}`));
+  const [fieldNames,setFieldNames]=useState(()=>{
+    if(schedCtx?.fieldData?.fieldNames&&schedCtx.fieldData.fieldNames.length>0){
+      const base=Array.from({length:50},(_,i)=>FIELD_OPTS[i]||`Field ${i+1}`);
+      schedCtx.fieldData.fieldNames.forEach((f,i)=>{base[i]=f;});
+      return base;
+    }
+    return Array.from({length:50},(_,i)=>FIELD_OPTS[i]||`Field ${i+1}`);
+  });
   const [rows,setRows]=useState(makeRows);
   const [picked,setPicked]=useState(null);
   const [showNames,setShowNames]=useState(true);
@@ -1930,7 +1961,20 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
 
   return(
     <div>
-      {schedCtx&&<div style={{background:"#dbeafe",border:"1px solid #93c5fd",borderRadius:8,padding:"12px 16px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      {schedCtx?.fieldData&&<div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"12px 16px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+        <div style={{fontSize:13,fontWeight:700,color:"#166534",display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:16}}>🗺</span>
+          <span>Grid loaded: <strong>{schedCtx.fieldData.evName||"Event"}</strong> · <strong>{schedCtx.fieldData.nf} fields</strong> pre-configured</span>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4,marginLeft:8}}>
+            {(schedCtx.fieldData.fieldNames||[]).slice(0,6).map((f,i)=>(
+              <span key={i} style={{background:"#dcfce7",color:"#166534",borderRadius:20,padding:"1px 8px",fontSize:10,fontWeight:700}}>{f}</span>
+            ))}
+            {(schedCtx.fieldData.fieldNames||[]).length>6&&<span style={{fontSize:10,color:"#64748b"}}>+{schedCtx.fieldData.fieldNames.length-6} more</span>}
+          </div>
+        </div>
+        <button className="btn btn-secondary btn-sm" onClick={()=>setSchedCtx(prev=>({...prev,fieldData:null}))} style={{padding:"3px 12px",fontSize:11}}>✕ Clear</button>
+      </div>}
+      {schedCtx&&schedCtx.teams&&<div style={{background:"#dbeafe",border:"1px solid #93c5fd",borderRadius:8,padding:"12px 16px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div style={{fontSize:13,fontWeight:700,color:"#1e40af"}}>
           📋 Scheduling from: <span style={{fontWeight:900}}>{schedCtx.evName}</span> • <span style={{fontWeight:900}}>{schedCtx.divLabel}</span> • {schedCtx.teams.length} teams
         </div>
@@ -3533,46 +3577,238 @@ function Pool2BracketView({poolGames,teams}){
 
 /* ════════════════════ PARKS ════════════════════ */
 function ParksView({eventParks=[]}){
-  const [sel,setSel]=useState(eventParks);
-  const all=[...PARKS_DB,...EXTRA_PARKS];
-  const avail=all.filter(p=>!sel.includes(p.id));
-  const sched=all.filter(p=>sel.includes(p.id));
+  const WORKER='https://usssa-poller.chad-157.workers.dev';
+  const NAVY='#1e3a5f';
+  const [venues,setVenues]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [loadErr,setLoadErr]=useState('');
+  const [search,setSearch]=useState('');
+  const [expanded,setExpanded]=useState(null); // venue id
+  const [pkTab,setPkTab]=useState('db'); // 'db' | 'add'
+  // Add park form state
+  const [nName,setNName]=useState('');
+  const [nCity,setNCity]=useState('');
+  const [nState,setNState]=useState('FL');
+  const [nAddress,setNAddress]=useState('');
+  const [nFields,setNFields]=useState(['Field 1','Field 2']);
+  const [nNewField,setNNewField]=useState('');
+  const [saving,setSaving]=useState(false);
+  const [saveMsg,setSaveMsg]=useState('');
+  const [deleting,setDeleting]=useState(null);
+
+  // Fetch venues on mount
+  React.useEffect(()=>{
+    setLoading(true);
+    fetch(WORKER+'/venues')
+      .then(r=>r.json())
+      .then(j=>{
+        if(j.status==='ok'){setVenues(j.venues||[]);}
+        else{setLoadErr('Worker error: '+(j.message||'unknown'));}
+      })
+      .catch(e=>setLoadErr('Could not load venues: '+e.message))
+      .finally(()=>setLoading(false));
+  },[]);
+
+  const filtered=venues.filter(v=>{
+    if(!search.trim())return true;
+    const q=search.toLowerCase();
+    return(v.name||'').toLowerCase().includes(q)||(v.city||'').toLowerCase().includes(q)||(v.state||'').toLowerCase().includes(q);
+  });
+
+  function toggleExpand(id){setExpanded(p=>p===id?null:id);}
+
+  async function addFieldToNew(){
+    if(!nNewField.trim())return;
+    setNFields(p=>[...p,nNewField.trim()]);setNNewField('');
+  }
+  function removeNewField(i){setNFields(p=>p.filter((_,idx)=>idx!==i));}
+  function renameNewField(i,val){setNFields(p=>p.map((f,idx)=>idx===i?val:f));}
+
+  async function saveNewVenue(){
+    if(!nName.trim()){setSaveMsg('Park name is required.');return;}
+    if(nFields.length===0){setSaveMsg('Add at least one field.');return;}
+    setSaving(true);setSaveMsg('');
+    try{
+      const r=await fetch(WORKER+'/venues/add',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({name:nName,city:nCity,state:nState,address:nAddress,fields:nFields})
+      });
+      const j=await r.json();
+      if(j.status==='ok'){
+        setVenues(p=>[...p,j.venue]);
+        setNName('');setNCity('');setNState('FL');setNAddress('');setNFields(['Field 1','Field 2']);
+        setSaveMsg('✅ Park saved!');
+        setPkTab('db');
+        setTimeout(()=>setSaveMsg(''),3000);
+      } else {setSaveMsg('Error: '+(j.message||'unknown'));}
+    }catch(e){setSaveMsg('Save failed: '+e.message);}
+    setSaving(false);
+  }
+
+  async function deleteVenue(venue){
+    if(venue.source!=='custom'){return;}
+    if(!window.confirm('Remove "'+venue.name+'" from your venue list?'))return;
+    setDeleting(venue.id);
+    try{
+      const r=await fetch(WORKER+'/venues/delete',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({id:venue.id})
+      });
+      const j=await r.json();
+      if(j.status==='ok'){setVenues(p=>p.filter(v=>v.id!==venue.id));}
+    }catch(e){alert('Delete failed: '+e.message);}
+    setDeleting(null);
+  }
+
+  const inS={padding:'6px 10px',border:'1px solid #cbd5e1',borderRadius:5,fontSize:12,background:'#fff',color:'#0f172a',width:'100%',boxSizing:'border-box'};
+
   return(
     <div>
-      <Alrt type="warn">⚠️ Only parks for this sport are listed. Contact your state director for park corrections.</Alrt>
-      <div className="g2" style={{gap:20}}>
-        <div>
-          <div className="fw7 mb2 t-navy">Parks to Consider</div>
-          <div style={{border:"2px solid var(--gray-m)",borderRadius:8,height:280,overflowY:"auto",padding:6}}>
-            {avail.map(p=>(
-              <div key={p.id} onClick={()=>setSel(v=>[...v,p.id])}
-                style={{padding:"7px 8px",borderRadius:4,cursor:"pointer",fontSize:12.5,display:"flex",justifyContent:"space-between"}}
-                onMouseEnter={e=>e.currentTarget.style.background="#f0f4ff"}
-                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <span>{p.name}</span>
-                {p.fields>0&&<span className="t-gray t-xs">{p.fields}F</span>}
-              </div>
-            ))}
+      {/* Tab bar */}
+      <div style={{display:'flex',gap:0,marginBottom:18,borderBottom:'2px solid #e2e8f0'}}>
+        {[['db','🏟 Venue Database'],['add','➕ Add New Park']].map(([k,lbl])=>(
+          <div key={k} onClick={()=>setPkTab(k)}
+            style={{padding:'8px 20px',fontWeight:700,fontSize:13,cursor:'pointer',
+              borderBottom:'3px solid '+(pkTab===k?NAVY:'transparent'),
+              color:pkTab===k?NAVY:'#64748b',marginBottom:'-2px',transition:'all .15s'}}>
+            {lbl}
           </div>
-        </div>
-        <div>
-          <div className="fw7 mb2 t-navy">Parks to Schedule ({sched.length})</div>
-          <div style={{border:"2px solid var(--green)",background:"#f0fdf4",borderRadius:8,height:280,overflowY:"auto",padding:6}}>
-            {sched.map(p=>(
-              <div key={p.id} onClick={()=>setSel(v=>v.filter(x=>x!==p.id))}
-                style={{padding:"7px 8px",borderRadius:4,cursor:"pointer",fontSize:12.5,background:"var(--green-l)",marginBottom:4,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span className="fw7">{p.name}</span>
-                <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                  {p.fields>0&&<span className="badge b-green">{p.fields} fields</span>}
-                  <span style={{fontSize:11,color:"var(--red)"}}>✕</span>
-                </div>
-              </div>
-            ))}
-            {sched.length===0&&<div className="t-gray t-sm" style={{padding:8}}>No parks selected yet</div>}
-          </div>
-          <div className="t-xs t-gray mt2">Total fields available: <strong>{sched.reduce((a,p)=>a+p.fields,0)}</strong></div>
-        </div>
+        ))}
       </div>
+
+      {pkTab==='db'?(
+        <div>
+          {/* Search bar */}
+          <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:14}}>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍  Search parks, city, or state…"
+              style={{...inS,flex:1,fontSize:13,padding:'8px 12px'}}/>
+            {loading&&<span style={{fontSize:12,color:'#94a3b8'}}>Loading…</span>}
+            {!loading&&<span style={{fontSize:12,color:'#64748b',whiteSpace:'nowrap'}}>{filtered.length} venues</span>}
+          </div>
+          {loadErr&&<Alrt type="warn">⚠️ {loadErr} — showing cached data if available.</Alrt>}
+
+          {/* Venue list */}
+          <div style={{display:'flex',flexDirection:'column',gap:6}}>
+            {filtered.map(v=>{
+              const isExp=expanded===v.id;
+              const isCustom=v.source==='custom';
+              return(
+                <div key={v.id} style={{background:'#fff',border:'1px solid '+(isExp?'#93c5fd':'#e2e8f0'),borderRadius:10,overflow:'hidden',boxShadow:isExp?'0 2px 8px rgba(0,0,0,.08)':'0 1px 2px rgba(0,0,0,.04)',transition:'all .15s'}}>
+                  {/* Header row */}
+                  <div style={{display:'flex',alignItems:'center',padding:'10px 14px',cursor:'pointer',gap:10}}
+                    onClick={()=>toggleExpand(v.id)}>
+                    <div style={{flex:1}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8}}>
+                        <span style={{fontWeight:700,fontSize:13,color:NAVY}}>{v.name}</span>
+                        {isCustom&&<span style={{fontSize:10,background:'#dbeafe',color:'#1e40af',borderRadius:20,padding:'1px 7px',fontWeight:700}}>Custom</span>}
+                      </div>
+                      {(v.city||v.state)&&<div style={{fontSize:11,color:'#64748b',marginTop:2}}>{[v.city,v.state].filter(Boolean).join(', ')}</div>}
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:10}}>
+                      {v.fields&&v.fields.length>0&&(
+                        <span style={{fontSize:11,background:'#f0fdf4',color:'#15803d',border:'1px solid #bbf7d0',borderRadius:20,padding:'2px 9px',fontWeight:700}}>
+                          {v.fields.length} field{v.fields.length!==1?'s':''}
+                        </span>
+                      )}
+                      {isCustom&&(
+                        <div onClick={e=>{e.stopPropagation();deleteVenue(v);}}
+                          style={{padding:'3px 8px',fontSize:11,color:'#ef4444',cursor:'pointer',borderRadius:4,background:'#fff1f2',border:'1px solid #fecaca',fontWeight:600,opacity:deleting===v.id?0.5:1}}>
+                          {deleting===v.id?'…':'✕ Remove'}
+                        </div>
+                      )}
+                      <span style={{color:'#94a3b8',fontSize:12}}>{isExp?'▲':'▼'}</span>
+                    </div>
+                  </div>
+                  {/* Expanded: field list */}
+                  {isExp&&(
+                    <div style={{borderTop:'1px solid #e2e8f0',padding:'12px 14px',background:'#f8fafc'}}>
+                      {v.address&&<div style={{fontSize:11,color:'#64748b',marginBottom:10}}>📍 {v.address}</div>}
+                      {v.fields&&v.fields.length>0?(
+                        <div>
+                          <div style={{fontWeight:700,fontSize:11,color:'#475569',textTransform:'uppercase',letterSpacing:.6,marginBottom:8}}>Fields</div>
+                          <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                            {v.fields.map((f,i)=>(
+                              <span key={i} style={{background:'#dbeafe',color:'#1e40af',borderRadius:6,padding:'4px 10px',fontSize:12,fontWeight:600}}>
+                                {f}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ):(
+                        <div style={{fontSize:12,color:'#94a3b8'}}>No fields configured.</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {!loading&&filtered.length===0&&(
+              <div style={{textAlign:'center',padding:'40px 20px',color:'#94a3b8',fontSize:13}}>
+                No venues found{search?' matching "'+search+'"':''}.
+              </div>
+            )}
+          </div>
+        </div>
+      ):(
+        /* Add New Park tab */
+        <div style={{maxWidth:580}}>
+          <div style={{background:'#fff',border:'1px solid #e2e8f0',borderRadius:12,padding:'20px 24px',boxShadow:'0 1px 4px rgba(0,0,0,.06)'}}>
+            <div style={{fontWeight:800,fontSize:15,color:NAVY,marginBottom:16}}>New Park / Venue</div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+              <div style={{gridColumn:'1/-1'}}>
+                <div style={{fontSize:11,fontWeight:700,color:'#475569',marginBottom:4}}>Park Name *</div>
+                <input style={inS} placeholder="e.g. Frank Brown Park" value={nName} onChange={e=>setNName(e.target.value)}/>
+              </div>
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:'#475569',marginBottom:4}}>City</div>
+                <input style={inS} placeholder="Panama City Beach" value={nCity} onChange={e=>setNCity(e.target.value)}/>
+              </div>
+              <div>
+                <div style={{fontSize:11,fontWeight:700,color:'#475569',marginBottom:4}}>State</div>
+                <input style={inS} placeholder="FL" maxLength={2} value={nState} onChange={e=>setNState(e.target.value.toUpperCase())}/>
+              </div>
+              <div style={{gridColumn:'1/-1'}}>
+                <div style={{fontSize:11,fontWeight:700,color:'#475569',marginBottom:4}}>Address (optional)</div>
+                <input style={inS} placeholder="123 Main St, City, FL 00000" value={nAddress} onChange={e=>setNAddress(e.target.value)}/>
+              </div>
+            </div>
+
+            {/* Field names */}
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:11,fontWeight:700,color:'#475569',marginBottom:8}}>Field Names</div>
+              <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:8}}>
+                {nFields.map((f,i)=>(
+                  <div key={i} style={{display:'flex',gap:6,alignItems:'center'}}>
+                    <input value={f} onChange={e=>renameNewField(i,e.target.value)}
+                      style={{...inS,flex:1}} placeholder={'Field '+(i+1)}/>
+                    <div onClick={()=>removeNewField(i)}
+                      style={{padding:'5px 10px',background:'#fff1f2',border:'1px solid #fecaca',borderRadius:5,cursor:'pointer',fontSize:12,color:'#ef4444',fontWeight:700,flexShrink:0}}>✕</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{display:'flex',gap:6}}>
+                <input value={nNewField} onChange={e=>setNNewField(e.target.value)}
+                  onKeyDown={e=>{if(e.key==='Enter'){e.preventDefault();addFieldToNew();}}}
+                  placeholder="Field name (e.g. Field 3, Diamond A)…"
+                  style={{...inS,flex:1}}/>
+                <button className="btn btn-secondary btn-sm" onClick={addFieldToNew} style={{flexShrink:0}}>+ Add Field</button>
+              </div>
+            </div>
+
+            {saveMsg&&<div style={{fontSize:12,marginBottom:10,color:saveMsg.startsWith('✅')?'#15803d':'#dc2626',fontWeight:600}}>{saveMsg}</div>}
+            <div style={{display:'flex',gap:8}}>
+              <button className="btn btn-primary" onClick={saveNewVenue} disabled={saving||!nName.trim()}>
+                {saving?'Saving…':'💾 Save Park'}
+              </button>
+              <button className="btn btn-secondary" onClick={()=>{setNName('');setNCity('');setNState('FL');setNAddress('');setNFields(['Field 1','Field 2']);setSaveMsg('');}}>
+                Clear
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -4172,6 +4408,181 @@ function LiveLockView(){
   );
 }
 
+/* ════════════════════ CONTACT TOOLS CARD ════════════════════ */
+function ContactToolsCard({ev,evRosters}){
+  const NAVY="#1e3a5f";
+  const [scope,setScope]=useState("tournament");
+  const [selDivIds,setSelDivIds]=useState(new Set());
+  const [teamSearch,setTeamSearch]=useState("");
+  const [selTeam,setSelTeam]=useState(null);
+  const [teamOverride,setTeamOverride]=useState({email:"",phone:""});
+  const [subject,setSubject]=useState("");
+  const [body,setBody]=useState("");
+  const [sent,setSent]=useState(false);
+  const divisions=React.useMemo(()=>(ev?.divisions||[]).map(normDiv),[ev]);
+  const allTeams=React.useMemo(()=>divisions.flatMap(d=>evRosters[String(ev?.id||"")+"_"+d.id]||[]),[divisions,evRosters,ev]);
+  const divisionTeams=React.useMemo(()=>[...selDivIds].flatMap(divId=>evRosters[String(ev?.id||"")+"_"+divId]||[]),[selDivIds,evRosters,ev]);
+  const teamResults=React.useMemo(()=>{
+    if(!teamSearch.trim())return[];
+    const q=teamSearch.toLowerCase();
+    return allTeams.filter(t=>t.name?.toLowerCase().includes(q)||t.coach?.toLowerCase().includes(q)).slice(0,8);
+  },[teamSearch,allTeams]);
+  const targetTeams=scope==="tournament"?allTeams:scope==="division"?divisionTeams:(selTeam?[selTeam]:[]);
+  const smsLen=(subject+body).length;
+  const smsOver=smsLen>80;
+  const canSend=!!(body.trim()&&targetTeams.length>0);
+  function handleSend(method){if(!canSend)return;setSent(method);setTimeout(()=>setSent(false),3000);}
+  function toggleDiv(id){setSelDivIds(p=>{const n=new Set(p);n.has(id)?n.delete(id):n.add(id);return n;});}
+  const btnLabel=scope==="tournament"?"All Teams":scope==="division"?"Division":"Team";
+  return(
+    <React.Fragment>
+      {/* Header */}
+      <div style={{background:NAVY,color:"#fff",padding:"11px 18px",display:"flex",alignItems:"center",gap:8}}>
+        <span style={{fontSize:16}}>📬</span>
+        <strong style={{fontSize:14,letterSpacing:.3}}>Contact Tools</strong>
+        <span style={{marginLeft:"auto",fontSize:11,background:"rgba(255,255,255,0.15)",borderRadius:12,padding:"2px 10px",letterSpacing:.3}}>
+          SendGrid Integration Pending
+        </span>
+      </div>
+      <div style={{padding:"16px 18px"}}>
+        {/* STEP 1: Scope */}
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>Step 1 — Who are you contacting?</div>
+          <div style={{display:"flex",gap:8}}>
+            {[["tournament","🏆","Entire Tournament",allTeams.length],["division","📂","By Division",divisionTeams.length],["team","👤","Individual Team",selTeam?1:0]].map(([s,emoji,label,cnt])=>(
+              <div key={s} onClick={()=>setScope(s)} style={{flex:1,padding:"10px 8px",borderRadius:8,cursor:"pointer",textAlign:"center",
+                border:"2px solid "+(scope===s?NAVY:"#e2e8f0"),background:scope===s?"#eff6ff":"#f8fafc",transition:"all .15s"}}>
+                <div style={{fontSize:18,marginBottom:3}}>{emoji}</div>
+                <div style={{fontWeight:700,fontSize:11,color:scope===s?NAVY:"#374151"}}>{label}</div>
+                {scope===s&&<div style={{fontSize:10,color:"#2563eb",marginTop:2,fontWeight:600}}>{cnt>0?cnt+" team"+(cnt!==1?"s":""):"—"}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Division picker */}
+        {scope==="division"&&(
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>Select Divisions</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {divisions.map(d=>{
+                const cnt=(evRosters[String(ev?.id||"")+"_"+d.id]||[]).length;
+                const sel=selDivIds.has(d.id);
+                return(
+                  <div key={d.id} onClick={()=>toggleDiv(d.id)} style={{
+                    padding:"6px 12px",borderRadius:20,cursor:"pointer",fontSize:12,fontWeight:600,
+                    border:"2px solid "+(sel?"#2563eb":"#e2e8f0"),background:sel?"#eff6ff":"#f8fafc",
+                    color:sel?"#1d4ed8":"#374151",display:"flex",alignItems:"center",gap:5}}>
+                    {sel&&<span style={{color:"#2563eb"}}>✓</span>}
+                    {d.label}
+                    <span style={{background:sel?"#bfdbfe":"#e2e8f0",borderRadius:10,padding:"1px 6px",fontSize:10}}>{cnt}t</span>
+                  </div>
+                );
+              })}
+              {divisions.length>1&&(
+                <div onClick={()=>setSelDivIds(new Set(divisions.map(d=>d.id)))}
+                  style={{padding:"6px 12px",borderRadius:20,cursor:"pointer",fontSize:12,fontWeight:600,border:"1px dashed #cbd5e1",color:"#64748b"}}>
+                  All
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Individual team picker */}
+        {scope==="team"&&(
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>Find a Team</div>
+            <input value={teamSearch} onChange={e=>{setTeamSearch(e.target.value);setSelTeam(null);}}
+              placeholder="🔍 Search by team name or coach..."
+              style={{width:"100%",padding:"8px 10px",border:"1px solid #e2e8f0",borderRadius:6,fontSize:13,marginBottom:6,boxSizing:"border-box"}}/>
+            {teamResults.length>0&&!selTeam&&(
+              <div style={{border:"1px solid #e2e8f0",borderRadius:6,overflow:"hidden",maxHeight:180,overflowY:"auto"}}>
+                {teamResults.map(t=>(
+                  <div key={t.id} onClick={()=>{setSelTeam(t);setTeamSearch(t.name);setTeamOverride({email:t.email||"",phone:t.phone||""}); }}
+                    style={{padding:"8px 12px",fontSize:12,cursor:"pointer",borderBottom:"1px solid #f1f5f9",background:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center"}}
+                    onMouseEnter={e=>e.currentTarget.style.background="#f0f9ff"}
+                    onMouseLeave={e=>e.currentTarget.style.background="#fff"}>
+                    <div>
+                      <div style={{fontWeight:700,color:"#1e293b"}}>{t.name}</div>
+                      <div style={{color:"#64748b",fontSize:11}}>{t.coach?"Coach: "+t.coach:""}{t.cls?" · "+t.cls:""}</div>
+                    </div>
+                    <div style={{fontSize:11,color:"#94a3b8"}}>{t.city||""}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {selTeam&&(
+              <div style={{background:"#f0f9ff",border:"1px solid #bfdbfe",borderRadius:8,padding:"10px 14px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                  <div>
+                    <div style={{fontWeight:800,color:NAVY,fontSize:13}}>{selTeam.name}</div>
+                    <div style={{fontSize:12,color:"#64748b"}}>{selTeam.coach||"No coach listed"}{selTeam.cls?" · "+selTeam.cls:""}</div>
+                  </div>
+                  <button onClick={()=>{setSelTeam(null);setTeamSearch("");}} style={{background:"none",border:"none",color:"#94a3b8",cursor:"pointer",fontSize:16,lineHeight:1}}>✕</button>
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  <div style={{flex:1}}>
+                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:3}}>Email</label>
+                    <input value={teamOverride.email} onChange={e=>setTeamOverride(p=>({...p,email:e.target.value}))}
+                      placeholder="coach@email.com"
+                      style={{width:"100%",padding:"6px 8px",border:"1px solid #bfdbfe",borderRadius:5,fontSize:12,boxSizing:"border-box",background:"#fff"}}/>
+                  </div>
+                  <div style={{flex:1}}>
+                    <label style={{fontSize:11,fontWeight:700,color:"#64748b",display:"block",marginBottom:3}}>Cell / Phone</label>
+                    <input value={teamOverride.phone} onChange={e=>setTeamOverride(p=>({...p,phone:e.target.value}))}
+                      placeholder="(555) 000-0000"
+                      style={{width:"100%",padding:"6px 8px",border:"1px solid #bfdbfe",borderRadius:5,fontSize:12,boxSizing:"border-box",background:"#fff"}}/>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* STEP 2: Compose */}
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:11,fontWeight:700,color:"#64748b",textTransform:"uppercase",letterSpacing:.6,marginBottom:8}}>Step 2 — Compose Message</div>
+          <input value={subject} onChange={e=>setSubject(e.target.value)} maxLength={40}
+            placeholder="Subject (e.g. Field update for Sunday)"
+            style={{width:"100%",padding:"8px 10px",border:"1px solid #e2e8f0",borderRadius:6,fontSize:13,marginBottom:8,boxSizing:"border-box"}}/>
+          <textarea value={body} onChange={e=>setBody(e.target.value)} rows={3}
+            placeholder="Your message to team managers..."
+            style={{width:"100%",padding:"8px 10px",border:"1px solid #e2e8f0",borderRadius:6,fontSize:13,resize:"vertical",boxSizing:"border-box"}}/>
+          <div style={{fontSize:11,color:smsOver?"#dc2626":"#94a3b8",marginTop:3,textAlign:"right"}}>
+            {smsLen}/80 SMS chars {smsOver&&"⚠️ Over limit — SMS may be split"}
+          </div>
+        </div>
+
+        {/* STEP 3: Send */}
+        <div style={{borderTop:"1px solid #f1f5f9",paddingTop:12,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{flex:1,fontSize:12,color:"#64748b",minWidth:140}}>
+            {sent?(
+              <span style={{color:"#16a34a",fontWeight:700}}>✅ Queued for {sent==="email"?"email":"SMS"} — {targetTeams.length} team{targetTeams.length!==1?"s":""}</span>
+            ):targetTeams.length>0?(
+              <span>Sending to <strong style={{color:NAVY}}>{targetTeams.length} team{targetTeams.length!==1?"s":""}</strong></span>
+            ):(
+              <span style={{color:"#94a3b8"}}>Select recipient(s) above to continue</span>
+            )}
+          </div>
+          <button onClick={()=>handleSend("email")} disabled={!canSend}
+            style={{display:"flex",alignItems:"center",gap:6,padding:"9px 18px",borderRadius:7,border:"none",
+              background:canSend?"#2563eb":"#e2e8f0",color:canSend?"#fff":"#94a3b8",
+              cursor:canSend?"pointer":"not-allowed",fontWeight:700,fontSize:13,transition:"all .15s"}}>
+            📧 Email {btnLabel}
+          </button>
+          <button onClick={()=>handleSend("text")} disabled={!canSend}
+            style={{display:"flex",alignItems:"center",gap:6,padding:"9px 18px",borderRadius:7,border:"none",
+              background:canSend?"#16a34a":"#e2e8f0",color:canSend?"#fff":"#94a3b8",
+              cursor:canSend?"pointer":"not-allowed",fontWeight:700,fontSize:13,transition:"all .15s"}}>
+            💬 Text {btnLabel}
+          </button>
+        </div>
+      </div>
+    </React.Fragment>
+  );
+}
+
 /* ════════════════════ CONTACT / NOTES ════════════════════ */
 function ContactView({ev}){
   const NAVY="#1e3a5f";
@@ -4389,12 +4800,297 @@ function FlightView({flight,divId,divCode,eventParks}){
   );
 }
 
+/* ════════════════════ ASSIGN FIELDS TAB ════════════════════ */
+function AssignFieldsTab({evId,fieldAssignments,setFieldAssignments,onNext}){
+  const PARK_COLORS_LOCAL=["#1e3a5f","#14532d","#4c1d95","#7c2d12","#164e63","#713f12","#881337","#134e4a","#1c4532","#374151"];
+  const [allVenues,setAllVenues]=React.useState([]);
+  const [loading,setLoading]=React.useState(false);
+  const [search,setSearch]=React.useState("");
+  const [cityFilter,setCityFilter]=React.useState("");
+  const [expandedId,setExpandedId]=React.useState(null);
+  const [editFields,setEditFields]=React.useState({}); // venueKey → ["Field 1","Field 2",...]
+  const [newFieldText,setNewFieldText]=React.useState({});
+
+  // Load venues from worker
+  React.useEffect(()=>{
+    setLoading(true);
+    fetch("https://usssa-poller.chad-157.workers.dev/venues")
+      .then(r=>r.json())
+      .then(d=>{
+        const venues=(d.venues||d||[]);
+        setAllVenues(venues);
+        setLoading(false);
+      })
+      .catch(()=>setLoading(false));
+  },[]);
+
+  const assignedIds=new Set(fieldAssignments.map(a=>a.venueKey));
+
+  const cities=React.useMemo(()=>{
+    const s=new Set(allVenues.map(v=>v.city||"").filter(Boolean));
+    return [...s].sort();
+  },[allVenues]);
+
+  const filtered=React.useMemo(()=>{
+    let list=allVenues;
+    if(search.trim())list=list.filter(v=>(v.name||"").toLowerCase().includes(search.toLowerCase())||(v.city||"").toLowerCase().includes(search.toLowerCase()));
+    if(cityFilter)list=list.filter(v=>v.city===cityFilter);
+    return list;
+  },[allVenues,search,cityFilter]);
+
+  const topCities=React.useMemo(()=>{
+    const freq={};
+    allVenues.forEach(v=>{if(v.city)freq[v.city]=(freq[v.city]||0)+1;});
+    return Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,8).map(([c])=>c);
+  },[allVenues]);
+
+  function venueKey(v){return `${v.name}__${v.city}`;}
+
+  function toggleVenue(v){
+    const key=venueKey(v);
+    if(assignedIds.has(key)){
+      setFieldAssignments(fieldAssignments.filter(a=>a.venueKey!==key));
+    } else {
+      const colorIdx=fieldAssignments.length%PARK_COLORS_LOCAL.length;
+      const defaultFields=["Field 1","Field 2","Field 3"];
+      setEditFields(prev=>({...prev,[key]:defaultFields}));
+      setFieldAssignments([...fieldAssignments,{venueKey:key,venueId:v.id||v.venueID||key,venueName:v.name,city:v.city||"",fields:defaultFields,color:PARK_COLORS_LOCAL[colorIdx]}]);
+      setExpandedId(key);
+    }
+  }
+
+  function updateFields(key,fields){
+    setEditFields(prev=>({...prev,[key]:fields}));
+    setFieldAssignments(fieldAssignments.map(a=>a.venueKey===key?{...a,fields}:a));
+  }
+
+  function addField(key){
+    const txt=(newFieldText[key]||"").trim();
+    if(!txt)return;
+    const cur=(editFields[key]||fieldAssignments.find(a=>a.venueKey===key)?.fields||[]);
+    updateFields(key,[...cur,txt]);
+    setNewFieldText(p=>({...p,[key]:""}));
+  }
+
+  function removeField(key,i){
+    const cur=editFields[key]||fieldAssignments.find(a=>a.venueKey===key)?.fields||[];
+    updateFields(key,cur.filter((_,idx)=>idx!==i));
+  }
+
+  function renameField(key,i,val){
+    const cur=(editFields[key]||fieldAssignments.find(a=>a.venueKey===key)?.fields||[]).slice();
+    cur[i]=val;
+    updateFields(key,cur);
+  }
+
+  const totalFields=fieldAssignments.reduce((s,a)=>s+(a.fields||[]).length,0);
+
+  return(
+    <div style={{display:"flex",height:"calc(100vh - 230px)",minHeight:480,overflow:"hidden",borderRadius:10,border:"1px solid #e2e8f0",background:"#fff"}}>
+
+      {/* ── LEFT PANEL: Park browser (60%) ── */}
+      <div style={{flex:"0 0 58%",display:"flex",flexDirection:"column",borderRight:"2px solid #e2e8f0",overflow:"hidden"}}>
+
+        {/* Search bar */}
+        <div style={{padding:"10px 12px",borderBottom:"1px solid #e2e8f0",background:"#fff"}}>
+          <input
+            placeholder="🔍 Search parks or city..."
+            value={search}
+            onChange={e=>setSearch(e.target.value)}
+            autoFocus
+            style={{width:"100%",padding:"7px 11px",border:"1.5px solid #cbd5e1",borderRadius:8,fontSize:13,boxSizing:"border-box",outline:"none"}}
+          />
+        </div>
+
+        {/* City quick-filter pills */}
+        <div style={{padding:"6px 10px",borderBottom:"1px solid #e2e8f0",background:"#f8fafc",display:"flex",gap:4,flexWrap:"nowrap",overflowX:"auto"}}>
+          {["All",...topCities].map(c=>{
+            const active=cityFilter===(c==="All"?"":c);
+            return(
+              <span key={c} onClick={()=>setCityFilter(c==="All"?"":c)}
+                style={{padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap",
+                  background:active?"#1e3a5f":"#fff",color:active?"#fff":"#475569",
+                  border:`1.5px solid ${active?"#1e3a5f":"#cbd5e1"}`}}>
+                {c}
+              </span>
+            );
+          })}
+          {(search||cityFilter)&&(
+            <span onClick={()=>{setSearch("");setCityFilter("");}}
+              style={{padding:"3px 9px",borderRadius:20,fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0,
+                background:"#fee2e2",color:"#991b1b",border:"1.5px solid #fca5a5"}}>
+              ✕ Clear
+            </span>
+          )}
+        </div>
+
+        {/* Count bar */}
+        <div style={{padding:"3px 12px",fontSize:10,color:"#94a3b8",background:"#fff",borderBottom:"1px solid #f1f5f9"}}>
+          {loading?"Loading venues...":`${filtered.length} of ${allVenues.length} venues • tap to assign`}
+        </div>
+
+        {/* Scrollable venue list */}
+        <div style={{flex:1,overflowY:"auto"}}>
+          {loading?(
+            <div style={{textAlign:"center",padding:40,color:"#94a3b8"}}>
+              <div style={{fontSize:28,marginBottom:8}}>🔄</div>
+              <div style={{fontSize:13}}>Loading Florida venues...</div>
+            </div>
+          ):filtered.length===0?(
+            <div style={{textAlign:"center",padding:40,color:"#94a3b8"}}>
+              <div style={{fontSize:24,marginBottom:8}}>🔍</div>
+              <div style={{fontSize:12}}>No venues match your search</div>
+            </div>
+          ):(
+            filtered.map((v,vi)=>{
+              const key=venueKey(v);
+              const sel=assignedIds.has(key);
+              const asgn=fieldAssignments.find(a=>a.venueKey===key);
+              const fldCount=asgn?(editFields[key]||asgn.fields||[]).length:0;
+              return(
+                <div key={vi} onClick={()=>toggleVenue(v)}
+                  style={{display:"flex",alignItems:"center",gap:10,padding:"7px 12px",cursor:"pointer",
+                    borderBottom:"1px solid #f1f5f9",
+                    background:sel?"#f0fdf4":"#fff",transition:"background .08s"}}>
+                  <div style={{width:20,height:20,borderRadius:"50%",flexShrink:0,
+                    background:sel?"#22c55e":"#e2e8f0",
+                    display:"flex",alignItems:"center",justifyContent:"center",
+                    fontSize:10,fontWeight:800,color:sel?"#fff":"#94a3b8"}}>
+                    {sel?"✓":"+"}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:700,fontSize:12,color:sel?"#166534":"#1e3a5f",
+                      whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                      {v.name||"—"}
+                    </div>
+                    <div style={{fontSize:10,color:"#64748b"}}>
+                      📍 {v.city||""}{v.city&&v.state?", ":""}{v.state||""}
+                    </div>
+                  </div>
+                  {sel&&(
+                    <div style={{flexShrink:0,fontSize:10,color:"#16a34a",fontWeight:700,
+                      background:"#dcfce7",padding:"2px 7px",borderRadius:20,
+                      border:"1px solid #86efac"}}>
+                      {fldCount} field{fldCount!==1?"s":""}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* ── RIGHT PANEL: Assigned complexes (42%) ── */}
+      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#f8fafc"}}>
+
+        {/* Header */}
+        <div style={{padding:"10px 14px",borderBottom:"1px solid #e2e8f0",background:"#1e3a5f",color:"#fff"}}>
+          <div style={{fontWeight:800,fontSize:13}}>🏟 Assigned Complexes</div>
+          <div style={{fontSize:10,opacity:.75,marginTop:1}}>
+            {fieldAssignments.length===0?"None assigned yet":`${fieldAssignments.length} complex${fieldAssignments.length!==1?"es":""}${totalFields>0?" · "+totalFields+" fields":""}`}
+          </div>
+        </div>
+
+        {/* Scrollable assigned list */}
+        <div style={{flex:1,overflowY:"auto",padding:"8px 8px 4px"}}>
+          {fieldAssignments.length===0?(
+            <div style={{textAlign:"center",padding:32,color:"#94a3b8"}}>
+              <div style={{fontSize:28,marginBottom:8}}>👈</div>
+              <div style={{fontSize:12,lineHeight:1.5}}>Select a park on the left to assign it to this tournament</div>
+            </div>
+          ):(
+            fieldAssignments.map((a)=>{
+              const isExp=expandedId===a.venueKey;
+              const flds=editFields[a.venueKey]||a.fields||[];
+              return(
+                <div key={a.venueKey} style={{marginBottom:6,borderRadius:8,overflow:"hidden",
+                  border:`2px solid ${a.color}`,background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,.06)"}}>
+
+                  {/* Complex header */}
+                  <div style={{background:a.color,padding:"8px 11px",display:"flex",alignItems:"center",
+                    justifyContent:"space-between",cursor:"pointer"}}
+                    onClick={()=>setExpandedId(isExp?null:a.venueKey)}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontWeight:800,fontSize:12,color:"#fff",whiteSpace:"nowrap",
+                        overflow:"hidden",textOverflow:"ellipsis"}}>{a.venueName}</div>
+                      <div style={{fontSize:10,color:"rgba(255,255,255,.75)"}}>
+                        {a.city} · {flds.length} field{flds.length!==1?"s":""}
+                      </div>
+                    </div>
+                    <span style={{color:"rgba(255,255,255,.85)",fontSize:12,flexShrink:0,marginLeft:6}}>{isExp?"▲":"▼"}</span>
+                  </div>
+
+                  {/* Field editor (expanded) */}
+                  {isExp&&(
+                    <div style={{padding:"10px 11px",background:"#f8fafc"}}>
+                      <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:7}}>
+                        {flds.map((f,fi)=>(
+                          <div key={fi} style={{display:"flex",gap:4,alignItems:"center"}}>
+                            <input value={f} onChange={e=>renameField(a.venueKey,fi,e.target.value)}
+                              style={{flex:1,padding:"4px 8px",border:"1px solid #cbd5e1",borderRadius:6,
+                                fontSize:12,fontWeight:600,color:"#1e3a5f"}}/>
+                            <button onClick={()=>removeField(a.venueKey,fi)}
+                              style={{background:"#fee2e2",color:"#991b1b",border:"none",borderRadius:5,
+                                padding:"4px 7px",fontSize:11,fontWeight:700,cursor:"pointer"}}>✕</button>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{display:"flex",gap:4,marginBottom:6}}>
+                        <input placeholder="New field name..."
+                          value={newFieldText[a.venueKey]||""} onChange={e=>setNewFieldText(p=>({...p,[a.venueKey]:e.target.value}))}
+                          onKeyDown={e=>{if(e.key==="Enter")addField(a.venueKey);}}
+                          style={{flex:1,padding:"4px 8px",border:"1px solid #cbd5e1",borderRadius:6,fontSize:12}}/>
+                        <button onClick={()=>addField(a.venueKey)}
+                          style={{background:"#1e3a5f",color:"#fff",border:"none",borderRadius:6,
+                            padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>+ Add</button>
+                      </div>
+                      <div style={{display:"flex",gap:4}}>
+                        <button onClick={()=>{const n=flds.length+1;updateFields(a.venueKey,[...flds,`Field ${n}`]);}}
+                          style={{flex:1,background:"#f1f5f9",color:"#475569",border:"1px solid #cbd5e1",
+                            borderRadius:6,padding:"4px 6px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                          + Auto-number
+                        </button>
+                        <button onClick={()=>toggleVenue({name:a.venueName,city:a.city})}
+                          style={{background:"#fee2e2",color:"#991b1b",border:"1px solid #fca5a5",
+                            borderRadius:6,padding:"4px 8px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                          🗑 Remove
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Continue button pinned to bottom */}
+        {fieldAssignments.length>0&&(
+          <div style={{padding:"10px 12px",borderTop:"2px solid #e2e8f0",background:"#fff",flexShrink:0}}>
+            <button onClick={onNext}
+              style={{width:"100%",background:"#16a34a",color:"#fff",border:"none",borderRadius:8,
+                padding:"10px 0",fontSize:13,fontWeight:800,cursor:"pointer",
+                boxShadow:"0 2px 8px rgba(22,163,74,.25)"}}>
+              🗺 Continue to Grid Builder →
+            </button>
+            <div style={{textAlign:"center",fontSize:10,color:"#94a3b8",marginTop:4}}>
+              {fieldAssignments.length} complex{fieldAssignments.length!==1?"es":""},&nbsp;{totalFields} field{totalFields!==1?"s":""}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ════════════════════ EVENT DETAIL ════════════════════ */
-function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
+function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule,onGrid,fieldAssignments,setFieldAssignments}){
   const divisions=(ev.divisions||[]).map(normDiv);
   const firstId=divisions.length>0?divisions[0].id:null;
   const [activeDivId,setActiveDivId]=useState(firstId);
   const [evTab,setEvTab]=useState("roster");
+  const [dirTab,setDirTab]=useState("fields");
   const [dirDivId,setDirDivId]=useState(firstId);
   const [flightId,setFlightId]=useState(null);
   const [pubTab,setPubTab]=useState("standings");
@@ -4411,6 +5107,7 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
   const [loadingTeams,setLoadingTeams]=useState(false);
   const [searchState,setSearchState]=useState(ev.state||"FL");
   const [hasSearched,setHasSearched]=useState(false);
+  const [movingTeamId,setMovingTeamId]=useState(null);
   function runTeamSearch(){
     if(!activeDivAge)return;
     setLoadingTeams(true);setUsssaTeams([]);setHasSearched(true);
@@ -4427,6 +5124,48 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
     go();
   }
   useEffect(()=>{setUsssaTeams([]);setHasSearched(false);},[activeDivId]);
+  useEffect(()=>{
+    const evId=ev.id;
+    const usssaEvId=ev.evid||ev.id;
+    if(!evId)return;
+    let cancelled=false;
+    const go=async()=>{
+      try{
+        const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(String(usssaEvId)));
+        const json=await r.json();
+        if(cancelled)return;
+        if(json.status!=='ok'||!json.teams||!json.teams.length)return;
+        const byDiv={};
+        for(const t of json.teams){
+          const dl=(t.division||"").trim();
+          if(!byDiv[dl])byDiv[dl]=[];
+          byDiv[dl].push(t);
+        }
+        setEvRosters(p=>{
+          const next={...p};
+          let changed=false;
+          for(const d of divisions){
+            const k=String(evId)+"_"+d.id;
+            if(next[k]&&next[k].length)continue;
+            const divTeams=byDiv[d.label]||[];
+            if(!divTeams.length)continue;
+            next[k]=divTeams.map(t=>{
+              const rawEntry=t.entry_status||"";
+              const rawPay=t.payment_status||"";
+              const entryS=rawEntry==="Approved"?"Approved":rawEntry==="Pending"?"Pending":rawEntry==="Hold"?"Hold":"Approved";
+              const payS=rawPay==="Paid"?"Paid":rawPay.toLowerCase().includes("partial")?"Partial Paid":"Not Paid";
+              const tid="us_"+String(ev.evid||evId)+"_"+(t.team_name||"").replace(/\W+/g,"_");
+              return {id:tid,name:t.team_name||"",city:t.team_city||"",state:t.team_state||"",cls:d.label||"",coach:t.manager_name||"",email:t.manager_email||"",phone:t.manager_phone||"",entryStatus:entryS,payStatus:payS,entryFee:"",gateFee:"",discount:"",notes:""};
+            });
+            changed=true;
+          }
+          return changed?next:p;
+        });
+      }catch(e){console.warn("Auto-populate error:",e.message);}
+    };
+    go();
+    return ()=>{cancelled=true;};
+  },[ev.id,divisions.length]);
 
   const rosterKey=String(ev.id)+"_"+(activeDivId||"");
   const divRoster=evRosters[rosterKey]||[];
@@ -4446,6 +5185,26 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
   const pubTeams=teamDB(pubDivNorm?pubDivNorm.id:"");
   const pubGames=poolGamesDB(pubDivNorm?pubDivNorm.id:"");
   function parseDivAge(lbl){const m=(lbl||"").match(/^(\d+)/);return m?parseInt(m[1]):null;}
+  function getDivClassRank(lbl){
+    const m=(lbl||"").match(/^\d+(.*)/);
+    const c=(m?m[1]:"").toUpperCase().trim();
+    if(c==="OP")return 0;
+    if(c==="A")return 1;
+    if(c==="AA")return 2;
+    if(c==="AAA")return 3;
+    if(c==="MAJ"||c==="MAJORS")return 4;
+    return 0;
+  }
+  function canMoveDiv(fromLbl,toLbl){
+    const fa=parseDivAge(fromLbl),ta=parseDivAge(toLbl);
+    if(!fa||!ta)return{ok:true,reason:""};
+    if(ta<fa)return{ok:false,reason:"Can't play down in age"};
+    if(ta-fa>2)return{ok:false,reason:"Max 2 age groups up ("+fa+"→"+ta+")"};
+    const fc=getDivClassRank(fromLbl),tc=getDivClassRank(toLbl);
+    if(tc===0)return{ok:true,reason:""};
+    if(tc<fc)return{ok:false,reason:"Can't play down in class"};
+    return{ok:true,reason:""};
+  }
   function teamFinalFee(t){const base=(parseFloat(t.entryFee)||0)+(parseFloat(t.gateFee)||0);const disc=parseFloat(t.discount)||0;return base*(1-disc/100);}
   function usssaId(t){return "us_"+String(ev.evid||"")+"_"+(t.team_name||"").replace(/\W+/g,"_");}
   const activeDivAge=activeDivObj?parseDivAge(activeDivObj.label):null;
@@ -4467,6 +5226,18 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
   const inStyle={width:"100%",padding:"3px 6px",border:"1px solid #ddd",borderRadius:4,fontSize:12,boxSizing:"border-box"};
 
   function updateRoster(fn){setEvRosters(p=>({...p,[rosterKey]:fn(p[rosterKey]||[])}));}
+  function moveTeam(team,targetDivId){
+    const targetDiv=divisions.find(d=>d.id===targetDivId);
+    if(!targetDiv)return;
+    const targetKey=String(ev.id)+"_"+targetDivId;
+    updateRoster(prev=>prev.filter(x=>x.id!==team.id));
+    setEvRosters(p=>{
+      const tgt=p[targetKey]||[];
+      if(tgt.some(x=>x.id===team.id))return p;
+      return{...p,[targetKey]:[...tgt,{...team,cls:targetDiv.label}]};
+    });
+    setActionTeamId(null);setMovingTeamId(null);
+  }
   function addTeam(team){
     const isUSSSA=!team.id;
     const tid=isUSSSA?usssaId(team):team.id;
@@ -4513,7 +5284,7 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
       <div className="flex-b mb4">
         <button className="btn btn-secondary btn-sm" onClick={onBack}>← Back to Events</button>
         <div className="flex-c gap-3">
-          <button className="btn btn-primary btn-sm" onClick={e=>{e.stopPropagation();handleSchedule();}}>📅 Schedule in Builder →</button>
+          
           <Ev_StatusBadge status={ev.status}/>
         </div>
       </div>
@@ -4539,17 +5310,19 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
           <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:16,alignItems:"center"}}>
             {divisions.map(d=>{
               const dk=String(ev.id)+"_"+d.id;
-              const cnt=(evRosters[dk]||[]).length;
+              const divArr=(evRosters[dk]||[]);
+              const cnt=divArr.length;
+              const paidCnt=divArr.filter(t=>t.payStatus==="Paid").length;
               return(
                 <div key={d.id} className={`div-pill ${activeDivId===d.id?"dp-on":"dp-off"}`}
-                  onClick={e=>{e.stopPropagation();setActiveDivId(d.id);setActionTeamId(null);setTeamSearch("");setSchedMsg("");}}>
-                  {d.label}<span style={{fontSize:10,opacity:.65,marginLeft:4}}>{cnt>0?"("+cnt+" rostered)":"("+d.numTeams+"t)"}</span>
+                  onClick={e=>{e.stopPropagation();setActiveDivId(d.id);setActionTeamId(null);setMovingTeamId(null);setTeamSearch("");setSchedMsg("");}}>
+                  {d.label}<span style={{fontSize:10,opacity:.65,marginLeft:4}}>{cnt>0?"("+cnt+" entered · "+paidCnt+" paid)":"("+d.numTeams+"t)"}</span>
                 </div>
               );
             })}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:12}}>
-            <div className="stat-card"><div className="stat-ico" style={{background:"#dbeafe"}}>👥</div><div><div className="stat-val">{divRoster.length}</div><div className="stat-lbl">Rostered</div></div></div>
+            <div className="stat-card"><div className="stat-ico" style={{background:"#dbeafe"}}>👥</div><div><div className="stat-val">{divRoster.length}</div><div className="stat-lbl">Entered</div></div></div>
             <div className="stat-card"><div className="stat-ico" style={{background:"#dcfce7"}}>✓</div><div><div className="stat-val">{approvedCount}</div><div className="stat-lbl">Approved</div></div></div>
             <div className="stat-card"><div className="stat-ico" style={{background:"#d1fae5"}}>💰</div><div><div className="stat-val">{paidCount}</div><div className="stat-lbl">Paid</div></div></div>
             <div className="stat-card"><div className="stat-ico" style={{background:"#fef9c3"}}>$</div><div><div className="stat-val">{"$"+totalPaid.toFixed(0)}</div><div className="stat-lbl">Collected</div></div></div>
@@ -4578,13 +5351,12 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
               <span className="card-title">👥 {activeDivObj?activeDivObj.label:"Division"} — Teams in Event ({divRoster.length}{activeDivObj?" / "+activeDivObj.numTeams+"t":""})</span>
               <div className="flex-c gap-2">
                 {schedMsg?<span style={{fontSize:12,color:"var(--red)",fontWeight:600}}>⚠ {schedMsg}</span>:null}
-                <button className="btn btn-secondary btn-sm" onClick={e=>{e.stopPropagation();handleSchedule();}}>📅 Schedule Builder →</button>
               </div>
             </div>
             <div className="tbl-scroll">
               {divRoster.length===0?(
                 <div style={{padding:"18px 18px 8px",color:"var(--gray)",fontSize:13,textAlign:"center",borderBottom:"1px solid #f0f4f8"}}>
-                  No teams rostered yet. Add teams from the list below.
+                  No teams entered yet. Add teams from the list below.
                 </div>
               ):(
                 <table>
@@ -4593,6 +5365,7 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
                     <th>Team Name</th>
                     <th>Class</th>
                     <th>City, ST</th>
+                    <th style={{width:170}}>Manager</th>
                     <th style={{width:120}}>Entry Status</th>
                     <th style={{width:120}}>Payment</th>
                     <th style={{width:80}}>Entry Fee</th>
@@ -4615,6 +5388,12 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
                         <td style={{fontWeight:700,fontSize:13}}>{t.name}</td>
                         <td><span className="badge b-blue" style={{fontSize:10}}>{t.cls}</span></td>
                         <td className="t-sm t-gray">{t.city}, {t.state}</td>
+                        <td style={{fontSize:11,lineHeight:1.5}}>
+                          {t.coach&&<div style={{fontWeight:600,color:"#1e293b"}}>{t.coach}</div>}
+                          {t.email&&<div style={{color:"#2563eb"}}><a href={"mailto:"+t.email} style={{color:"#2563eb",textDecoration:"none"}}>{t.email}</a></div>}
+                          {t.phone&&<div style={{color:"#64748b"}}>{t.phone}</div>}
+                          {!t.coach&&!t.email&&!t.phone&&<span style={{color:"#cbd5e1"}}>—</span>}
+                        </td>
                         <td>
                           <select style={{fontSize:11,padding:"3px 6px",borderRadius:4,border:"1px solid #ddd",color:entryClr,fontWeight:700,background:"#fff",width:"100%"}}
                             value={t.entryStatus} onChange={e=>setField(t.id,"entryStatus",e.target.value)}>
@@ -4647,6 +5426,33 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
                               <div style={{padding:"7px 14px",fontSize:13,cursor:"pointer"}} onClick={()=>{setField(t.id,"payStatus","Partial Paid");setActionTeamId(null);}}>💳 Partial Paid</div>
                               <div style={{padding:"7px 14px",fontSize:13,cursor:"pointer"}} onClick={()=>{setField(t.id,"payStatus","Not Paid");setActionTeamId(null);}}>⚪ Not Paid</div>
                               <div style={{height:1,background:"#f0f4f8",margin:"4px 0"}}></div>
+                              <div style={{padding:"7px 14px",fontSize:11,fontWeight:700,color:"var(--gray)",textTransform:"uppercase",letterSpacing:.5,borderBottom:"1px solid #f0f4f8"}}>Move to Division</div>
+                              {movingTeamId===t.id?(
+                                <div style={{maxHeight:160,overflowY:"auto"}}>
+                                  {divisions.filter(d=>d.id!==activeDivId).map(d=>{
+                                    const chk=canMoveDiv(activeDivObj?.label||"",d.label);
+                                    const disabled=!chk.ok;
+                                    return(
+                                    <div key={d.id} style={{padding:"6px 14px 6px 22px",fontSize:12,cursor:disabled?"not-allowed":"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",opacity:disabled?0.45:1,background:disabled?"#f8fafc":""}}
+                                      onMouseEnter={e=>{if(!disabled)e.currentTarget.style.background="#f0f9ff";}}
+                                      onMouseLeave={e=>{if(!disabled)e.currentTarget.style.background="";}}
+                                      onClick={()=>{if(!disabled)moveTeam(t,d.id);}}>
+                                      <div style={{display:"flex",flexDirection:"column",gap:1}}>
+                                        <span style={{fontWeight:600,color:disabled?"#94a3b8":"inherit"}}>{d.label}</span>
+                                        {disabled&&<span style={{fontSize:10,color:"#f87171"}}>{chk.reason}</span>}
+                                      </div>
+                                      <span style={{fontSize:10,color:"#94a3b8"}}>{(evRosters[String(ev.id)+"_"+d.id]||[]).length}t</span>
+                                    </div>
+                                    );
+                                  })}
+                                </div>
+                              ):(
+                                <div style={{padding:"7px 14px",fontSize:13,cursor:"pointer",display:"flex",justifyContent:"space-between"}}
+                                  onClick={e=>{e.stopPropagation();setMovingTeamId(t.id);}}>
+                                  <span>➡ Select Division…</span><span style={{color:"#94a3b8"}}>▸</span>
+                                </div>
+                              )}
+                              <div style={{height:1,background:"#f0f4f8",margin:"4px 0"}}></div>
                               <div style={{padding:"7px 14px",fontSize:13,cursor:"pointer",color:"var(--red)",fontWeight:600}} onClick={()=>{removeTeam(t.id);setActionTeamId(null);}}>✕ Remove Team</div>
                             </div>
                           ):null}
@@ -4659,12 +5465,12 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
             </div>
             <div style={{padding:"10px 18px",borderTop:"1px solid #eee",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#fafbfc",flexWrap:"wrap",gap:8}}>
               <div style={{fontSize:12,color:"var(--gray)"}}>
-                {divRoster.length>0?(<span>{divRoster.length} teams · {approvedCount} approved · {paidCount} paid · <strong>${totalPaid.toFixed(0)}</strong> collected · <strong style={{color:totalOwed>0?"var(--red)":"inherit"}}>${totalOwed.toFixed(0)}</strong> balance due</span>):(<span>0 teams rostered</span>)}
+                {divRoster.length>0?(<span>{divRoster.length} teams · {approvedCount} approved · {paidCount} paid · <strong>${totalPaid.toFixed(0)}</strong> collected · <strong style={{color:totalOwed>0?"var(--red)":"inherit"}}>${totalOwed.toFixed(0)}</strong> balance due</span>):(<span>0 teams entered</span>)}
               </div>
-              <button className="btn btn-primary btn-sm" onClick={e=>{e.stopPropagation();handleSchedule();}}>📅 Schedule This Division in Builder →</button>
             </div>
           </div>
-          <div className="card" style={{marginTop:12}}>
+          <div className="card" style={{marginTop:12,overflow:"hidden"}}>
+          <ContactToolsCard ev={ev} evRosters={evRosters}/>
             <div className="card-hd" style={{flexWrap:"wrap",gap:8}}>
               <div>
                 <span className="card-title">➕ Search &amp; Add Teams — {activeDivObj?activeDivObj.label:""}</span>
@@ -4735,49 +5541,102 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule}){
       ):(
         evTab==="director"?(
           <div>
-            {divisions.length===0?(
-              <div className="card"><div className="card-body" style={{textAlign:"center",padding:48,color:"var(--gray)"}}>No divisions configured for this event.</div></div>
-            ):(
-              <div>
-                <div className="div-pills">
-                  {divisions.map(d=>(
-                    <div key={d.id} className={`div-pill ${dirDivId===d.id?"dp-on":"dp-off"}`}
-                      onClick={e=>{e.stopPropagation();setDirDivId(d.id);setFlightId(null);}}>
-                      {d.label}<span style={{fontSize:10,opacity:.65,marginLeft:4}}>({d.numTeams}t)</span>
-                    </div>
-                  ))}
+            {/* Director sub-tabs */}
+            <div style={{display:"flex",gap:0,marginBottom:18,borderBottom:"2px solid #e2e8f0",overflowX:"auto"}}>
+              {[["fields","🏟 Assign Fields"],["grid","🗺 Build Grid"],["schedule","📅 Build Schedule"]].map(([k,lbl],idx)=>(
+                <div key={k} onClick={()=>setDirTab(k)}
+                  style={{display:"flex",alignItems:"center",gap:6,padding:"8px 20px",fontWeight:700,fontSize:13,cursor:"pointer",whiteSpace:"nowrap",
+                    borderBottom:"3px solid "+(dirTab===k?"var(--red)":"transparent"),
+                    color:dirTab===k?"var(--red)":"#64748b",marginBottom:"-2px",transition:"all .15s"}}>
+                  {lbl}
+                  {idx<2&&<span style={{fontSize:10,color:"#cbd5e1"}}>›</span>}
                 </div>
-                {dirDiv?(
-                  dirFlights.length>0?(
-                    <div>
-                      <div className="fl-tabs">
-                        {dirFlights.map(f=>(
-                          <div key={f.id}
-                            className={`fl-tab ${(!flightId&&f===dirFlights[0])||flightId===f.id?"on":""} ${f.live?"fl-live":""}`}
-                            onClick={e=>{e.stopPropagation();setFlightId(f.id);}}>
-                            {f.type==="pool"?"🔵":"🏆"} {f.name}
-                            <span style={{marginLeft:6,fontSize:10,opacity:.6}}>{f.status}</span>
+              ))}
+            </div>
+
+            {dirTab==="fields"?(
+              <AssignFieldsTab evId={ev.id} fieldAssignments={fieldAssignments} setFieldAssignments={setFieldAssignments} onNext={()=>setDirTab("grid")}/>
+            ):dirTab==="schedule"?(
+              <div>
+                <div style={{fontSize:13,color:"#64748b",marginBottom:14}}>
+                  Select a division to open it in the Schedule Builder with live team data pre-loaded.
+                </div>
+                {divisions.length===0?(
+                  <div className="card"><div className="card-body" style={{textAlign:"center",padding:48,color:"var(--gray)"}}>No divisions configured for this event.</div></div>
+                ):(
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(190px,1fr))",gap:12}}>
+                    {divisions.map(d=>{
+                      const dk=String(ev.id)+"_"+d.id;
+                      const divTeams=evRosters[dk]||[];
+                      const paidCnt=divTeams.filter(t=>t.payStatus==="Paid").length;
+                      return(
+                        <div key={d.id} style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:10,padding:"14px 16px",boxShadow:"0 1px 3px rgba(0,0,0,.06)"}}>
+                          <div style={{fontWeight:800,fontSize:15,color:"var(--navy)",marginBottom:4}}>{d.label}</div>
+                          <div style={{fontSize:12,color:"#64748b",marginBottom:12}}>
+                            {divTeams.length} entered · {paidCnt} paid
                           </div>
-                        ))}
-                        <div className="fl-tab fl-add" style={{color:"var(--green)",borderColor:"var(--green)",cursor:"pointer"}} onClick={e=>{e.stopPropagation();addFlight("pool");}}>+ Add Pool Flight</div>
-                        <div className="fl-tab fl-add" style={{color:"var(--gold)",borderColor:"var(--gold)",cursor:"pointer"}} onClick={e=>{e.stopPropagation();addFlight("bracket");}}>+ Add Bracket Flight</div>
-                      </div>
-                      {dirFlight?<FlightView flight={dirFlight} divId={dirDivId} divCode={dirDiv.code} eventParks={ev.parks||[]}/>:null}
-                    </div>
-                  ):(
-                    <div className="card" style={{marginTop:16}}>
-                      <div className="card-body" style={{textAlign:"center",padding:"36px 24px"}}>
-                        <div style={{fontSize:40,marginBottom:10}}>📋</div>
-                        <div style={{fontSize:16,fontWeight:700,color:"var(--navy)",marginBottom:8}}>No Flights Configured for {dirDiv.label}</div>
-                        <div style={{fontSize:13,color:"var(--gray)",maxWidth:420,margin:"0 auto 20px"}}>Add a flight here, or go to the <strong>Teams in Event</strong> tab and use <strong>Schedule Builder →</strong> to schedule directly.</div>
-                        <div style={{display:"flex",gap:12,justifyContent:"center"}}>
-                          <button className="btn btn-primary btn-sm" onClick={e=>{e.stopPropagation();addFlight("pool");}}>+ Add Pool Flight</button>
-                          <button className="btn btn-secondary btn-sm" onClick={e=>{e.stopPropagation();addFlight("bracket");}}>+ Add Bracket Flight</button>
+                          <button className="btn btn-primary btn-sm"
+                            style={{width:"100%",opacity:divTeams.length===0?0.45:1,cursor:divTeams.length===0?"not-allowed":"pointer"}}
+                            disabled={divTeams.length===0}
+                            onClick={e=>{e.stopPropagation();if(onSchedule)onSchedule({evId:ev.id,evName:ev.name,divId:d.id,divLabel:d.label,teams:divTeams});}}>
+                            📅 Schedule →
+                          </button>
                         </div>
-                      </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ):(
+              /* Build Grid tab */
+              <div>
+                {fieldAssignments.length===0&&(
+                  <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:8,padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
+                    <span style={{fontSize:18}}>💡</span>
+                    <div>
+                      <span style={{fontWeight:700,fontSize:13,color:"#92400e"}}>No fields assigned yet.</span>
+                      <span style={{fontSize:12,color:"#78350f",marginLeft:6}}>Go to <button onClick={()=>setDirTab("fields")} style={{background:"none",border:"none",color:"var(--red)",fontWeight:700,cursor:"pointer",fontSize:12,padding:0,textDecoration:"underline"}}>Assign Fields</button> first to pre-load complexes into the Grid Builder.</span>
                     </div>
-                  )
-                ):null}
+                  </div>
+                )}
+                {fieldAssignments.length>0&&(
+                  <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"12px 16px",marginBottom:14}}>
+                    <div style={{fontWeight:700,fontSize:12,color:"#166534",marginBottom:6}}>✅ {fieldAssignments.length} complex{fieldAssignments.length!==1?"es":""} assigned — will auto-load into Grid Builder</div>
+                    <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                      {fieldAssignments.map((fa,i)=>(
+                        <span key={i} style={{background:"#dcfce7",color:"#166534",borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}}>
+                          🏟 {fa.venueName} · {fa.fields.length} fields
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div style={{background:"#fff",border:"1px solid #e2e8f0",borderRadius:12,padding:"20px 24px",marginBottom:16,boxShadow:"0 1px 4px rgba(0,0,0,.06)"}}>
+                  <div style={{fontWeight:800,fontSize:16,color:"var(--navy)",marginBottom:4}}>{ev.name}</div>
+                  <div style={{fontSize:12,color:"#64748b",marginBottom:14}}>
+                    {ev.loc} · {ev.date} · {divisions.length} divisions
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(120px,1fr))",gap:7,marginBottom:20}}>
+                    {divisions.map(d=>{
+                      const dk=String(ev.id)+"_"+d.id;
+                      const cnt=(evRosters[dk]||[]).length;
+                      return(
+                        <div key={d.id} style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:7,padding:"7px 10px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <span style={{fontWeight:700,fontSize:12,color:"var(--navy)"}}>{d.label}</span>
+                          <span style={{fontSize:11,background:"#dbeafe",color:"#1e40af",borderRadius:20,padding:"1px 7px",fontWeight:700}}>{cnt}t</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <button className="btn btn-primary"
+                    onClick={e=>{e.stopPropagation();if(onGrid)onGrid({
+                      evId:ev.id,evName:ev.name,
+                      divisions:divisions.map(d=>d.label),
+                      totalTeams:divisions.reduce((s,d)=>{const dk=String(ev.id)+"_"+d.id;return s+(evRosters[dk]||[]).length;},0)
+                    });}}>
+                    🗺 Open Grid Builder →
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -5235,6 +6094,8 @@ function App(){
   const [allBracketGames,setAllBracketGames]=useState([...BG8,...BG9]);
   const [evRosters,setEvRosters]=useState({});
   const [schedCtx,setSchedCtx]=useState(null);
+  const [gridCtx,setGridCtx]=useState(null);
+  const [evFieldAssignments,setEvFieldAssignments]=useState({});
   const [dbStatus,setDbStatus]=useState('connecting');
   const [liveDiv,setLiveDiv]=useState({status:'idle',updatedAt:null});
   useEffect(()=>{
@@ -5274,6 +6135,13 @@ function App(){
   function nav(id){setView(id);if(id==="events")setSelEv(null)}
   function selectEvent(ev){setSelEv(ev);setView("event-detail")}
   function handleSchedule(ctx){setSchedCtx(ctx);nav("s-layout");}
+  function handleGrid(ctx){
+    const fa=evFieldAssignments[ctx.evId]||[];
+    const assignedParks=fa.length>0?fa.map((a,i)=>({id:`pk_${a.venueId||i}`,name:a.venueName,color:PARK_COLORS[i%PARK_COLORS.length],fields:a.fields||["Field 1","Field 2"]})):null;
+    setGridCtx({...ctx,assignedParks});
+    nav("s-grid");
+  }
+  function handleSendToSchedule(fieldData){setSchedCtx(prev=>({...(prev||{}),fieldData}));nav("s-layout");}
   const title=()=>{
     if(view==="event-detail"&&selEv)return selEv.name;
     if(view==="create")return "Create New Event";
@@ -5322,10 +6190,10 @@ function App(){
         </div>
         <div className="content">
           {view==="events"&&<Dashboard events={events} onSelect={selectEvent} onNav={nav}/>}
-          {view==="event-detail"&&selEv&&<EventDetailView ev={selEv} onBack={()=>nav("events")} onNav={nav} evRosters={evRosters} setEvRosters={setEvRosters} onSchedule={handleSchedule}/>}
+          {view==="event-detail"&&selEv&&<EventDetailView ev={selEv} onBack={()=>nav("events")} onNav={nav} evRosters={evRosters} setEvRosters={setEvRosters} onSchedule={handleSchedule} onGrid={handleGrid} fieldAssignments={evFieldAssignments[selEv?.id]||[]} setFieldAssignments={fa=>setEvFieldAssignments(prev=>({...prev,[selEv.id]:fa}))}/>}
           {view==="create"&&<CreateEventView/>}
           {view==="s-game-mgr"&&<GameMgrView games={allGames} setGames={setAllGames} teams={ALL_TEAMS}/>}
-          {view==="s-grid"&&<GridBuilderView/>}
+          {view==="s-grid"&&<GridBuilderView gridCtx={gridCtx} setGridCtx={setGridCtx} onSendToSchedule={handleSendToSchedule}/>}
           {view==="s-layout"&&<LayoutView games={allGames} setGames={setAllGames} teams={ALL_TEAMS} schedCtx={schedCtx} setSchedCtx={setSchedCtx}/>}
           {view==="s-bracket"&&<BracketView bGames={allBracketGames} setBGames={setAllBracketGames} teams={ALL_TEAMS} games={allGames} editable={true}/>}
           {view==="s-standings"&&<StandingsView teams={ALL_TEAMS} games={allGames}/>}
