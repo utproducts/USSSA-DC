@@ -51,38 +51,74 @@ export default {
       return new Response(null, { status: 204, headers: CORS });
     }
 
-    // ── /teams-search  (main fix: accept age, state, name params) ──
+    // ── /teams-search — searches the KV-backed known_teams index ──
     if (path === "/teams-search" && request.method === "GET") {
-      const stateAbbr = (url.searchParams.get("state") || "FL").toUpperCase().trim();
-      const age       = url.searchParams.get("age")  || "";
-      const name      = url.searchParams.get("name") || url.searchParams.get("q") || "";
-
-      // If "all" was passed, we still need a stateID — default FL
-      const stateID   = stateAbbr === "ALL" ? 9 : (STATE_IDS[stateAbbr] || 9);
+      const stateFilter = (url.searchParams.get("state") || "").toUpperCase().trim();
+      const ageRaw      = url.searchParams.get("age") || "";
+      const nameQ       = (url.searchParams.get("name") || url.searchParams.get("q") || "").toLowerCase().trim();
+      const ageNum      = parseInt(ageRaw, 10);
 
       try {
-        const apiUrl = `https://dc.usssa.com/api/getTeamList?sportID=11&search=${encodeURIComponent(name)}&stateID=${stateID}`;
-        const resp = await fetch(apiUrl, { headers: { Accept: "application/json" } });
-        const raw  = await resp.json();
+        // Load the global known_teams index built from all seeded events
+        const index = await env.USSSA_DIVISIONS.get("known_teams", { type: "json" }) || [];
 
-        // USSSA returns array or {data:[...]} or {teams:[...]}
-        let teams = Array.isArray(raw) ? raw : (raw.data || raw.teams || raw.results || []);
+        let teams = index;
 
-        // Client-side age filter if the API doesn't handle it
-        if (age && age !== "all") {
-          const ageNum = parseInt(age, 10);
-          if (!isNaN(ageNum)) {
-            teams = teams.filter(t => {
-              const cls = String(t.ClassName || t.className || t.cls || t.division || "");
-              const m   = cls.match(/(\d+)/);
-              return m ? parseInt(m[1], 10) === ageNum : true;
-            });
-          }
+        // Filter by state
+        if (stateFilter && stateFilter !== "ALL") {
+          teams = teams.filter(t => (t.team_state || t.state || "").toUpperCase() === stateFilter);
         }
 
-        return json({ status: "ok", teams: teams.map(normalizeTeam), count: teams.length });
+        // Filter by age (from division label, e.g. "14AA" → 14)
+        if (!isNaN(ageNum)) {
+          teams = teams.filter(t => {
+            const div = String(t.division || t.cls || "");
+            const m   = div.match(/^(\d+)/);
+            return m ? parseInt(m[1], 10) === ageNum : true;
+          });
+        }
+
+        // Filter by name substring
+        if (nameQ) {
+          teams = teams.filter(t => (t.team_name || t.name || "").toLowerCase().includes(nameQ));
+        }
+
+        // Deduplicate by team_id
+        const seen = new Set();
+        teams = teams.filter(t => {
+          const key = t.team_id || t.id || t.team_name;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
+        return json({ status: "ok", teams, count: teams.length, source: "kv-index" });
       } catch (e) {
         return json({ status: "error", message: e.message, teams: [] }, 500);
+      }
+    }
+
+    // ── /teams-index/rebuild — scans all event_teams_* keys and rebuilds index ──
+    if (path === "/teams-index/rebuild" && request.method === "GET") {
+      try {
+        const list   = await env.USSSA_DIVISIONS.list({ prefix: "event_teams_" });
+        const allTeams = [];
+        for (const key of list.keys) {
+          const data = await env.USSSA_DIVISIONS.get(key.name, { type: "json" });
+          if (data && Array.isArray(data.teams)) allTeams.push(...data.teams);
+        }
+        // Deduplicate by team_id
+        const seen = new Set();
+        const unique = allTeams.filter(t => {
+          const k = t.team_id || t.team_name;
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+        await env.USSSA_DIVISIONS.put("known_teams", JSON.stringify(unique));
+        return json({ status: "ok", total: unique.length, events: list.keys.length });
+      } catch (e) {
+        return json({ status: "error", message: e.message }, 500);
       }
     }
 
@@ -156,7 +192,22 @@ export default {
         const teams   = body.teams;
         if (!eventId || !Array.isArray(teams))
           return json({ status: "error", error: "event_id and teams[] required" }, 400);
+
+        // Save event-specific teams
         await env.USSSA_DIVISIONS.put(`event_teams_${eventId}`, JSON.stringify({ teams, seeded_at: new Date().toISOString() }));
+
+        // Merge into global known_teams index (background, non-blocking)
+        ctx.waitUntil((async () => {
+          try {
+            const existing = await env.USSSA_DIVISIONS.get("known_teams", { type: "json" }) || [];
+            const existingIds = new Set(existing.map(t => t.team_id || t.team_name));
+            const newTeams = teams.filter(t => !existingIds.has(t.team_id || t.team_name));
+            if (newTeams.length > 0) {
+              await env.USSSA_DIVISIONS.put("known_teams", JSON.stringify([...existing, ...newTeams]));
+            }
+          } catch (_) {}
+        })());
+
         return json({ status: "ok", seeded: teams.length, event_id: eventId });
       } catch (e) { return json({ status: "error", error: e.message }, 500); }
     }
