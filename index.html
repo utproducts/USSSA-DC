@@ -2394,17 +2394,17 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
         </div>
       </div>
 
-      {/* ══ Build Matchups — teams not yet imported for this event ══ */}
+      {/* ══ Build Matchups — teams not loaded yet ══ */}
       {schedCtx&&schedCtx.evId&&!teams.length&&(
         <div className="card mb4">
           <div className="card-hd" style={{background:"linear-gradient(135deg,#1e3a5f,#2563eb)"}}>
             <span className="card-title" style={{color:"#fff"}}>⚾ Build Matchups</span>
-            <span style={{fontSize:11,color:"rgba(255,255,255,.55)",marginLeft:8}}>Import this event's teams to get started</span>
+            <span style={{fontSize:11,color:"rgba(255,255,255,.55)",marginLeft:8}}>Teams for this event haven't been loaded yet</span>
           </div>
           <div style={{padding:"18px 20px"}}>
-            {/* Division overview pills */}
+            {/* Division pills — info from event metadata */}
             {schedCtx.divCounts&&Object.keys(schedCtx.divCounts).length>0&&(
-              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:14}}>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:16}}>
                 {Object.entries(schedCtx.divCounts).sort((a,b)=>b[1]-a[1]).map(([lbl,cnt])=>{
                   const dc=getDivColor(lbl);
                   return(
@@ -2416,45 +2416,41 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
                 })}
               </div>
             )}
-            {/* Two-path instructions */}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:showSchedImport?14:0}}>
-              <div style={{background:"#eff6ff",border:"1px solid #93c5fd",borderRadius:8,padding:"14px"}}>
-                <div style={{fontWeight:700,fontSize:13,color:"#1e40af",marginBottom:6}}>📂 Option 1 — Director Tools</div>
-                <div style={{fontSize:11,color:"#1e40af",lineHeight:1.6}}>
-                  Open this event in <strong>Director Tools</strong> → go to the <strong>Roster</strong> tab →
-                  use <strong>Sync</strong> or <strong>Import</strong> to load your teams.
-                  When you return to Schedule Builder they will load automatically.
-                </div>
+            {/* Step 1: Refresh from Event Manager */}
+            <div style={{background:"#eff6ff",border:"1px solid #93c5fd",borderRadius:8,padding:"14px 16px",marginBottom:10}}>
+              <div style={{fontWeight:700,fontSize:13,color:"#1e40af",marginBottom:4}}>
+                🔄 Step 1 — Refresh Teams from Event Manager
               </div>
-              <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"14px"}}>
-                <div style={{fontWeight:700,fontSize:13,color:"#166534",marginBottom:6}}>📋 Option 2 — Paste JSON here</div>
-                <div style={{fontSize:11,color:"#166534",lineHeight:1.6,marginBottom:8}}>
-                  Have your team list as JSON? Paste it directly and teams will load instantly.
-                  Format: <code style={{background:"#dcfce7",padding:"1px 4px",borderRadius:3}}>{"[{\"team_name\":\"...\",\"division\":\"12AA\",...}]"}</code>
-                </div>
-                <button
-                  onClick={()=>setShowSchedImport(s=>!s)}
-                  style={{padding:"5px 14px",background:"#16a34a",color:"#fff",border:"none",borderRadius:6,fontWeight:700,fontSize:12,cursor:"pointer"}}>
-                  {showSchedImport?"✕ Close":"📥 Paste JSON"}
-                </button>
+              <div style={{fontSize:11,color:"#1e40af",lineHeight:1.6}}>
+                Go to <strong>Event Manager</strong> (📅 in the left sidebar) and click <strong>Refresh Teams</strong>.
+                This loads your saved rosters from the cloud. Then come back here — teams will appear automatically.
               </div>
             </div>
-            {/* Inline JSON import */}
+            {/* Step 2: If no roster in cloud yet, import via Director Tools */}
+            <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:"14px 16px",marginBottom:showSchedImport?10:0}}>
+              <div style={{fontWeight:700,fontSize:12,color:"#475569",marginBottom:4}}>
+                📂 No roster yet? Import in Director Tools first
+              </div>
+              <div style={{fontSize:11,color:"#64748b",lineHeight:1.6,marginBottom:8}}>
+                Open this event in Director Tools → <strong>Roster</strong> tab → <strong>Sync</strong> or <strong>Import</strong>.
+                Once saved, Refresh Teams will pick it up here.
+                Or paste JSON directly below:
+              </div>
+              <button onClick={()=>setShowSchedImport(s=>!s)}
+                style={{padding:"4px 12px",background:"#475569",color:"#fff",border:"none",borderRadius:5,fontWeight:700,fontSize:11,cursor:"pointer"}}>
+                {showSchedImport?"✕ Close":"📥 Paste JSON"}
+              </button>
+            </div>
             {showSchedImport&&(
-              <div style={{marginTop:4}}>
-                <textarea
-                  value={schedImportText}
-                  onChange={e=>setSchedImportText(e.target.value)}
+              <div>
+                <textarea value={schedImportText} onChange={e=>setSchedImportText(e.target.value)}
                   placeholder={'[\n  {"team_name":"Panthers","division":"12AA","team_city":"Tampa","team_state":"FL"},\n  ...\n]'}
-                  style={{width:"100%",height:140,fontFamily:"monospace",fontSize:11,padding:8,
-                    border:"1px solid #86efac",borderRadius:6,boxSizing:"border-box",resize:"vertical"}}/>
-                {schedImportErr&&<div style={{color:"#dc2626",fontSize:11,marginTop:4}}>{schedImportErr}</div>}
-                <button
-                  onClick={importSchedTeams}
-                  disabled={!schedImportText.trim()}
-                  style={{marginTop:8,padding:"7px 18px",background:"#16a34a",color:"#fff",border:"none",
-                    borderRadius:6,fontWeight:700,fontSize:13,cursor:"pointer",
-                    opacity:schedImportText.trim()?1:.5}}>
+                  style={{width:"100%",height:120,fontFamily:"monospace",fontSize:11,padding:8,
+                    border:"1px solid #cbd5e1",borderRadius:6,boxSizing:"border-box",resize:"vertical"}}/>
+                {schedImportErr&&<div style={{color:"#dc2626",fontSize:11,marginTop:3}}>{schedImportErr}</div>}
+                <button onClick={importSchedTeams} disabled={!schedImportText.trim()}
+                  style={{marginTop:6,padding:"6px 16px",background:"#2563eb",color:"#fff",border:"none",
+                    borderRadius:6,fontWeight:700,fontSize:12,cursor:"pointer",opacity:schedImportText.trim()?1:.5}}>
                   ✅ Import Teams
                 </button>
               </div>
@@ -6454,12 +6450,52 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule,onGr
 }
 
 /* ════════════════════ DASHBOARD ════════════════════ */
-function Dashboard({events,onSelect,onNav}){
+function Dashboard({events,onSelect,onNav,evRosters,setEvRosters}){
   const [stateF,setStateF]=useState("all");
   const [seasonF,setSeasonF]=useState("all");
   const [directorF,setDirectorF]=useState("all");
   const [statureF,setStatureF]=useState("all");
   const [evTab,setEvTab]=useState("active");
+  const [refreshing,setRefreshing]=useState(false);
+  const [refreshMsg,setRefreshMsg]=useState('');
+
+  async function refreshTeams(){
+    if(!setEvRosters||refreshing)return;
+    setRefreshing(true);setRefreshMsg('');
+    const updates={};
+    await Promise.all(tabShown.map(async ev=>{
+      try{
+        const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(ev.id));
+        const j=await r.json();
+        if(j.status==='ok'&&j.teams&&j.teams.length){
+          const evId=String(ev.id);
+          const normalizedDivs=(ev.divisions||[]).map(normDiv);
+          const byDivLabel={};
+          j.teams.forEach(t=>{const dl=(t.division||'').trim();if(!byDivLabel[dl])byDivLabel[dl]=[];byDivLabel[dl].push(t);});
+          normalizedDivs.forEach(d=>{
+            const rk=evId+'_'+d.id;
+            const divTeams=byDivLabel[d.label]||[];
+            if(divTeams.length){
+              updates[rk]=divTeams.map(t=>({
+                id:'us_'+evId+'_'+(t.team_name||'').replace(/\W+/g,'_'),
+                name:t.team_name||'',city:t.team_city||'',state:t.team_state||'FL',
+                cls:d.label,coach:t.manager_name||'',email:t.manager_email||'',
+                phone:t.manager_phone||'',entryStatus:t.entry_status||'Approved',
+                payStatus:t.payment_status||'Not Paid',entryFee:'',gateFee:'',discount:'',notes:''
+              }));
+            }
+          });
+        }
+      }catch(e){}
+    }));
+    setEvRosters(prev=>({...prev,...updates}));
+    setRefreshing(false);
+    const teamTotal=Object.values(updates).reduce((s,a)=>s+a.length,0);
+    const divTotal=Object.keys(updates).length;
+    setRefreshMsg(teamTotal>0
+      ?`✅ ${teamTotal} teams loaded across ${divTotal} divisions`
+      :'⚠️ No team data found in cloud — open an event in Director Tools → Roster to import teams first');
+  }
   const getYear=d=>{const m=d.match(/\d{4}/);return m?m[0]:null;};
   const seasons=[...new Set(events.map(e=>getYear(e.date)).filter(Boolean))].sort((a,b)=>b-a);
   const directors=[...new Set(events.map(e=>e.director).filter(Boolean))].sort();
@@ -6502,9 +6538,25 @@ function Dashboard({events,onSelect,onNav}){
               <option value="all">All Statures</option>
               {statures.map(s=><option key={s}>{s}</option>)}
             </select>
+            <button className="btn btn-secondary btn-sm"
+              onClick={refreshTeams}
+              disabled={refreshing}
+              style={{opacity:refreshing?.6:1,display:"flex",alignItems:"center",gap:5}}>
+              <span style={{display:"inline-block",animation:refreshing?"spin 1s linear infinite":"none"}}>🔄</span>
+              {refreshing?"Refreshing…":"Refresh Teams"}
+            </button>
             <button className="btn btn-primary btn-sm" onClick={()=>onNav("create")}>+ Create New Event</button>
           </div>
         </div>
+        {refreshMsg&&(
+          <div style={{padding:"8px 16px",fontSize:12,fontWeight:600,
+            color:refreshMsg.startsWith('✅')?'#166534':'#92400e',
+            background:refreshMsg.startsWith('✅')?'#f0fdf4':'#fefce8',
+            borderBottom:'1px solid '+(refreshMsg.startsWith('✅')?'#86efac':'#fde047')}}>
+            {refreshMsg}
+            <button onClick={()=>setRefreshMsg('')} style={{float:'right',background:'none',border:'none',cursor:'pointer',fontSize:12,color:'inherit'}}>✕</button>
+          </div>
+        )}
         <div style={{display:"flex",gap:0,padding:"0 16px",background:"#f8fafc",borderBottom:"2px solid #e2e8f0"}}>
           {TABS.map(t=><button key={t.id} onClick={()=>setEvTab(t.id)} style={{...tabBase,background:evTab===t.id?"#fff":"transparent",color:evTab===t.id?"#1e3a5f":"#64748b",borderBottom:evTab===t.id?"2px solid #1e3a5f":"2px solid transparent",marginBottom:"-2px"}}>{t.ico} {t.label} <span style={{background:evTab===t.id?"#1e3a5f":"#e2e8f0",color:evTab===t.id?"#fff":"#64748b",borderRadius:10,padding:"1px 7px",fontSize:11,marginLeft:4,fontWeight:700}}>{t.count}</span></button>)}
         </div>
@@ -6522,7 +6574,13 @@ function Dashboard({events,onSelect,onNav}){
                 <td className="t-sm">{ev.date}</td>
                 <td><span style={{color:"var(--blue)",fontWeight:700}}>{ev.name}</span></td>
                 <td className="t-sm">{ev.divisions.length}</td>
-                <td className="t-sm">{ev.divisions.reduce((a,d)=>a+(d.numTeams||0),0)}</td>
+                <td className="t-sm">{(()=>{
+                  const loaded=(ev.divisions||[]).map(normDiv).reduce((s,d)=>{const rk=String(ev.id)+'_'+d.id;return s+((evRosters&&evRosters[rk])||[]).length;},0);
+                  const meta=(ev.divisions||[]).reduce((a,d)=>a+(d.numTeams||0),0);
+                  return loaded>0
+                    ?<span>{loaded}<span style={{color:"#16a34a",fontWeight:900,marginLeft:3}}>✓</span></span>
+                    :<span style={{color:"#94a3b8"}}>{meta}</span>;
+                })()}</td>
                 <td className="t-sm">{ev.stature}</td>
                 <td className="t-sm">{ev.director}</td>
                 <td><Ev_StatusBadge status={ev.status}/></td>
@@ -7065,7 +7123,7 @@ function App(){
           </div>
         </div>
         <div className="content">
-          {view==="events"&&<Dashboard events={events} onSelect={selectEvent} onNav={nav}/>}
+          {view==="events"&&<Dashboard events={events} onSelect={selectEvent} onNav={nav} evRosters={evRosters} setEvRosters={setEvRosters}/>}
           {view==="event-detail"&&selEv&&<EventDetailView ev={selEv} onBack={()=>nav("events")} onNav={nav} evRosters={evRosters} setEvRosters={setEvRosters} onSchedule={handleSchedule} onGrid={handleGrid} fieldAssignments={evFieldAssignments[selEv?.id]||[]} setFieldAssignments={fa=>setEvFieldAssignments(prev=>({...prev,[selEv.id]:fa}))}/>}
           {view==="create"&&<CreateEventView/>}
           {view==="s-game-mgr"&&<GameMgrView games={allGames} setGames={setAllGames} teams={ALL_TEAMS}/>}
