@@ -5521,7 +5521,7 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule,onGr
     setLoadingTeams(true);setUsssaTeams([]);setHasSearched(true);
     const go=async()=>{
       try{
-        const url='https://usssa-poller.chad-157.workers.dev/teams-search?age='+encodeURIComponent(activeDivAge)+'&state='+encodeURIComponent(searchState||'all');
+        const url='https://usssa-poller.chad-157.workers.dev/teams-search?age='+encodeURIComponent(activeDivAge)+'&state='+encodeURIComponent(searchState||'FL')+'&q='+encodeURIComponent(teamSearch||'');
         const r=await fetch(url);
         const json=await r.json();
         if(json.status!=='ok')throw new Error(json.message||'Error');
