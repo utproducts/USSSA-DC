@@ -983,6 +983,8 @@ function GridBuilderView({gridCtx,setGridCtx,onSendToSchedule}){
   const [addTimeVal,setAddTimeVal]=useState("08:00");
   const [showTimeAdd,setShowTimeAdd]=useState(false);
   const [editingPkId,setEditingPkId]=useState(null);
+  const [fillSrc,setFillSrc]=useState(null);   // {day,pkId,f,t,div,type} — fill-handle source cell
+  const [fillOver,setFillOver]=useState(null);  // {day,pkId,f,t} — cell currently dragged over
 
   const pk=parks.find(p=>p.id===activePkId)||parks[0];
 
@@ -1276,13 +1278,16 @@ function GridBuilderView({gridCtx,setGridCtx,onSendToSchedule}){
                           const isBlk=cell.type==="blocked";
                           const isEmpty=!cell.div&&cell.type==="open";
                           const abbr=SLOT_ABBR[cell.type]||"";
-                          const bg=isSel?"#dbeafe":isBlk?"#fecaca":dc?dc.bg:ti%2===0?"#fff":"#fafcff";
+                          const inFillRange=(()=>{if(!fillSrc||fillSrc.day!==day||fillSrc.pkId!==pk.id||fillSrc.f!==f)return false;if(!fillOver||fillOver.day!==day||fillOver.pkId!==pk.id||fillOver.f!==f)return false;const si=times.indexOf(fillSrc.t),di=times.indexOf(fillOver.t),ci=times.indexOf(t);if(si===-1||di===-1||ci===-1)return false;return ci>=Math.min(si,di)&&ci<=Math.max(si,di);})();
+                          const bg=inFillRange?"#bbf7d0":isSel?"#dbeafe":isBlk?"#fecaca":dc?dc.bg:ti%2===0?"#fff":"#fafcff";
                           return(
                             <td key={fi}
-                              onClick={()=>{setSelCell(isSel?null:key);if(!isSel)setDivFilter("");}}
+                              onClick={()=>{if(fillSrc)return;setSelCell(isSel?null:key);if(!isSel)setDivFilter("");}}
+                              onDragOver={e=>{if(fillSrc&&fillSrc.day===day&&fillSrc.pkId===pk.id&&fillSrc.f===f){e.preventDefault();e.stopPropagation();setFillOver({day,pkId:pk.id,f,t});}}}
+                              onDrop={e=>{e.preventDefault();e.stopPropagation();if(!fillSrc||fillSrc.day!==day||fillSrc.pkId!==pk.id||fillSrc.f!==f){return;}const si=times.indexOf(fillSrc.t),di=times.indexOf(t);if(si===-1||di===-1){setFillSrc(null);setFillOver(null);return;}const[lo,hi]=si<=di?[si,di]:[di,si];setGrid(prev=>{const dg={...(prev[day]||{})};for(let i=lo;i<=hi;i++){dg[ck(fillSrc.pkId,fillSrc.f,times[i])]={div:fillSrc.div,type:fillSrc.type};}return{...prev,[day]:dg};});setFillSrc(null);setFillOver(null);}}
                               style={{borderLeft:"1px solid #e8ecf0",borderBottom:"1px solid #edf0f4",
                                 padding:0,cursor:"pointer",background:bg,height:30,
-                                outline:isSel?`2px solid ${pk.color}`:"none",outlineOffset:-1,
+                                outline:inFillRange?`2px solid #16a34a`:isSel?`2px solid ${pk.color}`:"none",outlineOffset:-1,
                                 transition:"background .08s",position:"relative",
                                 textAlign:"center",verticalAlign:"middle"}}>
 
@@ -1307,6 +1312,20 @@ function GridBuilderView({gridCtx,setGridCtx,onSendToSchedule}){
                                   </span>
                                   {abbr&&<span style={{fontSize:7,fontWeight:800,color:st.color,
                                     letterSpacing:.3,textTransform:"uppercase",lineHeight:1.5}}>{abbr}</span>}
+                                </div>
+                              )}
+
+                              {!isSel&&!isEmpty&&!isBlk&&(
+                                <div draggable={true} title="Drag to fill down"
+                                  onMouseDown={e=>e.stopPropagation()}
+                                  onDragStart={e=>{e.stopPropagation();setFillSrc({day,pkId:pk.id,f,t,div:cell.div,type:cell.type});setFillOver(null);}}
+                                  onDragEnd={()=>{setFillSrc(null);setFillOver(null);}}
+                                  style={{position:"absolute",bottom:1,right:1,width:9,height:9,
+                                    background:dc?dc.border:"#1e3a5f",borderRadius:1,
+                                    cursor:"se-resize",zIndex:3,opacity:0.75,
+                                    display:"flex",alignItems:"center",justifyContent:"center",
+                                    fontSize:6,color:"#fff",lineHeight:1,userSelect:"none"}}>
+                                  ↘
                                 </div>
                               )}
 
@@ -1545,8 +1564,10 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
   const [fieldPickSearch,setFieldPickSearch]=useState("");
   const [cellPickModal,setCellPickModal]=useState(null); // {rowId,fi,fieldLabel,step:1|2,t1Id}
   const [cellPickSearch,setCellPickSearch]=useState("");
+  const [fieldPageStart,setFieldPageStart]=useState(0);
+  const FIELDS_PER_PAGE=8;
 
-  const fields=fieldNames.slice(0,nf);
+  const fields=fieldNames.slice(fieldPageStart,Math.min(fieldPageStart+FIELDS_PER_PAGE,nf));
   const assignedIds=new Set(rows.flatMap(r=>Object.values(r.cells)).filter(v=>v!=="blocked"));
   const unscheduled=games.filter(g=>!assignedIds.has(g.id));
   const pickedGame=picked?games.find(g=>g.id===picked):null;
@@ -1918,11 +1939,11 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
     if(picked){
       if(!cur||cur==="blocked"){
         setRows(prev=>prev.map(r=>r.id===rowId?{...r,cells:{...r.cells,[fi]:picked}}:r));
-        setGames(prev=>prev.map(g=>g.id===picked?{...g,time:row?.time,field:fields[fi],date:row?.date}:g));
+        setGames(prev=>prev.map(g=>g.id===picked?{...g,time:row?.time,field:fieldNames[fi],date:row?.date}:g));
         setPicked(null);
       }else if(cur!=="blocked"){
         setRows(prev=>prev.map(r=>r.id===rowId?{...r,cells:{...r.cells,[fi]:picked}}:r));
-        setGames(prev=>prev.map(g=>g.id===picked?{...g,time:row?.time,field:fields[fi],date:row?.date}:g));
+        setGames(prev=>prev.map(g=>g.id===picked?{...g,time:row?.time,field:fieldNames[fi],date:row?.date}:g));
         setPicked(cur);
       }
       return;
@@ -2355,6 +2376,30 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
         </div>
       )}
 
+      {/* ── Field Pagination Nav (shown when nf > FIELDS_PER_PAGE) ── */}
+      {nf>FIELDS_PER_PAGE&&(
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,padding:"7px 14px",
+          background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:7}}>
+          <button onClick={()=>setFieldPageStart(s=>Math.max(0,s-FIELDS_PER_PAGE))}
+            disabled={fieldPageStart===0}
+            style={{padding:"4px 12px",borderRadius:5,border:"1px solid #0ea5e9",fontWeight:800,fontSize:12,cursor:fieldPageStart===0?"not-allowed":"pointer",
+              background:fieldPageStart===0?"#e0f2fe":"#0ea5e9",color:fieldPageStart===0?"#94a3b8":"#fff"}}>
+            ◀ Prev
+          </button>
+          <span style={{fontSize:12,fontWeight:700,color:"#0369a1",flex:1,textAlign:"center"}}>
+            Showing Fields {fieldPageStart+1}–{Math.min(fieldPageStart+FIELDS_PER_PAGE,nf)} of {nf}
+          </span>
+          <button onClick={()=>setFieldPageStart(s=>Math.min(Math.max(0,nf-FIELDS_PER_PAGE),s+FIELDS_PER_PAGE))}
+            disabled={fieldPageStart+FIELDS_PER_PAGE>=nf}
+            style={{padding:"4px 12px",borderRadius:5,border:"1px solid #0ea5e9",fontWeight:800,fontSize:12,
+              cursor:fieldPageStart+FIELDS_PER_PAGE>=nf?"not-allowed":"pointer",
+              background:fieldPageStart+FIELDS_PER_PAGE>=nf?"#e0f2fe":"#0ea5e9",
+              color:fieldPageStart+FIELDS_PER_PAGE>=nf?"#94a3b8":"#fff"}}>
+            Next ▶
+          </button>
+        </div>
+      )}
+
       {/* ══ Schedule Grid ══ */}
       <div style={{overflowX:"auto",border:"1px solid #cbd5e1",borderRadius:8,boxShadow:"0 2px 8px rgba(0,0,0,.06)"}}>
         <table style={{borderCollapse:"collapse",fontSize:12}}>
@@ -2363,7 +2408,8 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
               <th style={STH(SL[0],SW[0])}>Row</th>
               <th style={STH(SL[1],SW[1])}>Date</th>
               <th style={{...STH(SL[2],SW[2]),boxShadow:"3px 0 8px rgba(0,0,0,.18)"}}>Time</th>
-              {fields.map((f,fi)=>{
+              {fields.map((f,lfi)=>{
+                const fi=fieldPageStart+lfi;
                 const [hBg,hBdr]=[getFC(fi)[0],getFC(fi)[1]];
                 return(
                 <th key={fi} style={{background:hBg,color:"#fff",padding:"7px 8px",
@@ -2393,7 +2439,7 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
                 <React.Fragment key={date}>
                   {/* Day header row */}
                   <tr>
-                    <td colSpan={3+nf+1} style={{padding:0,position:"sticky",left:0,zIndex:2}}>
+                    <td colSpan={3+fields.length+1} style={{padding:0,position:"sticky",left:0,zIndex:2}}>
                       <div style={{display:"flex",alignItems:"center",gap:10,padding:"6px 12px",
                         background:dayBg,borderTop:"2px solid #e2e8f0",borderBottom:"1px solid #e2e8f0"}}>
                         <button onClick={()=>blockDay(date)}
@@ -2422,7 +2468,8 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
                             {TIME_OPTS.map(t=><option key={t}>{t}</option>)}
                           </select>
                         </td>
-                        {fields.map((fieldLabel,fi)=>{
+                        {fields.map((fieldLabel,lfi)=>{
+                          const fi=fieldPageStart+lfi;
                           const val=row.cells[fi];
                           const game=val&&val!=="blocked"?games.find(g=>g.id===val):null;
                           const isBlocked=val==="blocked";
