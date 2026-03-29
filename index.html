@@ -2217,25 +2217,12 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
       </div>}
       {schedCtx&&schedCtx.evId&&(
         <div style={{marginBottom:16}}>
-          <div style={{background:"#dbeafe",border:"1px solid #93c5fd",borderRadius:schedCtx.divCounts&&Object.keys(schedCtx.divCounts).length>0?"8px 8px 0 0":"8px",padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{background:"#dbeafe",border:"1px solid #93c5fd",borderRadius:8,padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div style={{fontSize:13,fontWeight:700,color:"#1e40af"}}>
               📋 Scheduling from: <span style={{fontWeight:900}}>{schedCtx.evName}</span> • <span style={{fontWeight:900}}>{schedCtx.divLabel}</span> • {schedCtx.loadingTeams?<span style={{color:"#2563eb",fontStyle:"italic"}}>loading teams…</span>:(schedCtx.teams||[]).length>0?`${schedCtx.teams.length} teams`:schedCtx.divCounts?`${Object.values(schedCtx.divCounts).reduce((s,c)=>s+c,0)} teams across ${Object.keys(schedCtx.divCounts).length} divisions`:"no teams yet"}
             </div>
             <button className="btn btn-secondary btn-sm" onClick={()=>setSchedCtx(null)} style={{padding:"3px 12px",fontSize:11}}>✕ Clear</button>
           </div>
-          {schedCtx.divCounts&&Object.keys(schedCtx.divCounts).length>0&&(
-            <div style={{background:"#eff6ff",border:"1px solid #93c5fd",borderTop:"none",borderRadius:"0 0 8px 8px",padding:"10px 16px",display:"flex",flexWrap:"wrap",gap:6}}>
-              {Object.entries(schedCtx.divCounts).sort((a,b)=>b[1]-a[1]).map(([lbl,cnt])=>{
-                const dc=getDivColor(lbl);
-                return(
-                  <span key={lbl} style={{fontSize:11,fontWeight:800,padding:"3px 10px",borderRadius:14,
-                    background:dc.bg,color:dc.text,border:`1.5px solid ${dc.border}`,whiteSpace:"nowrap"}}>
-                    {lbl} <span style={{opacity:.7,fontWeight:600}}>· {cnt} teams</span>
-                  </span>
-                );
-              })}
-            </div>
-          )}
         </div>
       )}
       {/* ══ Settings Panel ══ */}
