@@ -5523,9 +5523,28 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule,onGr
       try{
         const url='https://usssa-poller.chad-157.workers.dev/teams-search?age='+encodeURIComponent(activeDivAge)+'&state='+encodeURIComponent(searchState||'FL')+'&q='+encodeURIComponent(teamSearch||'');
         const r=await fetch(url);
-        const json=await r.json();
-        if(json.status!=='ok')throw new Error(json.message||'Error');
-        setUsssaTeams(json.teams||[]);
+        const raw=await r.json();
+        // Handle normalized {status,teams} OR raw DC formats ([...] / {data:[]} / {teams:[]})
+        let teams=[];
+        if(raw&&raw.status==='ok'){teams=raw.teams||[];}
+        else if(Array.isArray(raw)){teams=raw;}
+        else if(raw&&Array.isArray(raw.data)){teams=raw.data;}
+        else if(raw&&Array.isArray(raw.teams)){teams=raw.teams;}
+        else if(raw&&(raw.error||raw.message)){throw new Error(raw.error||raw.message);}
+        // Normalize fields so display code works regardless of DC vs Worker format
+        teams=teams.map(t=>({
+          id:String(t.TeamID||t.teamID||t.id||Math.random()),
+          name:t.TeamName||t.teamName||t.name||t.team_name||'',
+          cls:t.ClassName||t.className||t.cls||t.division||'',
+          city:t.City||t.city||t.team_city||'',
+          state:t.State||t.state||t.team_state||'',
+          manager_name:t.ManagerName||t.managerName||t.manager_name||t.manager||'',
+          manager_email:t.ManagerEmail||t.managerEmail||t.manager_email||t.email||'',
+          manager_phone:t.ManagerPhone||t.managerPhone||t.manager_phone||t.phone||'',
+          entry_status:t.EntryStatus||t.entryStatus||t.entry_status||'',
+          payment_status:t.PaymentStatus||t.paymentStatus||t.payment_status||'',
+        }));
+        setUsssaTeams(teams);
       }catch(e){console.warn("USSSA search:",e.message);setUsssaTeams([]);}
       finally{setLoadingTeams(false);}
     };
