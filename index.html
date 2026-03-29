@@ -1529,6 +1529,9 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
   const [dropAlert,setDropAlert]=useState(null); // {msg,type} for inline validation alert
   const [selAge,setSelAge]=useState(null);
   const [selCell,setSelCell]=useState(null); // "rowId|fi" — selected grid cell for Block Selected
+  const [gridBuiltMsg,setGridBuiltMsg]=useState(""); // toast after Build Grid
+  const [fieldPickModal,setFieldPickModal]=useState(null); // {fi} — which field column is being renamed
+  const [fieldPickSearch,setFieldPickSearch]=useState("");
 
   const fields=fieldNames.slice(0,nf);
   const assignedIds=new Set(rows.flatMap(r=>Object.values(r.cells)).filter(v=>v!=="blocked"));
@@ -1863,6 +1866,10 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
       while(cur<=endMin){r.push({id:`r_${Date.now()}_${n}`,num:n++,date,time:toLabel(cur),cells:{}});cur+=len;}
     });
     setRows(r);
+    const totalSlots=r.length;
+    const dayCount=days.length;
+    setGridBuiltMsg(`✅ Grid built — ${totalSlots} time slot${totalSlots!==1?"s":""} across ${dayCount} day${dayCount!==1?"s":""}`);
+    setTimeout(()=>setGridBuiltMsg(""),5000);
   }
   function setResetTimes(){
     const len=parseInt(gl);
@@ -2111,6 +2118,12 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
                 <button onClick={submitFieldData} style={{...B(NAVY,"#fff"),width:"100%",marginTop:4,padding:"9px",fontSize:13}}>
                   🏗 Build Grid
                 </button>
+                {gridBuiltMsg&&(
+                  <div style={{marginTop:8,padding:"8px 12px",borderRadius:7,background:"#dcfce7",
+                    border:"1.5px solid #86efac",color:"#166534",fontWeight:700,fontSize:12,textAlign:"center"}}>
+                    {gridBuiltMsg}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -2343,13 +2356,12 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
                 <th key={fi} style={{background:hBg,color:"#fff",padding:"7px 8px",
                   textAlign:"center",minWidth:130,borderLeft:`3px solid ${hBdr}`,verticalAlign:"middle"}}>
                   <div style={{fontSize:9,color:"rgba(255,255,255,.6)",fontWeight:700,letterSpacing:.8,marginBottom:2,textTransform:"uppercase"}}>Field {fi+1}</div>
-                  <select value={fieldNames[fi]} onChange={e=>{const n=[...fieldNames];n[fi]=e.target.value;setFieldNames(n);}}
-                    style={{fontSize:12,padding:"3px 5px",borderRadius:3,border:"1px solid rgba(255,255,255,.3)",
-                      background:"rgba(255,255,255,.15)",color:"#fff",width:"100%",cursor:"pointer",fontWeight:700}}>
-                    {/* If the current name isn't in FIELD_OPTS (e.g. imported), add it first */}
-                    {!FIELD_OPTS.includes(fieldNames[fi])&&<option key="__curr" style={{background:"#1e3a5f",color:"#fff"}}>{fieldNames[fi]}</option>}
-                    {FIELD_OPTS.map(o=><option key={o} style={{background:"#1e3a5f",color:"#fff"}}>{o}</option>)}
-                  </select>
+                  <button onClick={e=>{e.stopPropagation();setFieldPickModal({fi});}}
+                    style={{fontSize:11,padding:"3px 8px",borderRadius:4,border:"1px solid rgba(255,255,255,.4)",
+                      background:"rgba(255,255,255,.15)",color:"#fff",cursor:"pointer",fontWeight:700,
+                      width:"100%",textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    {fieldNames[fi]||`Field ${fi+1}`} ✎
+                  </button>
                 </th>
                 );
               })}
@@ -2534,6 +2546,74 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
         <span style={{fontSize:11,color:"#94a3b8",marginLeft:4}}>{rows.length} rows · {nf} fields · {assignedIds.size} assigned · {unscheduled.length} unscheduled</span>
         <button style={B("#16a34a","#fff",{marginLeft:"auto",boxShadow:"0 2px 8px rgba(22,163,74,.25)"})}>💾 Save Layout</button>
       </div>
+
+      {/* ══ Field Rename Modal ══ */}
+      {fieldPickModal&&(()=>{
+        const fi=fieldPickModal.fi;
+        const cur=fieldNames[fi]||`Field ${fi+1}`;
+        const srch=fieldPickSearch;
+        const opts=FIELD_OPTS.filter(o=>!srch||o.toLowerCase().includes(srch.toLowerCase()));
+        const groups={};
+        opts.forEach(o=>{
+          const m=o.match(/^([A-Za-z][A-Za-z ]*[A-Za-z])\s*\d*$/);
+          const grp=m?m[1].trim().replace(/\s+\d+$/,""):"Other";
+          if(!groups[grp])groups[grp]=[];
+          groups[grp].push(o);
+        });
+        return(
+          <div style={{position:"fixed",inset:0,zIndex:10000,display:"flex",alignItems:"center",
+            justifyContent:"center",background:"rgba(0,0,0,0.6)"}}
+            onClick={()=>{setFieldPickModal(null);setFieldPickSearch("");}}>
+            <div style={{background:"#fff",borderRadius:12,boxShadow:"0 8px 40px rgba(0,0,0,.3)",
+              width:"min(480px,95vw)",maxHeight:"80vh",display:"flex",flexDirection:"column",overflow:"hidden"}}
+              onClick={e=>e.stopPropagation()}>
+              <div style={{background:"#1e3a5f",color:"#fff",padding:"13px 18px",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+                <strong style={{fontSize:14}}>✎ Rename Field {fi+1}</strong>
+                <span style={{fontSize:11,opacity:.65,marginLeft:4}}>now: {cur}</span>
+                <button onClick={()=>{setFieldPickModal(null);setFieldPickSearch("");}}
+                  style={{marginLeft:"auto",background:"rgba(255,255,255,.15)",border:"none",color:"#fff",
+                    borderRadius:6,padding:"3px 11px",cursor:"pointer",fontSize:13,fontWeight:700}}>✕</button>
+              </div>
+              <div style={{padding:"10px 14px",borderBottom:"1px solid #e2e8f0",flexShrink:0}}>
+                <input autoFocus value={srch} onChange={e=>setFieldPickSearch(e.target.value)}
+                  placeholder="🔍 Search field names..."
+                  style={{width:"100%",padding:"7px 10px",border:"1.5px solid #cbd5e1",borderRadius:7,
+                    fontSize:13,boxSizing:"border-box",outline:"none"}}/>
+              </div>
+              <div style={{overflowY:"auto",flex:1,padding:"8px 0"}}>
+                {!FIELD_OPTS.includes(cur)&&!srch&&(
+                  <div style={{padding:"4px 16px 8px",borderBottom:"1px solid #f1f5f9",marginBottom:4}}>
+                    <div style={{fontSize:10,fontWeight:700,color:"#64748b",textTransform:"uppercase",marginBottom:5}}>Current</div>
+                    <span style={{display:"inline-block",padding:"5px 12px",borderRadius:6,
+                      border:"1.5px solid #2563eb",background:"#eff6ff",color:"#1e3a5f",fontWeight:700,fontSize:12}}>
+                      ✓ {cur}
+                    </span>
+                  </div>
+                )}
+                {Object.entries(groups).map(([grp,items])=>(
+                  <div key={grp} style={{padding:"6px 16px 8px"}}>
+                    {!srch&&<div style={{fontSize:10,fontWeight:700,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.6,marginBottom:5}}>{grp}</div>}
+                    <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                      {items.map(o=>(
+                        <button key={o}
+                          onClick={()=>{const n=[...fieldNames];n[fi]=o;setFieldNames(n);setFieldPickModal(null);setFieldPickSearch("");}}
+                          style={{padding:"5px 12px",borderRadius:6,
+                            border:o===cur?"2px solid #2563eb":"1px solid #e2e8f0",
+                            background:o===cur?"#eff6ff":"#f8fafc",
+                            color:o===cur?"#1d4ed8":"#374151",
+                            fontWeight:o===cur?700:500,fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>
+                          {o===cur?"✓ ":""}{o}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {opts.length===0&&<div style={{textAlign:"center",padding:"24px",color:"#94a3b8",fontSize:13}}>No matches for "{srch}"</div>}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ══ Auto-Schedule Modal ══ */}
       {autoModal&&(
