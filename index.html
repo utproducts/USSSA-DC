@@ -3822,9 +3822,24 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
   // Load a division's teams from evRosters or KV when its pill is clicked
   async function loadDivisionTeams(divLabel){
     if(!bracketCtx?.evId||!setBracketCtx)return;
-    const age=parseInt(divLabel)||0;
-    setBracketCtx(prev=>prev?{...prev,loadingTeams:true}:null);
     setBracketNoTeamsMsg('');
+    // ── 1. Try evRosters in memory first ──
+    const normalizedDivs=(bracketCtx._divisions||[]).map(normDiv);
+    let allTeams=normalizedDivs.flatMap(d=>{
+      const rk=String(bracketCtx.evId)+'_'+d.id;
+      return (evRosters&&evRosters[rk])||[];
+    });
+    if(allTeams.length){
+      const newDivCounts={};
+      normalizedDivs.forEach(d=>{
+        const rk=String(bracketCtx.evId)+'_'+d.id;
+        if(d.label)newDivCounts[d.label]=((evRosters&&evRosters[rk])||[]).length||d.numTeams||0;
+      });
+      setBracketCtx(prev=>prev?{...prev,teams:allTeams,divCounts:newDivCounts,activeDivLabel:divLabel,loadingTeams:false}:null);
+      return;
+    }
+    // ── 2. Fallback: fetch from KV worker ──
+    setBracketCtx(prev=>prev?{...prev,loadingTeams:true}:null);
     try{
       const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(bracketCtx.evId));
       const j=await r.json();
