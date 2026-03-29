@@ -1634,30 +1634,41 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
   const dayGroups=[...new Set(rows.map(r=>r.date))].sort();
 
   // Fetch teams for an age group from the known_teams index (used when event teams not in KV)
-  async function fetchTeamsForAge(age){
-    if(!schedCtx?.evId||!setSchedCtx)return;
+  // Inline division-class matchers (mirrors EventDetailView parseDivClass/teamMatchesDiv)
+  function _pDC(lbl){const m=(lbl||'').match(/^(\d+)(.*)/);if(!m)return'';const s=m[2].toUpperCase().trim();if(s.startsWith('OP')||s==='O'||s==='0P')return'open';if(s==='AAA')return'aaa';if(s==='AA')return'aa';if(s==='A')return'a';return s.toLowerCase();}
+  function _tMatch(t,divLbl){const da=parseInt(((divLbl||'').match(/^(\d+)/)||['','0'])[1]);const dc=_pDC(divLbl);const tc=(t.cls||t.division||'').toUpperCase();const ta=parseInt((tc.match(/(\d+)/)||['','0'])[1]);if(ta!==da)return false;if(dc==='open')return tc.includes('OPEN')||tc.includes('OP');if(dc==='aaa')return tc.includes('AAA');if(dc==='aa')return tc.includes('AA')&&!tc.includes('AAA');if(dc==='a')return(tc.endsWith(' A')||tc.endsWith('A')||tc.includes(' A '))&&!tc.includes('AA');return false;}
+  // Load teams for ALL event divisions from the known_teams index with exact division-class filtering
+  async function syncAllDivisions(){
+    if(!schedCtx?.evId||!schedCtx?.divCounts||!setSchedCtx)return;
     setSchedCtx(prev=>prev?{...prev,loadingTeams:true}:null);
+    const evId=schedCtx.evId;
+    const divLabels=Object.keys(schedCtx.divCounts);
+    const uniqueAges=[...new Set(divLabels.map(l=>parseInt(l)||0))].filter(a=>a>0);
     try{
-      const r=await fetch('https://usssa-poller.chad-157.workers.dev/teams-search?age='+age+'&state=FL');
-      const j=await r.json();
-      const raw=Array.isArray(j)?j:(j.teams||j.data||[]);
-      const fetched=raw.map(t=>({
-        id:'kv_'+(t.team_id||t.id||'')+'_'+(t.team_name||'').replace(/\W+/g,'_'),
-        name:t.team_name||t.name||'',
-        cls:t.division||t.cls||String(age)+'U',
-        city:t.team_city||t.city||'',
-        state:t.team_state||t.state||'FL',
-        coach:t.manager_name||'',
-        email:t.manager_email||'',
-        phone:t.manager_phone||''
+      const results=await Promise.all(
+        uniqueAges.map(age=>
+          fetch('https://usssa-poller.chad-157.workers.dev/teams-search?age='+age+'&state=FL')
+            .then(r=>r.json()).then(j=>Array.isArray(j)?j:(j.teams||j.data||[])).catch(()=>[])
+        )
+      );
+      const allFetched=results.flat().map(t=>({
+        name:t.team_name||t.name||'',cls:t.division||t.cls||'',
+        city:t.team_city||t.city||'',state:t.team_state||t.state||'FL',
+        coach:t.manager_name||'',email:t.manager_email||'',phone:t.manager_phone||''
       })).filter(t=>t.name);
-      setSchedCtx(prev=>{
-        if(!prev)return null;
-        const existIds=new Set((prev.teams||[]).map(t=>t.id));
-        const combined=[...(prev.teams||[]),...fetched.filter(t=>!existIds.has(t.id))];
-        return {...prev,teams:combined,loadingTeams:false};
-      });
-      setSelAge(age);
+      // For each division label, filter matching teams and stamp correct cls
+      const seen=new Set();
+      const appTeams=divLabels.flatMap(lbl=>
+        allFetched.filter(t=>_tMatch(t,lbl)).map(t=>({
+          ...t,cls:lbl,
+          id:'sc_'+evId+'_'+lbl.replace(/\W/g,'')+'_'+(t.name||'').replace(/\W+/g,'_')
+        })).filter(t=>{if(seen.has(t.id))return false;seen.add(t.id);return true;})
+      );
+      const newDivCounts={};
+      divLabels.forEach(lbl=>{newDivCounts[lbl]=appTeams.filter(t=>t.cls===lbl).length||schedCtx.divCounts[lbl]||0;});
+      setSchedCtx(prev=>prev?{...prev,teams:appTeams,divCounts:newDivCounts,loadingTeams:false}:null);
+      const firstAge=parseInt([...divLabels].sort((a,b)=>parseInt(b)-parseInt(a))[0])||null;
+      if(firstAge)setSelAge(firstAge);
     }catch(e){
       setSchedCtx(prev=>prev?{...prev,loadingTeams:false}:null);
     }
@@ -2383,40 +2394,51 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
         </div>
       </div>
 
-      {/* ══ Build Matchups — division picker (shown when event selected but teams not yet loaded) ══ */}
+      {/* ══ Build Matchups — division overview (event selected, teams not yet in KV) ══ */}
       {schedCtx&&schedCtx.evId&&!teams.length&&schedCtx.divCounts&&Object.keys(schedCtx.divCounts).length>0&&(
         <div className="card mb4">
           <div className="card-hd" style={{background:"linear-gradient(135deg,#1e3a5f,#2563eb)"}}>
             <span className="card-title" style={{color:"#fff"}}>⚾ Build Matchups</span>
             <span style={{fontSize:11,color:"rgba(255,255,255,.55)",marginLeft:8}}>
-              {schedCtx.loadingTeams?"Loading teams…":"Click a division to load its teams"}
+              {schedCtx.loadingTeams?"Loading teams…":"Teams not yet synced for this event"}
             </span>
           </div>
           <div style={{padding:"16px 18px"}}>
             {schedCtx.loadingTeams?(
-              <div style={{textAlign:"center",color:"#2563eb",fontWeight:600,fontSize:13,padding:"12px 0"}}>⏳ Loading teams…</div>
+              <div style={{textAlign:"center",color:"#2563eb",fontWeight:600,fontSize:13,padding:"12px 0"}}>⏳ Loading teams from USSSA index…</div>
             ):(
               <>
-                <div style={{fontSize:11,color:"#64748b",marginBottom:10,fontWeight:600}}>
-                  ⚡ Select a division below — teams will load from the USSSA index so you can start scheduling:
-                </div>
-                <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                {/* Division overview pills — info only */}
+                <div style={{display:"flex",flexWrap:"wrap",gap:7,marginBottom:16}}>
                   {Object.entries(schedCtx.divCounts).sort((a,b)=>b[1]-a[1]).map(([lbl,cnt])=>{
                     const dc=getDivColor(lbl);
-                    const age=parseInt(lbl)||0;
                     return(
-                      <span key={lbl}
-                        onClick={()=>age&&fetchTeamsForAge(age)}
-                        style={{fontSize:13,fontWeight:800,padding:"6px 16px",borderRadius:20,
-                          cursor:age?"pointer":"default",userSelect:"none",
-                          background:dc.bg,color:dc.text,border:`2px solid ${dc.border}`,
-                          boxShadow:"0 1px 4px rgba(0,0,0,.1)",transition:"transform .1s"}}
-                        onMouseEnter={e=>e.currentTarget.style.transform="scale(1.05)"}
-                        onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
+                      <span key={lbl} style={{fontSize:12,fontWeight:800,padding:"5px 13px",borderRadius:18,
+                        background:dc.bg,color:dc.text,border:`1.5px solid ${dc.border}`,whiteSpace:"nowrap"}}>
                         {lbl} <span style={{opacity:.7,fontWeight:600}}>· {cnt} teams</span>
                       </span>
                     );
                   })}
+                </div>
+                {/* Sync button */}
+                <div style={{background:"#fefce8",border:"1px solid #fde047",borderRadius:8,padding:"12px 14px",display:"flex",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
+                  <div style={{flex:1,minWidth:200}}>
+                    <div style={{fontWeight:700,fontSize:13,color:"#78350f",marginBottom:3}}>
+                      ⚠️ Teams haven't been imported for this event yet
+                    </div>
+                    <div style={{fontSize:11,color:"#92400e",lineHeight:1.5}}>
+                      Click <strong>Load from USSSA</strong> to pull teams by division from the USSSA registry.
+                      These are all FL-registered teams per division — remove any not entered in this event.
+                      For exact rosters, use Director Tools → Roster → Import.
+                    </div>
+                  </div>
+                  <button
+                    onClick={syncAllDivisions}
+                    style={{padding:"8px 18px",background:"#2563eb",color:"#fff",border:"none",borderRadius:7,
+                      fontWeight:700,fontSize:13,cursor:"pointer",whiteSpace:"nowrap",
+                      boxShadow:"0 2px 6px rgba(37,99,235,.35)"}}>
+                    ⚡ Load from USSSA
+                  </button>
                 </div>
               </>
             )}
