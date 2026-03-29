@@ -1310,69 +1310,7 @@ function GridBuilderView({gridCtx,setGridCtx,onSendToSchedule}){
                                 </div>
                               )}
 
-                              {/* ── Picker popover ── */}
-                              {isSel&&(
-                                <div onClick={e=>e.stopPropagation()}
-                                  style={{position:"absolute",
-                                    top:"100%",
-                                    left:fi>=pk.fields.length-3?"auto":0,
-                                    right:fi>=pk.fields.length-3?0:"auto",
-                                    zIndex:80,background:"#fff",
-                                    border:`2px solid ${pk.color}`,borderRadius:10,
-                                    boxShadow:"0 12px 36px rgba(0,0,0,.18)",
-                                    padding:12,minWidth:230,textAlign:"left"}}>
-
-                                  <div style={{fontWeight:800,fontSize:10,color:"#94a3b8",
-                                    textTransform:"uppercase",letterSpacing:.8,marginBottom:5}}>
-                                    {day==="SAT"?"Saturday":"Sunday"} — {tShort(t)} · {f}
-                                  </div>
-
-                                  <input value={divFilter} onChange={e=>setDivFilter(e.target.value)}
-                                    placeholder="Filter…" autoFocus
-                                    style={{...Inp,width:"100%",marginBottom:6}}/>
-
-                                  <div style={{display:"flex",flexWrap:"wrap",gap:4,
-                                    maxHeight:140,overflowY:"auto",marginBottom:10}}>
-                                    {filtDivs.map(dv=>{
-                                      const dc2=getDivColor(dv);const isSeld=cell.div===dv;
-                                      return(
-                                        <span key={dv}
-                                          onClick={()=>sc(day,pk.id,f,t,{div:dv,type:cell.type==="open"?"pool":cell.type})}
-                                          style={{padding:"3px 9px",borderRadius:11,fontSize:11,fontWeight:800,
-                                            cursor:"pointer",
-                                            background:isSeld?dc2.border:dc2.bg,
-                                            color:isSeld?"#fff":dc2.text,
-                                            border:`1.5px solid ${dc2.border}`,
-                                            boxShadow:isSeld?`0 0 0 2px ${dc2.border}50`:"none"}}>
-                                          {dv}
-                                        </span>
-                                      );
-                                    })}
-                                  </div>
-
-                                  <div style={{fontWeight:800,fontSize:10,color:"#94a3b8",
-                                    textTransform:"uppercase",letterSpacing:.8,marginBottom:5}}>Slot Type</div>
-                                  <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:10}}>
-                                    {SLOT_TYPES.filter(s=>s.id!=="open").map(s=>(
-                                      <span key={s.id} onClick={()=>sc(day,pk.id,f,t,{type:s.id})}
-                                        style={{padding:"3px 8px",borderRadius:9,fontSize:10,fontWeight:700,
-                                          cursor:"pointer",
-                                          background:cell.type===s.id?s.color:s.bg,
-                                          color:cell.type===s.id?"#fff":s.color,
-                                          border:`1px solid ${s.color}40`}}>
-                                        {s.label}
-                                      </span>
-                                    ))}
-                                  </div>
-
-                                  {cell.div&&(
-                                    <button onClick={()=>sc(day,pk.id,f,t,{div:"",type:"open"})}
-                                      style={Btn("#fef2f2","#dc2626",{width:"100%",padding:"5px",borderRadius:6})}>
-                                      Clear Cell
-                                    </button>
-                                  )}
-                                </div>
-                              )}
+                              {/* picker moved to fixed modal at component root */}
                             </td>
                           );
                         })}
@@ -1454,6 +1392,79 @@ function GridBuilderView({gridCtx,setGridCtx,onSendToSchedule}){
           )}
         </div>
       )}
+
+      {/* ══ Cell Picker — fixed modal so it's never clipped by table scroll ══ */}
+      {selCell&&(()=>{
+        const parts=selCell.split("¦");
+        // format: day¦pkId¦field¦time
+        const [scDay,scPkId,...rest]=parts;
+        const scTime=rest[rest.length-1];
+        const scField=rest.slice(0,rest.length-1).join("¦");
+        const scPk=parks.find(p=>p.id===scPkId)||pk;
+        const scCell=gc(scDay,scPkId,scField,scTime);
+        return(
+          <div style={{position:"fixed",inset:0,zIndex:9999,display:"flex",alignItems:"center",
+            justifyContent:"center",background:"rgba(0,0,0,0.45)"}}
+            onClick={()=>{setSelCell(null);setDivFilter("");}}>
+            <div onClick={e=>e.stopPropagation()}
+              style={{background:"#fff",border:`2px solid ${scPk.color}`,borderRadius:12,
+                boxShadow:"0 12px 40px rgba(0,0,0,.25)",padding:16,
+                width:"min(360px,95vw)",maxHeight:"80vh",display:"flex",flexDirection:"column"}}>
+
+              {/* Header */}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                <div style={{fontWeight:800,fontSize:11,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.8}}>
+                  {scDay==="SAT"?"Saturday":"Sunday"} — {tShort(scTime)} · {scField}
+                </div>
+                <button onClick={()=>{setSelCell(null);setDivFilter("");}}
+                  style={{background:"none",border:"none",cursor:"pointer",fontSize:16,color:"#94a3b8",padding:"0 2px",lineHeight:1}}>✕</button>
+              </div>
+
+              {/* Division filter */}
+              <input value={divFilter} onChange={e=>setDivFilter(e.target.value)}
+                placeholder="Filter…" autoFocus
+                style={{...Inp,width:"100%",marginBottom:8,boxSizing:"border-box"}}/>
+
+              {/* Division pills */}
+              <div style={{display:"flex",flexWrap:"wrap",gap:5,maxHeight:180,overflowY:"auto",marginBottom:12}}>
+                {filtDivs.map(dv=>{
+                  const dc2=getDivColor(dv);const isSeld=scCell.div===dv;
+                  return(
+                    <span key={dv}
+                      onClick={()=>sc(scDay,scPkId,scField,scTime,{div:dv,type:scCell.type==="open"?"pool":scCell.type})}
+                      style={{padding:"4px 10px",borderRadius:11,fontSize:12,fontWeight:800,cursor:"pointer",
+                        background:isSeld?dc2.border:dc2.bg,color:isSeld?"#fff":dc2.text,
+                        border:`1.5px solid ${dc2.border}`,
+                        boxShadow:isSeld?`0 0 0 2px ${dc2.border}50`:"none"}}>
+                      {dv}
+                    </span>
+                  );
+                })}
+              </div>
+
+              {/* Slot type */}
+              <div style={{fontWeight:800,fontSize:10,color:"#94a3b8",textTransform:"uppercase",letterSpacing:.8,marginBottom:6}}>Slot Type</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:12}}>
+                {SLOT_TYPES.filter(s=>s.id!=="open").map(s=>(
+                  <span key={s.id} onClick={()=>sc(scDay,scPkId,scField,scTime,{type:s.id})}
+                    style={{padding:"4px 10px",borderRadius:9,fontSize:11,fontWeight:700,cursor:"pointer",
+                      background:scCell.type===s.id?s.color:s.bg,color:scCell.type===s.id?"#fff":s.color,
+                      border:`1px solid ${s.color}40`}}>
+                    {s.label}
+                  </span>
+                ))}
+              </div>
+
+              {scCell.div&&(
+                <button onClick={()=>sc(scDay,scPkId,scField,scTime,{div:"",type:"open"})}
+                  style={Btn("#fef2f2","#dc2626",{width:"100%",padding:"7px",borderRadius:7,fontSize:12})}>
+                  Clear Cell
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
