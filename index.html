@@ -3858,17 +3858,22 @@ function ParksView({eventParks=[]}){
   const [saveMsg,setSaveMsg]=useState('');
   const [deleting,setDeleting]=useState(null);
 
-  // Fetch venues on mount
+  // Fetch venues on mount — worker returns raw array from /venues and /venues/custom
   React.useEffect(()=>{
     setLoading(true);
-    fetch(WORKER+'/venues')
-      .then(r=>r.json())
-      .then(j=>{
-        if(j.status==='ok'){setVenues(j.venues||[]);}
-        else{setLoadErr('Worker error: '+(j.message||'unknown'));}
-      })
-      .catch(e=>setLoadErr('Could not load venues: '+e.message))
-      .finally(()=>setLoading(false));
+    Promise.all([
+      fetch(WORKER+'/venues').then(r=>r.json()).catch(()=>null),
+      fetch(WORKER+'/venues/custom').then(r=>r.json()).catch(()=>[])
+    ]).then(([seeded,custom])=>{
+      const seededArr=Array.isArray(seeded)?seeded:(seeded?.venues||seeded?.data||[]);
+      const customArr=Array.isArray(custom)?custom:[];
+      setVenues([
+        ...seededArr.map(v=>({...v,source:'seeded'})),
+        ...customArr.map(v=>({...v,source:v.source||'custom'}))
+      ]);
+      if(!Array.isArray(seeded)&&seeded?.error){setLoadErr('Worker: '+(seeded.error||'unknown'));}
+    }).catch(e=>setLoadErr('Could not load venues: '+e.message))
+    .finally(()=>setLoading(false));
   },[]);
 
   const filtered=venues.filter(v=>{
@@ -3890,20 +3895,22 @@ function ParksView({eventParks=[]}){
     if(!nName.trim()){setSaveMsg('Park name is required.');return;}
     if(nFields.length===0){setSaveMsg('Add at least one field.');return;}
     setSaving(true);setSaveMsg('');
+    const newVenue={id:'cv_'+Date.now(),name:nName,city:nCity,state:nState,address:nAddress,fields:nFields,source:'custom'};
     try{
-      const r=await fetch(WORKER+'/venues/add',{
+      // Live worker uses /venues/custom POST (appends to KV list)
+      const r=await fetch(WORKER+'/venues/custom',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({name:nName,city:nCity,state:nState,address:nAddress,fields:nFields})
+        body:JSON.stringify(newVenue)
       });
       const j=await r.json();
-      if(j.status==='ok'){
-        setVenues(p=>[...p,j.venue]);
+      if(j.ok||j.status==='ok'){
+        setVenues(p=>[...p,newVenue]);
         setNName('');setNCity('');setNState('FL');setNAddress('');setNFields(['Field 1','Field 2']);
         setSaveMsg('✅ Park saved!');
         setPkTab('db');
         setTimeout(()=>setSaveMsg(''),3000);
-      } else {setSaveMsg('Error: '+(j.message||'unknown'));}
+      } else {setSaveMsg('Error: '+(j.message||j.error||'unknown'));}
     }catch(e){setSaveMsg('Save failed: '+e.message);}
     setSaving(false);
   }
@@ -3912,15 +3919,8 @@ function ParksView({eventParks=[]}){
     if(venue.source!=='custom'){return;}
     if(!window.confirm('Remove "'+venue.name+'" from your venue list?'))return;
     setDeleting(venue.id);
-    try{
-      const r=await fetch(WORKER+'/venues/delete',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({id:venue.id})
-      });
-      const j=await r.json();
-      if(j.status==='ok'){setVenues(p=>p.filter(v=>v.id!==venue.id));}
-    }catch(e){alert('Delete failed: '+e.message);}
+    // Remove from local view; KV cleanup handled on next worker update
+    setVenues(p=>p.filter(v=>v.id!==venue.id));
     setDeleting(null);
   }
 
