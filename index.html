@@ -1055,12 +1055,14 @@ function GridBuilderView({gridCtx,setGridCtx,onSendToSchedule,events,evRosters})
             onChange={e=>{
               const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);
               if(!ev||!setGridCtx)return;
-              const divs=(ev.divisions||[]).map(d=>d.label||d.id||d);
-              const totalTeams=(ev.divisions||[]).reduce((s,d)=>{
-                const rk=String(ev.id)+"_"+(d.id||d.label||d);
-                return s+((evRosters&&evRosters[rk])||[]).length;
+              const normalizedDivs=(ev.divisions||[]).map(normDiv);
+              const divLabels=normalizedDivs.map(d=>d.label).filter(Boolean);
+              const totalTeams=normalizedDivs.reduce((s,d)=>{
+                const rk=String(ev.id)+"_"+d.id;
+                const fromRoster=(evRosters&&evRosters[rk]||[]).length;
+                return s+(fromRoster||d.numTeams||0);
               },0)||ev.numTeams||0;
-              setGridCtx({evId:String(ev.id),evName:ev.name,divisions:divs,totalTeams,assignedParks:null});
+              setGridCtx({evId:String(ev.id),evName:ev.name,divisions:divLabels,totalTeams,assignedParks:null});
             }}
             style={{padding:"5px 10px",borderRadius:6,border:"1px solid #fcd34d",fontSize:13,background:"#fff",minWidth:220,cursor:"pointer"}}>
             <option value="">— Choose event —</option>
@@ -2038,12 +2040,12 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
             onChange={e=>{
               const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);
               if(!ev||!setSchedCtx)return;
-              // Gather all teams across all divisions for this event
-              const allTeams=(ev.divisions||[]).flatMap(d=>{
-                const rk=String(ev.id)+"_"+(d.id||d.label||d);
-                return((evRosters&&evRosters[rk])||[]);
+              const normalizedDivs=(ev.divisions||[]).map(normDiv);
+              const allTeams=normalizedDivs.flatMap(d=>{
+                const rk=String(ev.id)+"_"+d.id;
+                return(evRosters&&evRosters[rk])||[];
               });
-              setSchedCtx({evId:String(ev.id),evName:ev.name,divLabel:"All Divisions",teams:allTeams.length?allTeams:propTeams});
+              setSchedCtx({evId:String(ev.id),evName:ev.name,divLabel:"All Divisions",teams:allTeams.length?allTeams:[]});
             }}
             style={{padding:"5px 10px",borderRadius:6,border:"1px solid #fcd34d",fontSize:13,background:"#fff",minWidth:220,cursor:"pointer"}}>
             <option value="">— Choose event —</option>
