@@ -1635,9 +1635,44 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
 
   // Fetch teams for an age group from the known_teams index (used when event teams not in KV)
   // Import teams for this event from a JSON paste (same contract as Director Tools import)
-  const [showSchedImport,setShowSchedImport]=useState(false);
-  const [schedImportText,setSchedImportText]=useState('');
-  const [schedImportErr,setSchedImportErr]=useState('');
+  const [schedNoTeamsMsg,setSchedNoTeamsMsg]=useState('');
+  // Click a division pill → load that event's teams from KV then jump to that age
+  async function loadDivisionTeams(divLabel){
+    if(!schedCtx?.evId||!setSchedCtx)return;
+    const age=parseInt(divLabel)||0;
+    // Already have some teams? Just switch age tab
+    if(teams&&teams.length){setSelAge(age);return;}
+    setSchedCtx(prev=>prev?{...prev,loadingTeams:true}:null);
+    setSchedNoTeamsMsg('');
+    try{
+      const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(schedCtx.evId));
+      const j=await r.json();
+      if(j.status==='ok'&&j.teams&&j.teams.length){
+        const evId=schedCtx.evId;
+        const normalizedDivs=((schedCtx._divisions||[])).map(normDiv);
+        // Build divCounts from fetched data
+        const byDivLabel={};
+        j.teams.forEach(t=>{const dl=(t.division||'').trim();if(!byDivLabel[dl])byDivLabel[dl]=[];byDivLabel[dl].push(t);});
+        const newDivCounts={};
+        Object.keys(schedCtx.divCounts||{}).forEach(lbl=>{newDivCounts[lbl]=(byDivLabel[lbl]||[]).length||schedCtx.divCounts[lbl]||0;});
+        const appTeams=j.teams.map(t=>({
+          id:'us_'+evId+'_'+(t.team_name||'').replace(/\W+/g,'_'),
+          name:t.team_name||'',cls:t.division||'',city:t.team_city||'',
+          state:t.team_state||'FL',coach:t.manager_name||'',
+          email:t.manager_email||'',phone:t.manager_phone||'',
+          entryStatus:t.entry_status||'Approved',payStatus:t.payment_status||'Not Paid'
+        }));
+        setSchedCtx(prev=>prev?{...prev,teams:appTeams,divCounts:newDivCounts,loadingTeams:false}:null);
+        setSelAge(age);
+      } else {
+        setSchedCtx(prev=>prev?{...prev,loadingTeams:false}:null);
+        setSchedNoTeamsMsg('No teams found for this event. Open it in Director Tools → Roster → Sync or Import first.');
+      }
+    }catch(e){
+      setSchedCtx(prev=>prev?{...prev,loadingTeams:false}:null);
+      setSchedNoTeamsMsg('Could not load teams: '+e.message);
+    }
+  }
   async function importSchedTeams(){
     setSchedImportErr('');
     let parsed;
@@ -2122,7 +2157,7 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
                 return t;
               });
               // Set context immediately (loadingTeams flag shows spinner)
-              setSchedCtx({evId:String(ev.id),evName:ev.name,divLabel:"All Divisions",teams:allTeams,divCounts,loadingTeams:!allTeams.length});
+              setSchedCtx({evId:String(ev.id),evName:ev.name,divLabel:"All Divisions",teams:allTeams,divCounts,loadingTeams:!allTeams.length,_divisions:ev.divisions||[]});
               // If not in cache, fetch from worker KV endpoint
               if(!allTeams.length){
                 try{
@@ -2394,67 +2429,43 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
         </div>
       </div>
 
-      {/* ══ Build Matchups — teams not loaded yet ══ */}
-      {schedCtx&&schedCtx.evId&&!teams.length&&(
+      {/* ══ Build Matchups — click a division to load teams ══ */}
+      {schedCtx&&schedCtx.evId&&!teams.length&&schedCtx.divCounts&&Object.keys(schedCtx.divCounts).length>0&&(
         <div className="card mb4">
           <div className="card-hd" style={{background:"linear-gradient(135deg,#1e3a5f,#2563eb)"}}>
             <span className="card-title" style={{color:"#fff"}}>⚾ Build Matchups</span>
-            <span style={{fontSize:11,color:"rgba(255,255,255,.55)",marginLeft:8}}>Teams for this event haven't been loaded yet</span>
+            <span style={{fontSize:11,color:"rgba(255,255,255,.55)",marginLeft:8}}>
+              {schedCtx.loadingTeams?"Loading…":"Click a division to load its teams"}
+            </span>
           </div>
-          <div style={{padding:"18px 20px"}}>
-            {/* Division pills — info from event metadata */}
-            {schedCtx.divCounts&&Object.keys(schedCtx.divCounts).length>0&&(
-              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:16}}>
-                {Object.entries(schedCtx.divCounts).sort((a,b)=>b[1]-a[1]).map(([lbl,cnt])=>{
-                  const dc=getDivColor(lbl);
-                  return(
-                    <span key={lbl} style={{fontSize:12,fontWeight:800,padding:"4px 12px",borderRadius:16,
-                      background:dc.bg,color:dc.text,border:`1.5px solid ${dc.border}`,whiteSpace:"nowrap"}}>
-                      {lbl} <span style={{opacity:.7,fontWeight:600}}>· {cnt} teams</span>
-                    </span>
-                  );
-                })}
-              </div>
-            )}
-            {/* Step 1: Refresh from Event Manager */}
-            <div style={{background:"#eff6ff",border:"1px solid #93c5fd",borderRadius:8,padding:"14px 16px",marginBottom:10}}>
-              <div style={{fontWeight:700,fontSize:13,color:"#1e40af",marginBottom:4}}>
-                🔄 Step 1 — Refresh Teams from Event Manager
-              </div>
-              <div style={{fontSize:11,color:"#1e40af",lineHeight:1.6}}>
-                Go to <strong>Event Manager</strong> (📅 in the left sidebar) and click <strong>Refresh Teams</strong>.
-                This loads your saved rosters from the cloud. Then come back here — teams will appear automatically.
-              </div>
-            </div>
-            {/* Step 2: If no roster in cloud yet, import via Director Tools */}
-            <div style={{background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:8,padding:"14px 16px",marginBottom:showSchedImport?10:0}}>
-              <div style={{fontWeight:700,fontSize:12,color:"#475569",marginBottom:4}}>
-                📂 No roster yet? Import in Director Tools first
-              </div>
-              <div style={{fontSize:11,color:"#64748b",lineHeight:1.6,marginBottom:8}}>
-                Open this event in Director Tools → <strong>Roster</strong> tab → <strong>Sync</strong> or <strong>Import</strong>.
-                Once saved, Refresh Teams will pick it up here.
-                Or paste JSON directly below:
-              </div>
-              <button onClick={()=>setShowSchedImport(s=>!s)}
-                style={{padding:"4px 12px",background:"#475569",color:"#fff",border:"none",borderRadius:5,fontWeight:700,fontSize:11,cursor:"pointer"}}>
-                {showSchedImport?"✕ Close":"📥 Paste JSON"}
-              </button>
-            </div>
-            {showSchedImport&&(
-              <div>
-                <textarea value={schedImportText} onChange={e=>setSchedImportText(e.target.value)}
-                  placeholder={'[\n  {"team_name":"Panthers","division":"12AA","team_city":"Tampa","team_state":"FL"},\n  ...\n]'}
-                  style={{width:"100%",height:120,fontFamily:"monospace",fontSize:11,padding:8,
-                    border:"1px solid #cbd5e1",borderRadius:6,boxSizing:"border-box",resize:"vertical"}}/>
-                {schedImportErr&&<div style={{color:"#dc2626",fontSize:11,marginTop:3}}>{schedImportErr}</div>}
-                <button onClick={importSchedTeams} disabled={!schedImportText.trim()}
-                  style={{marginTop:6,padding:"6px 16px",background:"#2563eb",color:"#fff",border:"none",
-                    borderRadius:6,fontWeight:700,fontSize:12,cursor:"pointer",opacity:schedImportText.trim()?1:.5}}>
-                  ✅ Import Teams
-                </button>
-              </div>
-            )}
+          <div style={{padding:"16px 18px"}}>
+            {schedCtx.loadingTeams
+              ?<div style={{textAlign:"center",color:"#2563eb",fontWeight:600,padding:"20px 0",fontSize:13}}>⏳ Loading teams…</div>
+              :<>
+                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                  {Object.entries(schedCtx.divCounts).sort((a,b)=>b[1]-a[1]).map(([lbl,cnt])=>{
+                    const dc=getDivColor(lbl);
+                    return(
+                      <span key={lbl} onClick={()=>loadDivisionTeams(lbl)}
+                        style={{fontSize:13,fontWeight:800,padding:"7px 18px",borderRadius:22,cursor:"pointer",
+                          userSelect:"none",transition:"transform .1s, box-shadow .1s",
+                          background:dc.bg,color:dc.text,border:`2px solid ${dc.border}`,
+                          boxShadow:"0 2px 6px rgba(0,0,0,.08)"}}
+                        onMouseEnter={e=>{e.currentTarget.style.transform="scale(1.06)";e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,.15)";}}
+                        onMouseLeave={e=>{e.currentTarget.style.transform="scale(1)";e.currentTarget.style.boxShadow="0 2px 6px rgba(0,0,0,.08)";}}>
+                        {lbl} <span style={{opacity:.7,fontWeight:600}}>· {cnt} teams</span>
+                      </span>
+                    );
+                  })}
+                </div>
+                {schedNoTeamsMsg&&(
+                  <div style={{marginTop:12,padding:"10px 14px",background:"#fefce8",border:"1px solid #fde047",
+                    borderRadius:7,fontSize:12,color:"#78350f",fontWeight:600}}>
+                    ⚠️ {schedNoTeamsMsg}
+                  </div>
+                )}
+              </>
+            }
           </div>
         </div>
       )}
