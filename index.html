@@ -1056,13 +1056,15 @@ function GridBuilderView({gridCtx,setGridCtx,onSendToSchedule,events,evRosters})
               const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);
               if(!ev||!setGridCtx)return;
               const normalizedDivs=(ev.divisions||[]).map(normDiv);
-              const divLabels=normalizedDivs.map(d=>d.label).filter(Boolean);
-              const totalTeams=normalizedDivs.reduce((s,d)=>{
+              const divCounts={};
+              normalizedDivs.forEach(d=>{
                 const rk=String(ev.id)+"_"+d.id;
-                const fromRoster=(evRosters&&evRosters[rk]||[]).length;
-                return s+(fromRoster||d.numTeams||0);
-              },0)||ev.numTeams||0;
-              setGridCtx({evId:String(ev.id),evName:ev.name,divisions:divLabels,totalTeams,assignedParks:null});
+                const cnt=(evRosters&&evRosters[rk]||[]).length||d.numTeams||0;
+                if(d.label)divCounts[d.label]=cnt;
+              });
+              const divLabels=normalizedDivs.map(d=>d.label).filter(Boolean);
+              const totalTeams=Object.values(divCounts).reduce((s,c)=>s+c,0)||ev.numTeams||0;
+              setGridCtx({evId:String(ev.id),evName:ev.name,divisions:divLabels,divCounts,totalTeams,assignedParks:null});
             }}
             style={{padding:"5px 10px",borderRadius:6,border:"1px solid #fcd34d",fontSize:13,background:"#fff",minWidth:220,cursor:"pointer"}}>
             <option value="">— Choose event —</option>
@@ -1074,13 +1076,30 @@ function GridBuilderView({gridCtx,setGridCtx,onSendToSchedule,events,evRosters})
         </div>
       )}
 
-      {/* ══ Event context banner ══ */}
-      {gridCtx&&<div style={{background:"#dbeafe",border:"1px solid #93c5fd",borderRadius:8,padding:"12px 16px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div style={{fontSize:13,fontWeight:700,color:"#1e40af"}}>
-          🗺 Building grid for: <span style={{fontWeight:900}}>{gridCtx.evName}</span> · <span style={{fontWeight:900}}>{gridCtx.divisions?.length||0} divisions</span> · {gridCtx.totalTeams} teams
+      {/* ══ Event context banner + division roster ══ */}
+      {gridCtx&&(
+        <div style={{marginBottom:16}}>
+          <div style={{background:"#dbeafe",border:"1px solid #93c5fd",borderRadius:"8px 8px 0 0",padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#1e40af"}}>
+              🗺 Building grid for: <span style={{fontWeight:900}}>{gridCtx.evName}</span> · <span style={{fontWeight:900}}>{gridCtx.divisions?.length||0} divisions</span> · {gridCtx.totalTeams} teams
+            </div>
+            <button className="btn btn-secondary btn-sm" onClick={()=>setGridCtx&&setGridCtx(null)} style={{padding:"3px 12px",fontSize:11}}>✕ Clear</button>
+          </div>
+          {gridCtx.divCounts&&Object.keys(gridCtx.divCounts).length>0&&(
+            <div style={{background:"#eff6ff",border:"1px solid #93c5fd",borderTop:"none",borderRadius:"0 0 8px 8px",padding:"10px 16px",display:"flex",flexWrap:"wrap",gap:6}}>
+              {Object.entries(gridCtx.divCounts).sort((a,b)=>b[1]-a[1]).map(([lbl,cnt])=>{
+                const dc=getDivColor(lbl);
+                return(
+                  <span key={lbl} style={{fontSize:11,fontWeight:800,padding:"3px 10px",borderRadius:14,
+                    background:dc.bg,color:dc.text,border:`1.5px solid ${dc.border}`,whiteSpace:"nowrap"}}>
+                    {lbl} <span style={{opacity:.7,fontWeight:600}}>· {cnt} teams</span>
+                  </span>
+                );
+              })}
+            </div>
+          )}
         </div>
-        <button className="btn btn-secondary btn-sm" onClick={()=>setGridCtx&&setGridCtx(null)} style={{padding:"3px 12px",fontSize:11}}>✕ Clear</button>
-      </div>}
+      )}
 
       {/* ══ Header row ══ */}
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10,flexWrap:"wrap"}}>
@@ -1476,6 +1495,7 @@ function GridBuilderView({gridCtx,setGridCtx,onSendToSchedule,events,evRosters})
               <div style={{display:"flex",flexWrap:"wrap",gap:5,maxHeight:180,overflowY:"auto",marginBottom:12}}>
                 {filtDivs.map(dv=>{
                   const dc2=getDivColor(dv);const isSeld=scCell.div===dv;
+                  const teamCnt=gridCtx?.divCounts?.[dv];
                   return(
                     <span key={dv}
                       onClick={()=>sc(scDay,scPkId,scField,scTime,{div:dv,type:scCell.type==="open"?"pool":scCell.type})}
@@ -1483,7 +1503,7 @@ function GridBuilderView({gridCtx,setGridCtx,onSendToSchedule,events,evRosters})
                         background:isSeld?dc2.border:dc2.bg,color:isSeld?"#fff":dc2.text,
                         border:`1.5px solid ${dc2.border}`,
                         boxShadow:isSeld?`0 0 0 2px ${dc2.border}50`:"none"}}>
-                      {dv}
+                      {dv}{teamCnt?<span style={{fontWeight:600,opacity:.75,fontSize:10}}> ·{teamCnt}t</span>:null}
                     </span>
                   );
                 })}
