@@ -3841,7 +3841,52 @@ function Pool2BracketView({poolGames,teams}){
 function ParksView({eventParks=[]}){
   const WORKER='https://usssa-poller.chad-157.workers.dev';
   const NAVY='#1e3a5f';
-  const [venues,setVenues]=useState([]);
+
+  // Built-in FL venue list — always available even if the worker is down
+  const BUILTIN_VENUES=[
+    {id:'bv_1',name:'Viera Regional Park',city:'Viera',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6'],source:'builtin'},
+    {id:'bv_2',name:'Space Coast Stadium',city:'Viera',state:'FL',fields:['Field 1','Field 2','Field 3'],source:'builtin'},
+    {id:'bv_3',name:'Cocoa Expo Sports Center',city:'Cocoa',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6','Field 7','Field 8'],source:'builtin'},
+    {id:'bv_4',name:'Kelly Park',city:'Cocoa',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4'],source:'builtin'},
+    {id:'bv_5',name:'ESPN Wide World of Sports',city:'Kissimmee',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6','Field 7','Field 8','Field 9','Field 10','Field 11','Field 12'],source:'builtin'},
+    {id:'bv_6',name:'Osceola County Stadium',city:'Kissimmee',state:'FL',fields:['Field 1','Field 2','Field 3'],source:'builtin'},
+    {id:'bv_7',name:'Kissimmee Softball Complex',city:'Kissimmee',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6'],source:'builtin'},
+    {id:'bv_8',name:'Bill Fredrick Park',city:'Orlando',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6','Field 7','Field 8'],source:'builtin'},
+    {id:'bv_9',name:'Barnett Park',city:'Orlando',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6'],source:'builtin'},
+    {id:'bv_10',name:'Rio Pinar Sports Complex',city:'Orlando',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6','Field 7','Field 8'],source:'builtin'},
+    {id:'bv_11',name:'Boombah Sports Complex',city:'Sanford',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6','Field 7','Field 8','Field 9','Field 10','Field 11','Field 12'],source:'builtin'},
+    {id:'bv_12',name:'Sanford River Run',city:'Sanford',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6','Field 7','Field 8'],source:'builtin'},
+    {id:'bv_13',name:'Sylvan Lake Park',city:'Sanford',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4'],source:'builtin'},
+    {id:'bv_14',name:'Lake Myrtle Sports Park',city:'Auburndale',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6','Field 7','Field 8'],source:'builtin'},
+    {id:'bv_15',name:'Chain of Lakes Park',city:'Winter Haven',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6'],source:'builtin'},
+    {id:'bv_16',name:"Hunter's Creek Sports Complex",city:'Orlando',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6'],source:'builtin'},
+    {id:'bv_17',name:'Plant City Stadium',city:'Plant City',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6'],source:'builtin'},
+    {id:'bv_18',name:'Softball Country Club',city:'Plant City',state:'FL',fields:['Diamond 1','Diamond 2','Diamond 3','Diamond 4','Diamond 5','Diamond 6','Diamond 7','Diamond 8','Diamond 9','Diamond 10','Diamond 11','Diamond 12'],source:'builtin'},
+    {id:'bv_19',name:'Brandon Sports and Aquatic Complex',city:'Brandon',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6','Field 7','Field 8'],source:'builtin'},
+    {id:'bv_20',name:'Wiregrass Ranch Sports Campus',city:'Wesley Chapel',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6','Field 7','Field 8'],source:'builtin'},
+    {id:'bv_21',name:'Eddie C. Moore Complex',city:'Clearwater',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6','Field 7','Field 8','Field 9','Field 10'],source:'builtin'},
+    {id:'bv_22',name:'Spectrum Field',city:'Clearwater',state:'FL',fields:['Field 1','Field 2','Field 3'],source:'builtin'},
+    {id:'bv_23',name:'Hillsborough County Athletic Complex',city:'Tampa',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6','Field 7','Field 8'],source:'builtin'},
+    {id:'bv_24',name:'Al Lopez Park',city:'Tampa',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6'],source:'builtin'},
+    {id:'bv_25',name:'CB Smith Park',city:'Pembroke Pines',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6'],source:'builtin'},
+    {id:'bv_26',name:'Miramar Regional Park',city:'Miramar',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6','Field 7','Field 8'],source:'builtin'},
+    {id:'bv_27',name:'Markham Park',city:'Sunrise',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6'],source:'builtin'},
+    {id:'bv_28',name:'Amelia Earhart Park',city:'Hialeah',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6','Field 7','Field 8','Field 9','Field 10'],source:'builtin'},
+    {id:'bv_29',name:'Homestead Sports Complex',city:'Homestead',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6','Field 7','Field 8'],source:'builtin'},
+    {id:'bv_30',name:'Roger Dean Chevrolet Stadium',city:'Jupiter',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6'],source:'builtin'},
+    {id:'bv_31',name:'Tradition Field',city:'Port St. Lucie',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4'],source:'builtin'},
+    {id:'bv_32',name:'Jacksonville Baseball Center',city:'Jacksonville',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6'],source:'builtin'},
+    {id:'bv_33',name:'Veterans Memorial Park',city:'Jacksonville',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6'],source:'builtin'},
+    {id:'bv_34',name:'Gainesville Sports Complex',city:'Gainesville',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6'],source:'builtin'},
+    {id:'bv_35',name:'Suwannee Valley Sports Complex',city:'Live Oak',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6'],source:'builtin'},
+    {id:'bv_36',name:'Pensacola MultiPlex',city:'Pensacola',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6'],source:'builtin'},
+    {id:'bv_37',name:'Bay County Sports Complex',city:'Panama City',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6'],source:'builtin'},
+    {id:'bv_38',name:'Tallahassee Sports Complex',city:'Tallahassee',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6'],source:'builtin'},
+    {id:'bv_39',name:'Publix Field at Holman Stadium',city:'Vero Beach',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4'],source:'builtin'},
+    {id:'bv_40',name:'Palm Beach Athletic Fields',city:'West Palm Beach',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6'],source:'builtin'},
+  ];
+
+  const [venues,setVenues]=useState(BUILTIN_VENUES);
   const [loading,setLoading]=useState(true);
   const [loadErr,setLoadErr]=useState('');
   const [search,setSearch]=useState('');
@@ -3858,22 +3903,19 @@ function ParksView({eventParks=[]}){
   const [saveMsg,setSaveMsg]=useState('');
   const [deleting,setDeleting]=useState(null);
 
-  // Fetch venues on mount — worker returns raw array from /venues and /venues/custom
+  // Fetch custom venues from worker and merge with built-in list
   React.useEffect(()=>{
     setLoading(true);
-    Promise.all([
-      fetch(WORKER+'/venues').then(r=>r.json()).catch(()=>null),
-      fetch(WORKER+'/venues/custom').then(r=>r.json()).catch(()=>[])
-    ]).then(([seeded,custom])=>{
-      const seededArr=Array.isArray(seeded)?seeded:(seeded?.venues||seeded?.data||[]);
-      const customArr=Array.isArray(custom)?custom:[];
-      setVenues([
-        ...seededArr.map(v=>({...v,source:'seeded'})),
-        ...customArr.map(v=>({...v,source:v.source||'custom'}))
-      ]);
-      if(!Array.isArray(seeded)&&seeded?.error){setLoadErr('Worker: '+(seeded.error||'unknown'));}
-    }).catch(e=>setLoadErr('Could not load venues: '+e.message))
-    .finally(()=>setLoading(false));
+    fetch(WORKER+'/venues/custom')
+      .then(r=>r.ok?r.json():Promise.reject(new Error(r.status)))
+      .then(custom=>{
+        const customArr=Array.isArray(custom)?custom:[];
+        if(customArr.length>0){
+          setVenues(prev=>[...prev.filter(v=>v.source==='builtin'),...customArr.map(v=>({...v,source:'custom'}))]);
+        }
+      })
+      .catch(()=>{/* custom fetch failed — built-in list still shows */})
+      .finally(()=>setLoading(false));
   },[]);
 
   const filtered=venues.filter(v=>{
@@ -3949,7 +3991,7 @@ function ParksView({eventParks=[]}){
             {loading&&<span style={{fontSize:12,color:'#94a3b8'}}>Loading…</span>}
             {!loading&&<span style={{fontSize:12,color:'#64748b',whiteSpace:'nowrap'}}>{filtered.length} venues</span>}
           </div>
-          {loadErr&&<Alrt type="warn">⚠️ {loadErr} — showing cached data if available.</Alrt>}
+          {loadErr&&<Alrt type="info">ℹ️ {loadErr} — showing built-in venue list.</Alrt>}
 
           {/* Venue list */}
           <div style={{display:'flex',flexDirection:'column',gap:6}}>
