@@ -1634,44 +1634,44 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
   const dayGroups=[...new Set(rows.map(r=>r.date))].sort();
 
   // Fetch teams for an age group from the known_teams index (used when event teams not in KV)
-  // Inline division-class matchers (mirrors EventDetailView parseDivClass/teamMatchesDiv)
-  function _pDC(lbl){const m=(lbl||'').match(/^(\d+)(.*)/);if(!m)return'';const s=m[2].toUpperCase().trim();if(s.startsWith('OP')||s==='O'||s==='0P')return'open';if(s==='AAA')return'aaa';if(s==='AA')return'aa';if(s==='A')return'a';return s.toLowerCase();}
-  function _tMatch(t,divLbl){const da=parseInt(((divLbl||'').match(/^(\d+)/)||['','0'])[1]);const dc=_pDC(divLbl);const tc=(t.cls||t.division||'').toUpperCase();const ta=parseInt((tc.match(/(\d+)/)||['','0'])[1]);if(ta!==da)return false;if(dc==='open')return tc.includes('OPEN')||tc.includes('OP');if(dc==='aaa')return tc.includes('AAA');if(dc==='aa')return tc.includes('AA')&&!tc.includes('AAA');if(dc==='a')return(tc.endsWith(' A')||tc.endsWith('A')||tc.includes(' A '))&&!tc.includes('AA');return false;}
-  // Load teams for ALL event divisions from the known_teams index with exact division-class filtering
-  async function syncAllDivisions(){
-    if(!schedCtx?.evId||!schedCtx?.divCounts||!setSchedCtx)return;
-    setSchedCtx(prev=>prev?{...prev,loadingTeams:true}:null);
-    const evId=schedCtx.evId;
-    const divLabels=Object.keys(schedCtx.divCounts);
-    const uniqueAges=[...new Set(divLabels.map(l=>parseInt(l)||0))].filter(a=>a>0);
+  // Import teams for this event from a JSON paste (same contract as Director Tools import)
+  const [showSchedImport,setShowSchedImport]=useState(false);
+  const [schedImportText,setSchedImportText]=useState('');
+  const [schedImportErr,setSchedImportErr]=useState('');
+  async function importSchedTeams(){
+    setSchedImportErr('');
+    let parsed;
+    try{parsed=JSON.parse(schedImportText.trim());}catch(e){setSchedImportErr('Invalid JSON: '+e.message);return;}
+    if(!Array.isArray(parsed)||!parsed.length){setSchedImportErr('Expected a JSON array of team objects.');return;}
+    const first=parsed[0];
+    if(!first.team_name&&!first.TeamName&&!first.name){setSchedImportErr('Each object needs a "team_name" field.');return;}
+    const evId=schedCtx?.evId;
+    if(!evId){setSchedImportErr('No event selected.');return;}
+    const kvTeams=parsed.map(t=>({
+      team_id:String(t.team_id||t.TeamID||t.id||''),
+      team_name:t.team_name||t.TeamName||t.name||'',
+      division:t.division||t.Division||t.cls||t.ClassName||'',
+      team_city:t.team_city||t.City||t.city||'',
+      team_state:t.team_state||t.State||t.state||'FL',
+      manager_name:t.manager_name||t.ManagerName||t.manager||t.coach||'',
+      manager_email:t.manager_email||t.ManagerEmail||t.email||'',
+      manager_phone:t.manager_phone||t.ManagerPhone||t.phone||'',
+      entry_status:t.entry_status||t.EntryStatus||'Approved',
+      payment_status:t.payment_status||t.PaymentStatus||'Not Paid'
+    }));
     try{
-      const results=await Promise.all(
-        uniqueAges.map(age=>
-          fetch('https://usssa-poller.chad-157.workers.dev/teams-search?age='+age+'&state=FL')
-            .then(r=>r.json()).then(j=>Array.isArray(j)?j:(j.teams||j.data||[])).catch(()=>[])
-        )
-      );
-      const allFetched=results.flat().map(t=>({
-        name:t.team_name||t.name||'',cls:t.division||t.cls||'',
-        city:t.team_city||t.city||'',state:t.team_state||t.state||'FL',
-        coach:t.manager_name||'',email:t.manager_email||'',phone:t.manager_phone||''
-      })).filter(t=>t.name);
-      // For each division label, filter matching teams and stamp correct cls
-      const seen=new Set();
-      const appTeams=divLabels.flatMap(lbl=>
-        allFetched.filter(t=>_tMatch(t,lbl)).map(t=>({
-          ...t,cls:lbl,
-          id:'sc_'+evId+'_'+lbl.replace(/\W/g,'')+'_'+(t.name||'').replace(/\W+/g,'_')
-        })).filter(t=>{if(seen.has(t.id))return false;seen.add(t.id);return true;})
-      );
+      await fetch('https://usssa-poller.chad-157.workers.dev/event-teams/seed',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({event_id:evId,teams:kvTeams})});
+      const appTeams=kvTeams.map(t=>({
+        id:'imp_'+evId+'_'+(t.team_name||'').replace(/\W+/g,'_'),
+        name:t.team_name,cls:t.division,city:t.team_city,state:t.team_state,
+        coach:t.manager_name,email:t.manager_email,phone:t.manager_phone,
+        entryStatus:t.entry_status,payStatus:t.payment_status
+      }));
       const newDivCounts={};
-      divLabels.forEach(lbl=>{newDivCounts[lbl]=appTeams.filter(t=>t.cls===lbl).length||schedCtx.divCounts[lbl]||0;});
-      setSchedCtx(prev=>prev?{...prev,teams:appTeams,divCounts:newDivCounts,loadingTeams:false}:null);
-      const firstAge=parseInt([...divLabels].sort((a,b)=>parseInt(b)-parseInt(a))[0])||null;
-      if(firstAge)setSelAge(firstAge);
-    }catch(e){
-      setSchedCtx(prev=>prev?{...prev,loadingTeams:false}:null);
-    }
+      appTeams.forEach(t=>{if(t.cls)newDivCounts[t.cls]=(newDivCounts[t.cls]||0)+1;});
+      setSchedCtx(prev=>prev?{...prev,teams:appTeams,divCounts:Object.keys(newDivCounts).length?newDivCounts:prev.divCounts,loadingTeams:false}:null);
+      setShowSchedImport(false);setSchedImportText('');
+    }catch(e){setSchedImportErr('Import failed: '+e.message);}
   }
 
   /* ══ Auto-Schedule ══════════════════════════════════════════ */
@@ -2394,53 +2394,70 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
         </div>
       </div>
 
-      {/* ══ Build Matchups — division overview (event selected, teams not yet in KV) ══ */}
-      {schedCtx&&schedCtx.evId&&!teams.length&&schedCtx.divCounts&&Object.keys(schedCtx.divCounts).length>0&&(
+      {/* ══ Build Matchups — teams not yet imported for this event ══ */}
+      {schedCtx&&schedCtx.evId&&!teams.length&&(
         <div className="card mb4">
           <div className="card-hd" style={{background:"linear-gradient(135deg,#1e3a5f,#2563eb)"}}>
             <span className="card-title" style={{color:"#fff"}}>⚾ Build Matchups</span>
-            <span style={{fontSize:11,color:"rgba(255,255,255,.55)",marginLeft:8}}>
-              {schedCtx.loadingTeams?"Loading teams…":"Teams not yet synced for this event"}
-            </span>
+            <span style={{fontSize:11,color:"rgba(255,255,255,.55)",marginLeft:8}}>Import this event's teams to get started</span>
           </div>
-          <div style={{padding:"16px 18px"}}>
-            {schedCtx.loadingTeams?(
-              <div style={{textAlign:"center",color:"#2563eb",fontWeight:600,fontSize:13,padding:"12px 0"}}>⏳ Loading teams from USSSA index…</div>
-            ):(
-              <>
-                {/* Division overview pills — info only */}
-                <div style={{display:"flex",flexWrap:"wrap",gap:7,marginBottom:16}}>
-                  {Object.entries(schedCtx.divCounts).sort((a,b)=>b[1]-a[1]).map(([lbl,cnt])=>{
-                    const dc=getDivColor(lbl);
-                    return(
-                      <span key={lbl} style={{fontSize:12,fontWeight:800,padding:"5px 13px",borderRadius:18,
-                        background:dc.bg,color:dc.text,border:`1.5px solid ${dc.border}`,whiteSpace:"nowrap"}}>
-                        {lbl} <span style={{opacity:.7,fontWeight:600}}>· {cnt} teams</span>
-                      </span>
-                    );
-                  })}
+          <div style={{padding:"18px 20px"}}>
+            {/* Division overview pills */}
+            {schedCtx.divCounts&&Object.keys(schedCtx.divCounts).length>0&&(
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:14}}>
+                {Object.entries(schedCtx.divCounts).sort((a,b)=>b[1]-a[1]).map(([lbl,cnt])=>{
+                  const dc=getDivColor(lbl);
+                  return(
+                    <span key={lbl} style={{fontSize:12,fontWeight:800,padding:"4px 12px",borderRadius:16,
+                      background:dc.bg,color:dc.text,border:`1.5px solid ${dc.border}`,whiteSpace:"nowrap"}}>
+                      {lbl} <span style={{opacity:.7,fontWeight:600}}>· {cnt} teams</span>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+            {/* Two-path instructions */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:showSchedImport?14:0}}>
+              <div style={{background:"#eff6ff",border:"1px solid #93c5fd",borderRadius:8,padding:"14px"}}>
+                <div style={{fontWeight:700,fontSize:13,color:"#1e40af",marginBottom:6}}>📂 Option 1 — Director Tools</div>
+                <div style={{fontSize:11,color:"#1e40af",lineHeight:1.6}}>
+                  Open this event in <strong>Director Tools</strong> → go to the <strong>Roster</strong> tab →
+                  use <strong>Sync</strong> or <strong>Import</strong> to load your teams.
+                  When you return to Schedule Builder they will load automatically.
                 </div>
-                {/* Sync button */}
-                <div style={{background:"#fefce8",border:"1px solid #fde047",borderRadius:8,padding:"12px 14px",display:"flex",alignItems:"flex-start",gap:12,flexWrap:"wrap"}}>
-                  <div style={{flex:1,minWidth:200}}>
-                    <div style={{fontWeight:700,fontSize:13,color:"#78350f",marginBottom:3}}>
-                      ⚠️ Teams haven't been imported for this event yet
-                    </div>
-                    <div style={{fontSize:11,color:"#92400e",lineHeight:1.5}}>
-                      Click <strong>Load from USSSA</strong> to pull teams by division from the USSSA registry.
-                      These are all FL-registered teams per division — remove any not entered in this event.
-                      For exact rosters, use Director Tools → Roster → Import.
-                    </div>
-                  </div>
-                  <button
-                    onClick={syncAllDivisions}
-                    style={{padding:"8px 18px",background:"#2563eb",color:"#fff",border:"none",borderRadius:7,
-                      fontWeight:700,fontSize:13,cursor:"pointer",whiteSpace:"nowrap",
-                      boxShadow:"0 2px 6px rgba(37,99,235,.35)"}}>
-                    ⚡ Load from USSSA
-                  </button>
+              </div>
+              <div style={{background:"#f0fdf4",border:"1px solid #86efac",borderRadius:8,padding:"14px"}}>
+                <div style={{fontWeight:700,fontSize:13,color:"#166534",marginBottom:6}}>📋 Option 2 — Paste JSON here</div>
+                <div style={{fontSize:11,color:"#166534",lineHeight:1.6,marginBottom:8}}>
+                  Have your team list as JSON? Paste it directly and teams will load instantly.
+                  Format: <code style={{background:"#dcfce7",padding:"1px 4px",borderRadius:3}}>{"[{\"team_name\":\"...\",\"division\":\"12AA\",...}]"}</code>
                 </div>
-              </>
+                <button
+                  onClick={()=>setShowSchedImport(s=>!s)}
+                  style={{padding:"5px 14px",background:"#16a34a",color:"#fff",border:"none",borderRadius:6,fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                  {showSchedImport?"✕ Close":"📥 Paste JSON"}
+                </button>
+              </div>
+            </div>
+            {/* Inline JSON import */}
+            {showSchedImport&&(
+              <div style={{marginTop:4}}>
+                <textarea
+                  value={schedImportText}
+                  onChange={e=>setSchedImportText(e.target.value)}
+                  placeholder={'[\n  {"team_name":"Panthers","division":"12AA","team_city":"Tampa","team_state":"FL"},\n  ...\n]'}
+                  style={{width:"100%",height:140,fontFamily:"monospace",fontSize:11,padding:8,
+                    border:"1px solid #86efac",borderRadius:6,boxSizing:"border-box",resize:"vertical"}}/>
+                {schedImportErr&&<div style={{color:"#dc2626",fontSize:11,marginTop:4}}>{schedImportErr}</div>}
+                <button
+                  onClick={importSchedTeams}
+                  disabled={!schedImportText.trim()}
+                  style={{marginTop:8,padding:"7px 18px",background:"#16a34a",color:"#fff",border:"none",
+                    borderRadius:6,fontWeight:700,fontSize:13,cursor:"pointer",
+                    opacity:schedImportText.trim()?1:.5}}>
+                  ✅ Import Teams
+                </button>
+              </div>
             )}
           </div>
         </div>
