@@ -2151,7 +2151,7 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
                   </div>
                 ))}
                 <button onClick={submitFieldData} style={{...B(NAVY,"#fff"),width:"100%",marginTop:4,padding:"9px",fontSize:13}}>
-                  🏗 Build Grid
+                  🏗 Generate Schedule Layout
                 </button>
                 {gridBuiltMsg&&(
                   <div style={{marginTop:8,padding:"8px 12px",borderRadius:7,background:"#dcfce7",
@@ -5914,7 +5914,7 @@ function EventDetailView({ev,onBack,onNav,evRosters,setEvRosters,onSchedule,onGr
           <div>
             {/* Director sub-tabs */}
             <div style={{display:"flex",gap:0,marginBottom:18,borderBottom:"2px solid #e2e8f0",overflowX:"auto"}}>
-              {[["fields","🏟 Assign Fields"],["grid","🗺 Build Grid"],["schedule","📅 Build Schedule"]].map(([k,lbl],idx)=>(
+              {[["fields","🏟 Assign Fields"],["grid","🗺 Schedule Layout"],["schedule","📅 Build Schedule"]].map(([k,lbl],idx)=>(
                 <div key={k} onClick={()=>setDirTab(k)}
                   style={{display:"flex",alignItems:"center",gap:6,padding:"8px 20px",fontWeight:700,fontSize:13,cursor:"pointer",whiteSpace:"nowrap",
                     borderBottom:"3px solid "+(dirTab===k?"var(--red)":"transparent"),
