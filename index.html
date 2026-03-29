@@ -3800,17 +3800,56 @@ function BracketBuilderView({teams,games=[],onBuild}){
 }
 
 /* ════════════════════ BRACKET ════════════════════ */
-function BracketView({bGames,setBGames,teams,games=[],editable}){
+function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,evRosters,bracketCtx,setBracketCtx}){
   const NAVY="#1e3a5f";
   const [tab,setTab]=useState("build");  // open Builder first by default
   const [builtGames,setBuiltGames]=useState(null);
   const [builtSeeds,setBuiltSeeds]=useState(null);
+  const [bracketNoTeamsMsg,setBracketNoTeamsMsg]=useState('');
 
   function onBuild(games,seeds){setBuiltGames(games);setBuiltSeeds(seeds);setTab("view")}
+
+  // Effective teams: bracketCtx.teams when event selected, else propTeams (ALL_TEAMS)
+  const teams=React.useMemo(()=>{
+    if(bracketCtx&&bracketCtx.evId){return(bracketCtx.teams||[]);}
+    return propTeams;
+  },[propTeams,bracketCtx]);
 
   const dGames=builtGames||bGames;
   const dTeams=builtSeeds?[...teams,...builtSeeds.filter(s=>!teams.find(t=>t.id===s.id))]:teams;
   const setDGames=builtGames?setBuiltGames:setBGames;
+
+  // Load a division's teams from evRosters or KV when its pill is clicked
+  async function loadDivisionTeams(divLabel){
+    if(!bracketCtx?.evId||!setBracketCtx)return;
+    const age=parseInt(divLabel)||0;
+    setBracketCtx(prev=>prev?{...prev,loadingTeams:true}:null);
+    setBracketNoTeamsMsg('');
+    try{
+      const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(bracketCtx.evId));
+      const j=await r.json();
+      if(j.status==='ok'&&j.teams&&j.teams.length){
+        const evId=bracketCtx.evId;
+        const byDivLabel={};
+        j.teams.forEach(t=>{const dl=(t.division||'').trim();if(!byDivLabel[dl])byDivLabel[dl]=[];byDivLabel[dl].push(t);});
+        const newDivCounts={};
+        Object.keys(bracketCtx.divCounts||{}).forEach(lbl=>{newDivCounts[lbl]=(byDivLabel[lbl]||[]).length||bracketCtx.divCounts[lbl]||0;});
+        const appTeams=j.teams.map(t=>({
+          id:'us_'+evId+'_'+(t.team_name||'').replace(/\W+/g,'_'),
+          name:t.team_name||'',cls:t.division||'',city:t.team_city||'',
+          state:t.team_state||'FL',coach:t.manager_name||'',
+          email:t.manager_email||'',phone:t.manager_phone||''
+        }));
+        setBracketCtx(prev=>prev?{...prev,teams:appTeams,divCounts:newDivCounts,activeDivLabel:divLabel,loadingTeams:false}:null);
+      } else {
+        setBracketCtx(prev=>prev?{...prev,loadingTeams:false}:null);
+        setBracketNoTeamsMsg('No teams found for this event. Open it in Director Tools → Roster → Sync or Import first.');
+      }
+    }catch(e){
+      setBracketCtx(prev=>prev?{...prev,loadingTeams:false}:null);
+      setBracketNoTeamsMsg('Could not load teams: '+e.message);
+    }
+  }
 
   /* ── Layout constants (compact USSSA style) ── */
   const GW=205,GH=62,TEAM_H=26,HDR_H=18,BASE_GAP=16,CONN=56;
@@ -3847,6 +3886,109 @@ function BracketView({bGames,setBGames,teams,games=[],editable}){
 
   return(
     <div>
+      {/* ── Event selector (direct sidebar access) ── */}
+      {editable&&!bracketCtx&&events&&events.length>0&&(
+        <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:8,padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+          <span style={{fontSize:13,fontWeight:700,color:"#92400e"}}>🏆 Select an event to build a bracket for:</span>
+          <select defaultValue="" onChange={async e=>{
+            const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);
+            if(!ev||!setBracketCtx)return;
+            const normalizedDivs=(ev.divisions||[]).map(normDiv);
+            const divCounts={};
+            let allTeams=normalizedDivs.flatMap(d=>{
+              const rk=String(ev.id)+"_"+d.id;
+              const t=(evRosters&&evRosters[rk])||[];
+              if(d.label)divCounts[d.label]=t.length||d.numTeams||0;
+              return t;
+            });
+            setBracketCtx({evId:String(ev.id),evName:ev.name,teams:allTeams,divCounts,loadingTeams:!allTeams.length,_divisions:ev.divisions||[]});
+            if(!allTeams.length){
+              try{
+                const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(ev.id));
+                const j=await r.json();
+                if(j.status==='ok'&&j.teams&&j.teams.length){
+                  const evId=String(ev.id);
+                  const byDivLabel={};
+                  j.teams.forEach(t=>{const dl=(t.division||'').trim();if(!byDivLabel[dl])byDivLabel[dl]=[];byDivLabel[dl].push(t);});
+                  const newDivCounts={};
+                  normalizedDivs.forEach(d=>{newDivCounts[d.label]=(byDivLabel[d.label]||[]).length||d.numTeams||0;});
+                  allTeams=j.teams.map(t=>({
+                    id:'us_'+evId+'_'+(t.team_name||'').replace(/\W+/g,'_'),
+                    name:t.team_name||'',cls:t.division||'',city:t.team_city||'',
+                    state:t.team_state||'FL',coach:t.manager_name||'',
+                    email:t.manager_email||'',phone:t.manager_phone||''
+                  }));
+                  setBracketCtx({evId,evName:ev.name,teams:allTeams,divCounts:newDivCounts,loadingTeams:false,_divisions:ev.divisions||[]});
+                } else {
+                  setBracketCtx(prev=>prev?{...prev,loadingTeams:false}:null);
+                }
+              }catch(e){setBracketCtx(prev=>prev?{...prev,loadingTeams:false}:null);}
+            }
+          }} style={{padding:"5px 10px",borderRadius:6,border:"1px solid #fcd34d",fontSize:13,background:"#fff",minWidth:220,cursor:"pointer"}}>
+            <option value="">— Choose event —</option>
+            {(events||[]).filter(ev=>ev.status!=="complete").map(ev=>(
+              <option key={ev.id} value={String(ev.id)}>{ev.name}{ev.date?` (${ev.date})`:""}</option>
+            ))}
+          </select>
+          <span style={{fontSize:11,color:"#78350f"}}>Or build a bracket freely below</span>
+        </div>
+      )}
+
+      {/* ── Event context banner ── */}
+      {editable&&bracketCtx&&bracketCtx.evId&&(
+        <div style={{background:"#dbeafe",border:"1px solid #93c5fd",borderRadius:8,padding:"12px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#1e40af"}}>
+            🏆 Bracket for: <span style={{fontWeight:900}}>{bracketCtx.evName}</span>
+            {bracketCtx.activeDivLabel&&<> · <span style={{fontWeight:900}}>{bracketCtx.activeDivLabel}</span></>}
+            {" · "}{bracketCtx.loadingTeams?<span style={{fontStyle:"italic"}}>loading…</span>
+              :(bracketCtx.teams||[]).length>0?`${bracketCtx.teams.length} teams`
+              :bracketCtx.divCounts?`${Object.values(bracketCtx.divCounts).reduce((s,c)=>s+c,0)} teams across ${Object.keys(bracketCtx.divCounts).length} divisions`:"no teams yet"}
+          </div>
+          <button className="btn btn-secondary btn-sm" onClick={()=>setBracketCtx(null)} style={{padding:"3px 12px",fontSize:11}}>✕ Clear</button>
+        </div>
+      )}
+
+      {/* ── Division picker (event selected, no teams loaded yet) ── */}
+      {editable&&bracketCtx&&bracketCtx.evId&&!teams.length&&bracketCtx.divCounts&&Object.keys(bracketCtx.divCounts).length>0&&(
+        <div className="card mb4">
+          <div className="card-hd" style={{background:"linear-gradient(135deg,#1e3a5f,#2563eb)"}}>
+            <span className="card-title" style={{color:"#fff"}}>🏆 Bracket Builder</span>
+            <span style={{fontSize:11,color:"rgba(255,255,255,.55)",marginLeft:8}}>
+              {bracketCtx.loadingTeams?"Loading teams…":"Click a division to seed the bracket"}
+            </span>
+          </div>
+          <div style={{padding:"16px 18px"}}>
+            {bracketCtx.loadingTeams
+              ?<div style={{textAlign:"center",color:"#2563eb",fontWeight:600,padding:"20px 0",fontSize:13}}>⏳ Loading teams…</div>
+              :<>
+                <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
+                  {Object.entries(bracketCtx.divCounts).sort((a,b)=>b[1]-a[1]).map(([lbl,cnt])=>{
+                    const dc=getDivColor(lbl);
+                    return(
+                      <span key={lbl} onClick={()=>loadDivisionTeams(lbl)}
+                        style={{fontSize:13,fontWeight:800,padding:"7px 18px",borderRadius:22,cursor:"pointer",
+                          userSelect:"none",transition:"transform .1s, box-shadow .1s",
+                          background:dc.bg,color:dc.text,border:`2px solid ${dc.border}`,
+                          boxShadow:"0 2px 6px rgba(0,0,0,.08)"}}
+                        onMouseEnter={e=>{e.currentTarget.style.transform="scale(1.06)";e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,.15)";}}
+                        onMouseLeave={e=>{e.currentTarget.style.transform="scale(1)";e.currentTarget.style.boxShadow="0 2px 6px rgba(0,0,0,.08)";}}>
+                        {lbl} <span style={{opacity:.7,fontWeight:600}}>· {cnt} teams</span>
+                      </span>
+                    );
+                  })}
+                </div>
+                {bracketNoTeamsMsg&&(
+                  <div style={{marginTop:12,padding:"10px 14px",background:"#fefce8",border:"1px solid #fde047",
+                    borderRadius:7,fontSize:12,color:"#78350f",fontWeight:600}}>
+                    ⚠️ {bracketNoTeamsMsg}
+                  </div>
+                )}
+              </>
+            }
+          </div>
+        </div>
+      )}
+
       {/* ── Tab bar ── */}
       <div style={{display:"flex",gap:4,marginBottom:14,borderBottom:"2px solid #e2e8f0"}}>
         {[["build","⚙️ Builder"],["view","🏆 Bracket"]].map(([t,label])=>(
@@ -3863,7 +4005,9 @@ function BracketView({bGames,setBGames,teams,games=[],editable}){
       </div>
 
       {/* ── Builder tab ── */}
-      {tab==="build"&&<BracketBuilderView teams={teams} games={games} onBuild={onBuild}/>}
+      {tab==="build"&&<BracketBuilderView
+        teams={bracketCtx?.activeDivLabel?teams.filter(t=>t.cls===bracketCtx.activeDivLabel):teams}
+        games={games} onBuild={onBuild}/>}
 
       {/* ── Bracket view tab ── */}
       {tab==="view"&&(
@@ -7027,6 +7171,7 @@ function App(){
   const [evRosters,setEvRosters]=useState({});
   const [schedCtx,setSchedCtx]=useState(null);
   const [gridCtx,setGridCtx]=useState(null);
+  const [bracketCtx,setBracketCtx]=useState(null);
   const [evFieldAssignments,setEvFieldAssignments]=useState({});
   const [dbStatus,setDbStatus]=useState('connecting');
   const [liveDiv,setLiveDiv]=useState({status:'idle',updatedAt:null});
@@ -7127,7 +7272,7 @@ function App(){
           {view==="s-game-mgr"&&<GameMgrView games={allGames} setGames={setAllGames} teams={ALL_TEAMS}/>}
           {view==="s-grid"&&<GridBuilderView gridCtx={gridCtx} setGridCtx={setGridCtx} onSendToSchedule={handleSendToSchedule} events={events} evRosters={evRosters}/>}
           {view==="s-layout"&&<LayoutView games={allGames} setGames={setAllGames} teams={ALL_TEAMS} schedCtx={schedCtx} setSchedCtx={setSchedCtx} events={events} evRosters={evRosters}/>}
-          {view==="s-bracket"&&<BracketView bGames={allBracketGames} setBGames={setAllBracketGames} teams={ALL_TEAMS} games={allGames} editable={true}/>}
+          {view==="s-bracket"&&<BracketView bGames={allBracketGames} setBGames={setAllBracketGames} teams={ALL_TEAMS} games={allGames} editable={true} events={events} evRosters={evRosters} bracketCtx={bracketCtx} setBracketCtx={setBracketCtx}/>}
           {view==="s-standings"&&<StandingsView teams={ALL_TEAMS} games={allGames}/>}
           {view==="s-seeds"&&<SeedsView teams={ALL_TEAMS}/>}
           {view==="s-parks"&&<ParksView eventParks={[]}/>}
