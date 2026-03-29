@@ -1645,7 +1645,7 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
     setSchedCtx(prev=>prev?{...prev,loadingTeams:true}:null);
     setSchedNoTeamsMsg('');
     try{
-      const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(schedCtx.evId));
+      const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(schedCtx.usssaId||schedCtx.evId));
       const j=await r.json();
       if(j.status==='ok'&&j.teams&&j.teams.length){
         const evId=schedCtx.evId;
@@ -2157,11 +2157,12 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
                 return t;
               });
               // Set context immediately (loadingTeams flag shows spinner)
-              setSchedCtx({evId:String(ev.id),evName:ev.name,divLabel:"All Divisions",teams:allTeams,divCounts,loadingTeams:!allTeams.length,_divisions:ev.divisions||[]});
+              const schedUsssaId=String(ev.evid||ev.id);
+              setSchedCtx({evId:String(ev.id),usssaId:schedUsssaId,evName:ev.name,divLabel:"All Divisions",teams:allTeams,divCounts,loadingTeams:!allTeams.length,_divisions:ev.divisions||[]});
               // If not in cache, fetch from worker KV endpoint
               if(!allTeams.length){
                 try{
-                  const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(ev.id));
+                  const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(schedUsssaId));
                   const j=await r.json();
                   if(j.status==='ok'&&j.teams&&j.teams.length){
                     const evId=String(ev.id);
@@ -3841,7 +3842,7 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
     // ── 2. Fallback: fetch from KV worker ──
     setBracketCtx(prev=>prev?{...prev,loadingTeams:true}:null);
     try{
-      const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(bracketCtx.evId));
+      const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(bracketCtx.usssaId||bracketCtx.evId));
       const j=await r.json();
       if(j.status==='ok'&&j.teams&&j.teams.length){
         const evId=bracketCtx.evId;
@@ -3916,10 +3917,11 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
               if(d.label)divCounts[d.label]=t.length||d.numTeams||0;
               return t;
             });
-            setBracketCtx({evId:String(ev.id),evName:ev.name,teams:allTeams,divCounts,loadingTeams:!allTeams.length,_divisions:ev.divisions||[]});
+            const bracketUsssaId=String(ev.evid||ev.id);
+            setBracketCtx({evId:String(ev.id),usssaId:bracketUsssaId,evName:ev.name,teams:allTeams,divCounts,loadingTeams:!allTeams.length,_divisions:ev.divisions||[]});
             if(!allTeams.length){
               try{
-                const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(ev.id));
+                const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(bracketUsssaId));
                 const j=await r.json();
                 if(j.status==='ok'&&j.teams&&j.teams.length){
                   const evId=String(ev.id);
@@ -6623,7 +6625,7 @@ function Dashboard({events,onSelect,onNav,evRosters,setEvRosters}){
     const updates={};
     await Promise.all(tabShown.map(async ev=>{
       try{
-        const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(ev.id));
+        const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(ev.evid||ev.id));
         const j=await r.json();
         if(j.status==='ok'&&j.teams&&j.teams.length){
           const evId=String(ev.id);
