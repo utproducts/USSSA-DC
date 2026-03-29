@@ -1633,6 +1633,36 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
   const pickedGame=picked?games.find(g=>g.id===picked):null;
   const dayGroups=[...new Set(rows.map(r=>r.date))].sort();
 
+  // Fetch teams for an age group from the known_teams index (used when event teams not in KV)
+  async function fetchTeamsForAge(age){
+    if(!schedCtx?.evId||!setSchedCtx)return;
+    setSchedCtx(prev=>prev?{...prev,loadingTeams:true}:null);
+    try{
+      const r=await fetch('https://usssa-poller.chad-157.workers.dev/teams-search?age='+age+'&state=FL');
+      const j=await r.json();
+      const raw=Array.isArray(j)?j:(j.teams||j.data||[]);
+      const fetched=raw.map(t=>({
+        id:'kv_'+(t.team_id||t.id||'')+'_'+(t.team_name||'').replace(/\W+/g,'_'),
+        name:t.team_name||t.name||'',
+        cls:t.division||t.cls||String(age)+'U',
+        city:t.team_city||t.city||'',
+        state:t.team_state||t.state||'FL',
+        coach:t.manager_name||'',
+        email:t.manager_email||'',
+        phone:t.manager_phone||''
+      })).filter(t=>t.name);
+      setSchedCtx(prev=>{
+        if(!prev)return null;
+        const existIds=new Set((prev.teams||[]).map(t=>t.id));
+        const combined=[...(prev.teams||[]),...fetched.filter(t=>!existIds.has(t.id))];
+        return {...prev,teams:combined,loadingTeams:false};
+      });
+      setSelAge(age);
+    }catch(e){
+      setSchedCtx(prev=>prev?{...prev,loadingTeams:false}:null);
+    }
+  }
+
   /* ══ Auto-Schedule ══════════════════════════════════════════ */
   const [autoModal,setAutoModal]=useState(false);
   const [autoRules,setAutoRules]=useState({noRematch:true,noConsecBreak:true,balanceFields:true,allowOverride:false});
@@ -2139,11 +2169,11 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
         </div>
         <button className="btn btn-secondary btn-sm" onClick={()=>setSchedCtx(prev=>({...prev,fieldData:null}))} style={{padding:"3px 12px",fontSize:11}}>✕ Clear</button>
       </div>}
-      {schedCtx&&(schedCtx.teams||schedCtx.loadingTeams)&&(
+      {schedCtx&&schedCtx.evId&&(
         <div style={{marginBottom:16}}>
           <div style={{background:"#dbeafe",border:"1px solid #93c5fd",borderRadius:schedCtx.divCounts&&Object.keys(schedCtx.divCounts).length>0?"8px 8px 0 0":"8px",padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div style={{fontSize:13,fontWeight:700,color:"#1e40af"}}>
-              📋 Scheduling from: <span style={{fontWeight:900}}>{schedCtx.evName}</span> • <span style={{fontWeight:900}}>{schedCtx.divLabel}</span> • {schedCtx.loadingTeams?<span style={{color:"#2563eb",fontStyle:"italic"}}>loading teams…</span>:`${(schedCtx.teams||[]).length} teams`}
+              📋 Scheduling from: <span style={{fontWeight:900}}>{schedCtx.evName}</span> • <span style={{fontWeight:900}}>{schedCtx.divLabel}</span> • {schedCtx.loadingTeams?<span style={{color:"#2563eb",fontStyle:"italic"}}>loading teams…</span>:(schedCtx.teams||[]).length>0?`${schedCtx.teams.length} teams`:schedCtx.divCounts?`${Object.values(schedCtx.divCounts).reduce((s,c)=>s+c,0)} teams across ${Object.keys(schedCtx.divCounts).length} divisions`:"no teams yet"}
             </div>
             <button className="btn btn-secondary btn-sm" onClick={()=>setSchedCtx(null)} style={{padding:"3px 12px",fontSize:11}}>✕ Clear</button>
           </div>
@@ -2353,16 +2383,44 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
         </div>
       </div>
 
-      {/* ══ Teams loading / empty state ══ */}
-      {schedCtx&&schedCtx.evId&&schedCtx.loadingTeams&&(
-        <div className="card mb4" style={{padding:"24px",textAlign:"center",color:"#2563eb",fontSize:13,fontWeight:600}}>
-          ⏳ Loading teams for <strong>{schedCtx.evName}</strong>…
-        </div>
-      )}
-      {schedCtx&&schedCtx.evId&&!schedCtx.loadingTeams&&teams.length===0&&(
-        <div className="card mb4" style={{padding:"24px",textAlign:"center",color:"#92400e",fontSize:13}}>
-          <div style={{fontWeight:700,marginBottom:6}}>⚠️ No teams found for this event</div>
-          <div style={{color:"#78350f",fontSize:12}}>Open this event in Director Tools and sync or import teams first, then return here to schedule.</div>
+      {/* ══ Build Matchups — division picker (shown when event selected but teams not yet loaded) ══ */}
+      {schedCtx&&schedCtx.evId&&!teams.length&&schedCtx.divCounts&&Object.keys(schedCtx.divCounts).length>0&&(
+        <div className="card mb4">
+          <div className="card-hd" style={{background:"linear-gradient(135deg,#1e3a5f,#2563eb)"}}>
+            <span className="card-title" style={{color:"#fff"}}>⚾ Build Matchups</span>
+            <span style={{fontSize:11,color:"rgba(255,255,255,.55)",marginLeft:8}}>
+              {schedCtx.loadingTeams?"Loading teams…":"Click a division to load its teams"}
+            </span>
+          </div>
+          <div style={{padding:"16px 18px"}}>
+            {schedCtx.loadingTeams?(
+              <div style={{textAlign:"center",color:"#2563eb",fontWeight:600,fontSize:13,padding:"12px 0"}}>⏳ Loading teams…</div>
+            ):(
+              <>
+                <div style={{fontSize:11,color:"#64748b",marginBottom:10,fontWeight:600}}>
+                  ⚡ Select a division below — teams will load from the USSSA index so you can start scheduling:
+                </div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:7}}>
+                  {Object.entries(schedCtx.divCounts).sort((a,b)=>b[1]-a[1]).map(([lbl,cnt])=>{
+                    const dc=getDivColor(lbl);
+                    const age=parseInt(lbl)||0;
+                    return(
+                      <span key={lbl}
+                        onClick={()=>age&&fetchTeamsForAge(age)}
+                        style={{fontSize:13,fontWeight:800,padding:"6px 16px",borderRadius:20,
+                          cursor:age?"pointer":"default",userSelect:"none",
+                          background:dc.bg,color:dc.text,border:`2px solid ${dc.border}`,
+                          boxShadow:"0 1px 4px rgba(0,0,0,.1)",transition:"transform .1s"}}
+                        onMouseEnter={e=>e.currentTarget.style.transform="scale(1.05)"}
+                        onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
+                        {lbl} <span style={{opacity:.7,fontWeight:600}}>· {cnt} teams</span>
+                      </span>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 
