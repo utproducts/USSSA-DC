@@ -1549,6 +1549,11 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
       const existIds=new Set(schedCtx.teams.map(t=>t.id));
       return [...schedCtx.teams,...xlTeams.filter(t=>!existIds.has(t.id))];
     }
+    // When an event is selected (schedCtx.evId set) but teams haven't loaded yet,
+    // return empty array — do NOT fall through to propTeams (ALL_TEAMS demo data)
+    if(schedCtx&&schedCtx.evId){
+      return xlTeams.length?xlTeams:[];
+    }
     if(!xlTeams.length)return propTeams;
     const existIds=new Set(propTeams.map(t=>t.id));
     return [...propTeams,...xlTeams.filter(t=>!existIds.has(t.id))];
@@ -2063,18 +2068,53 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
           <span style={{fontSize:13,fontWeight:700,color:"#92400e"}}>📋 Select an event to schedule for:</span>
           <select
             defaultValue=""
-            onChange={e=>{
+            onChange={async e=>{
               const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);
               if(!ev||!setSchedCtx)return;
               const normalizedDivs=(ev.divisions||[]).map(normDiv);
               const divCounts={};
-              const allTeams=normalizedDivs.flatMap(d=>{
+              // First check in-memory evRosters cache
+              let allTeams=normalizedDivs.flatMap(d=>{
                 const rk=String(ev.id)+"_"+d.id;
                 const t=(evRosters&&evRosters[rk])||[];
                 if(d.label)divCounts[d.label]=t.length||d.numTeams||0;
                 return t;
               });
-              setSchedCtx({evId:String(ev.id),evName:ev.name,divLabel:"All Divisions",teams:allTeams.length?allTeams:[],divCounts});
+              // Set context immediately (loadingTeams flag shows spinner)
+              setSchedCtx({evId:String(ev.id),evName:ev.name,divLabel:"All Divisions",teams:allTeams,divCounts,loadingTeams:!allTeams.length});
+              // If not in cache, fetch from worker KV endpoint
+              if(!allTeams.length){
+                try{
+                  const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(ev.id));
+                  const j=await r.json();
+                  if(j.status==='ok'&&j.teams&&j.teams.length){
+                    const evId=String(ev.id);
+                    // Group by division to rebuild divCounts
+                    const byDiv={};
+                    j.teams.forEach(t=>{const dl=(t.division||'').trim();if(!byDiv[dl])byDiv[dl]=[];byDiv[dl].push(t);});
+                    const newDivCounts={};
+                    normalizedDivs.forEach(d=>{newDivCounts[d.label]=byDiv[d.label]?byDiv[d.label].length:(d.numTeams||0);});
+                    // Convert KV format → app team format
+                    allTeams=j.teams.map(t=>({
+                      id:'us_'+evId+'_'+(t.team_name||'').replace(/\W+/g,'_'),
+                      name:t.team_name||'',
+                      city:t.team_city||'',
+                      state:t.team_state||'',
+                      cls:t.division||'',
+                      coach:t.manager_name||'',
+                      email:t.manager_email||'',
+                      phone:t.manager_phone||'',
+                      entryStatus:t.entry_status||'Approved',
+                      payStatus:t.payment_status||'Not Paid'
+                    }));
+                    setSchedCtx({evId,evName:ev.name,divLabel:"All Divisions",teams:allTeams,divCounts:newDivCounts,loadingTeams:false});
+                  } else {
+                    setSchedCtx(prev=>prev?{...prev,loadingTeams:false}:null);
+                  }
+                }catch(err){
+                  setSchedCtx(prev=>prev?{...prev,loadingTeams:false}:null);
+                }
+              }
             }}
             style={{padding:"5px 10px",borderRadius:6,border:"1px solid #fcd34d",fontSize:13,background:"#fff",minWidth:220,cursor:"pointer"}}>
             <option value="">— Choose event —</option>
@@ -2099,11 +2139,11 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
         </div>
         <button className="btn btn-secondary btn-sm" onClick={()=>setSchedCtx(prev=>({...prev,fieldData:null}))} style={{padding:"3px 12px",fontSize:11}}>✕ Clear</button>
       </div>}
-      {schedCtx&&schedCtx.teams&&(
+      {schedCtx&&(schedCtx.teams||schedCtx.loadingTeams)&&(
         <div style={{marginBottom:16}}>
           <div style={{background:"#dbeafe",border:"1px solid #93c5fd",borderRadius:schedCtx.divCounts&&Object.keys(schedCtx.divCounts).length>0?"8px 8px 0 0":"8px",padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div style={{fontSize:13,fontWeight:700,color:"#1e40af"}}>
-              📋 Scheduling from: <span style={{fontWeight:900}}>{schedCtx.evName}</span> • <span style={{fontWeight:900}}>{schedCtx.divLabel}</span> • {schedCtx.teams.length} teams
+              📋 Scheduling from: <span style={{fontWeight:900}}>{schedCtx.evName}</span> • <span style={{fontWeight:900}}>{schedCtx.divLabel}</span> • {schedCtx.loadingTeams?<span style={{color:"#2563eb",fontStyle:"italic"}}>loading teams…</span>:`${(schedCtx.teams||[]).length} teams`}
             </div>
             <button className="btn btn-secondary btn-sm" onClick={()=>setSchedCtx(null)} style={{padding:"3px 12px",fontSize:11}}>✕ Clear</button>
           </div>
@@ -2312,6 +2352,19 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
           </div>
         </div>
       </div>
+
+      {/* ══ Teams loading / empty state ══ */}
+      {schedCtx&&schedCtx.evId&&schedCtx.loadingTeams&&(
+        <div className="card mb4" style={{padding:"24px",textAlign:"center",color:"#2563eb",fontSize:13,fontWeight:600}}>
+          ⏳ Loading teams for <strong>{schedCtx.evName}</strong>…
+        </div>
+      )}
+      {schedCtx&&schedCtx.evId&&!schedCtx.loadingTeams&&teams.length===0&&(
+        <div className="card mb4" style={{padding:"24px",textAlign:"center",color:"#92400e",fontSize:13}}>
+          <div style={{fontWeight:700,marginBottom:6}}>⚠️ No teams found for this event</div>
+          <div style={{color:"#78350f",fontSize:12}}>Open this event in Director Tools and sync or import teams first, then return here to schedule.</div>
+        </div>
+      )}
 
       {/* ══ Teams Panel ══ */}
       {teams&&teams.length>0&&(()=>{
