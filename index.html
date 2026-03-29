@@ -4005,7 +4005,8 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
       </div>
 
       {/* ── Builder tab ── */}
-      {tab==="build"&&<BracketBuilderView
+      {tab==="build"&&(teams.length>0||!bracketCtx?.evId)&&<BracketBuilderView
+        key={bracketCtx?.activeDivLabel||'free'}
         teams={bracketCtx?.activeDivLabel?teams.filter(t=>t.cls===bracketCtx.activeDivLabel):teams}
         games={games} onBuild={onBuild}/>}
 
