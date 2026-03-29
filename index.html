@@ -1543,6 +1543,8 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
   const [gridBuiltMsg,setGridBuiltMsg]=useState(""); // toast after Build Grid
   const [fieldPickModal,setFieldPickModal]=useState(null); // {fi} — which field column is being renamed
   const [fieldPickSearch,setFieldPickSearch]=useState("");
+  const [cellPickModal,setCellPickModal]=useState(null); // {rowId,fi,fieldLabel,step:1|2,t1Id}
+  const [cellPickSearch,setCellPickSearch]=useState("");
 
   const fields=fieldNames.slice(0,nf);
   const assignedIds=new Set(rows.flatMap(r=>Object.values(r.cells)).filter(v=>v!=="blocked"));
@@ -2507,24 +2509,45 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
                                   <div style={{fontSize:11,color:"#fca5a5",marginTop:2}}>click to unblock</div>
                                 </div>
                               ):isHalfThis?(
-                                <div style={{padding:"6px 6px"}}>
-                                  <div style={{fontSize:10,fontWeight:800,color:"#1d4ed8",lineHeight:1.3,
-                                    overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:136}}>
-                                    {half1obj?.name||"Team 1"}
+                                <div style={{padding:"4px 6px"}} onClick={ev=>ev.stopPropagation()}>
+                                  <div style={{fontSize:10,fontWeight:800,color:"#1d4ed8",overflow:"hidden",
+                                    textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:3}}>
+                                    🏠 {half1obj?.name||"Team 1"}
                                   </div>
-                                  <div style={{fontSize:9,color:"#2563eb",fontWeight:700,margin:"3px 0",
-                                    borderTop:"1px dashed #93c5fd",paddingTop:3}}>
-                                    ⬇ drop 2nd team here
+                                  <div style={{display:"flex",gap:3,alignItems:"center",marginBottom:3}}>
+                                    <input
+                                      placeholder="Add opponent..."
+                                      value={cellPickModal?.rowId===row.id&&cellPickModal?.fi===fi?cellPickSearch:""}
+                                      onClick={ev=>{ev.stopPropagation();setCellPickSearch("");setCellPickModal({rowId:row.id,fi,fieldLabel,step:2,t1Id:halfFill.t1Id});}}
+                                      onChange={ev=>{ev.stopPropagation();setCellPickSearch(ev.target.value);setCellPickModal({rowId:row.id,fi,fieldLabel,step:2,t1Id:halfFill.t1Id});}}
+                                      style={{flex:1,padding:"3px 5px",border:"1px solid #93c5fd",borderRadius:4,fontSize:10,minWidth:0,boxSizing:"border-box"}}/>
+                                    <button onClick={ev=>{ev.stopPropagation();setCellPickSearch("");setCellPickModal({rowId:row.id,fi,fieldLabel,step:2,t1Id:halfFill.t1Id});}}
+                                      style={{background:"#eff6ff",border:"1px solid #93c5fd",borderRadius:4,padding:"3px 6px",cursor:"pointer",fontSize:10,color:"#1d4ed8",flexShrink:0}}>▼</button>
                                   </div>
                                   <div onClick={ev=>{ev.stopPropagation();setHalfFill(null);}}
                                     style={{fontSize:9,color:"#dc2626",cursor:"pointer"}}>✕ cancel</div>
                                 </div>
                               ):(
-                                <div style={{padding:"10px 4px"}}>
+                                <div style={{padding:"4px 6px"}} onClick={ev=>ev.stopPropagation()}>
                                   {canPlace?(
-                                    <div style={{fontSize:12,fontWeight:700,color:accentText}}>→ Drop Here</div>
+                                    <div style={{fontSize:12,fontWeight:700,color:accentText,padding:"6px 0",textAlign:"center"}}>→ Drop Here</div>
                                   ):(
-                                    <div style={{fontSize:9,color:"#94a3b8"}}>drag teams here</div>
+                                    <div style={{display:"flex",gap:3,alignItems:"center"}}>
+                                      <input
+                                        placeholder={selAge?`${selAge}U teams...`:"pick age ↑"}
+                                        disabled={!selAge}
+                                        value={cellPickModal?.rowId===row.id&&cellPickModal?.fi===fi?cellPickSearch:""}
+                                        onClick={ev=>{ev.stopPropagation();if(!selAge)return;setCellPickSearch("");setCellPickModal({rowId:row.id,fi,fieldLabel,step:1,t1Id:null});}}
+                                        onChange={ev=>{ev.stopPropagation();if(!selAge)return;setCellPickSearch(ev.target.value);setCellPickModal({rowId:row.id,fi,fieldLabel,step:1,t1Id:null});}}
+                                        style={{flex:1,padding:"3px 5px",border:"1px solid #e2e8f0",borderRadius:4,
+                                          fontSize:10,minWidth:0,cursor:selAge?"text":"not-allowed",
+                                          background:selAge?"#fff":"#f8fafc",boxSizing:"border-box"}}/>
+                                      <button onClick={ev=>{ev.stopPropagation();if(!selAge)return;setCellPickSearch("");setCellPickModal({rowId:row.id,fi,fieldLabel,step:1,t1Id:null});}}
+                                        disabled={!selAge}
+                                        style={{background:"#f1f5f9",border:"1px solid #e2e8f0",borderRadius:4,
+                                          padding:"3px 6px",cursor:selAge?"pointer":"not-allowed",
+                                          fontSize:10,color:"#475569",flexShrink:0}}>▼</button>
+                                    </div>
                                   )}
                                 </div>
                               )}
@@ -2557,6 +2580,115 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
         <span style={{fontSize:11,color:"#94a3b8",marginLeft:4}}>{rows.length} rows · {nf} fields · {assignedIds.size} assigned · {unscheduled.length} unscheduled</span>
         <button style={B("#16a34a","#fff",{marginLeft:"auto",boxShadow:"0 2px 8px rgba(22,163,74,.25)"})}>💾 Save Layout</button>
       </div>
+
+      {/* ══ Cell Team Picker Modal ══ */}
+      {cellPickModal&&(()=>{
+        const {rowId,fi,fieldLabel,step,t1Id}=cellPickModal;
+        const targetRow=rows.find(r=>r.id===rowId);
+        const t1ObjPick=step===2&&t1Id?teams.find(t=>t.id===t1Id):null;
+        const agePool=selAge?teams.filter(t=>parseInt(t.cls)===selAge):teams;
+        const srch=cellPickSearch.toLowerCase();
+        const filteredPick=agePool.filter(t=>{
+          if(step===2&&t.id===t1Id)return false;
+          if(srch)return(t.name||"").toLowerCase().includes(srch)||(t.cls||"").toLowerCase().includes(srch);
+          return true;
+        });
+        function pickTeam(t){
+          if(step===1){
+            const errs=validateDrop(t.id,rowId);
+            if(errs.length>0){showDropAlert(errs);return;}
+            setHalfFill({rowId,fi,t1Id:t.id});
+            setCellPickModal({rowId,fi,fieldLabel,step:2,t1Id:t.id});
+            setCellPickSearch("");
+          }else{
+            const errs1=validateDrop(t1Id,rowId);
+            const errs2=validateDrop(t.id,rowId);
+            const allErrs=[...errs1,...errs2];
+            if(allErrs.length>0){showDropAlert(allErrs);setCellPickModal(null);setCellPickSearch("");return;}
+            const gameId=`gx_${Date.now()}`;
+            const num=`G${games.length+1}`;
+            const cls=teams.find(t2=>t2.id===t1Id)?.cls||"";
+            setGames(pg=>[...pg,{id:gameId,num,pool:gamePool,division:cls,
+              date:targetRow.date,time:targetRow.time,field:fieldLabel,
+              t1:t1Id,t2:t.id,home:t1Id,s1:null,s2:null,status:"scheduled"}]);
+            setRows(prev=>prev.map(r=>r.id===rowId?{...r,cells:{...r.cells,[fi]:gameId}}:r));
+            setHalfFill(null);
+            setCellPickModal(null);
+            setCellPickSearch("");
+          }
+        }
+        return(
+          <div style={{position:"fixed",inset:0,zIndex:10001,display:"flex",alignItems:"center",
+            justifyContent:"center",background:"rgba(0,0,0,0.5)"}}
+            onClick={()=>{setCellPickModal(null);setCellPickSearch("");}}>
+            <div onClick={e=>e.stopPropagation()}
+              style={{background:"#fff",borderRadius:12,boxShadow:"0 8px 36px rgba(0,0,0,.22)",
+                width:"min(420px,95vw)",maxHeight:"82vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+              {/* Header */}
+              <div style={{background:"#1e3a5f",color:"#fff",padding:"12px 16px",flexShrink:0,display:"flex",alignItems:"center",gap:10}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:800,fontSize:13}}>{step===1?"⚾ Pick Home Team":"⚾ Pick Away Team"}</div>
+                  <div style={{fontSize:10,opacity:.7,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    {targetRow?.date} · {targetRow?.time} · {fieldLabel}
+                    {step===2&&t1ObjPick&&<> · 🏠 {t1ObjPick.name}</>}
+                  </div>
+                </div>
+                <button onClick={()=>{setCellPickModal(null);setCellPickSearch("");}}
+                  style={{background:"rgba(255,255,255,.15)",border:"none",color:"#fff",borderRadius:6,
+                    padding:"3px 10px",cursor:"pointer",fontSize:13,fontWeight:700,flexShrink:0}}>✕</button>
+              </div>
+              {/* Step indicator */}
+              <div style={{display:"flex",gap:8,padding:"8px 14px",background:"#f8fafc",
+                borderBottom:"1px solid #e2e8f0",flexShrink:0}}>
+                {[1,2].map(s=>(
+                  <div key={s} style={{flex:1,textAlign:"center",padding:"5px 8px",borderRadius:7,
+                    background:step===s?"#1e3a5f":s<step?"#dcfce7":"#f1f5f9",
+                    color:step===s?"#fff":s<step?"#166534":"#94a3b8",fontWeight:700,fontSize:11}}>
+                    {s===1?"Step 1 · Home":"Step 2 · Away"}
+                    {s===1&&step===2&&t1ObjPick&&<div style={{fontSize:9,opacity:.8,overflow:"hidden",textOverflow:"ellipsis"}}>{t1ObjPick.name}</div>}
+                  </div>
+                ))}
+              </div>
+              {/* Search */}
+              <div style={{padding:"10px 14px",borderBottom:"1px solid #e2e8f0",flexShrink:0}}>
+                <input autoFocus value={cellPickSearch} onChange={e=>setCellPickSearch(e.target.value)}
+                  placeholder={selAge?`Search ${selAge}U teams...`:"Search all teams..."}
+                  style={{width:"100%",padding:"7px 10px",border:"1.5px solid #cbd5e1",borderRadius:7,
+                    fontSize:13,boxSizing:"border-box",outline:"none"}}/>
+                {!selAge&&<div style={{fontSize:10,color:"#f59e0b",marginTop:4}}>⚠ No age group selected — select one above to filter by division</div>}
+              </div>
+              {/* Team list */}
+              <div style={{overflowY:"auto",flex:1}}>
+                {filteredPick.length===0?(
+                  <div style={{padding:"28px",textAlign:"center",color:"#94a3b8",fontSize:13}}>No teams match</div>
+                ):filteredPick.map(t=>{
+                  const alreadyUsed=games.some(g=>g.t1===t.id||g.t2===t.id);
+                  return(
+                    <div key={t.id} onClick={()=>pickTeam(t)}
+                      style={{padding:"9px 14px",display:"flex",alignItems:"center",gap:10,cursor:"pointer",
+                        borderBottom:"1px solid #f1f5f9",background:alreadyUsed?"#fefce8":"#fff",
+                        transition:"background .07s"}}
+                      onMouseEnter={e=>e.currentTarget.style.background=alreadyUsed?"#fef9c3":"#eff6ff"}
+                      onMouseLeave={e=>e.currentTarget.style.background=alreadyUsed?"#fefce8":"#fff"}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontWeight:700,fontSize:13,color:"#0f172a",
+                          overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</div>
+                        <div style={{fontSize:10,color:"#64748b"}}>{t.cls||""}{t.city?` · ${t.city}`:""}</div>
+                      </div>
+                      {alreadyUsed&&<span style={{fontSize:9,background:"#fef3c7",color:"#92400e",
+                        borderRadius:8,padding:"2px 7px",fontWeight:700,flexShrink:0}}>scheduled</span>}
+                      <span style={{fontSize:11,fontWeight:700,flexShrink:0,
+                        color:step===1?"#16a34a":"#2563eb"}}>
+                        {step===1?"+ Home":"+ Away"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ══ Field Rename Modal ══ */}
       {fieldPickModal&&(()=>{
