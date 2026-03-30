@@ -4132,7 +4132,7 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
 
       {/* ── Tab bar ── */}
       <div style={{display:"flex",gap:4,marginBottom:14,borderBottom:"2px solid #e2e8f0"}}>
-        {[["build","⚙️ Builder"],["view","🏆 Bracket"]].map(([t,label])=>(
+        {[["build","⚙️ Builder"],["view","🏆 Bracket"],["scores","📝 Score Entry"]].map(([t,label])=>(
           <button key={t} onClick={()=>setTab(t)}
             style={{padding:"7px 16px",border:"none",cursor:"pointer",fontWeight:700,fontSize:12,
               borderRadius:"6px 6px 0 0",marginBottom:-2,
@@ -4332,6 +4332,165 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Score Entry tab ── */}
+      {tab==="scores"&&(
+        <div>
+          {champ&&(
+            <div style={{background:"linear-gradient(135deg,#b45309,#f59e0b)",color:"#fff",
+              padding:"10px 18px",borderRadius:10,marginBottom:14,display:"flex",
+              alignItems:"center",gap:12,boxShadow:"0 4px 14px rgba(0,0,0,.18)"}}>
+              <span style={{fontSize:26}}>🏆</span>
+              <div>
+                <div style={{fontSize:9,fontWeight:700,opacity:.85,textTransform:"uppercase",letterSpacing:1.2}}>Division Champion</div>
+                <div style={{fontSize:15,fontWeight:900,marginTop:1}}>{getT(champ)?.name}</div>
+              </div>
+            </div>
+          )}
+          {editable&&<div style={{background:"#f0f9ff",border:"1px solid #bae6fd",borderRadius:8,
+            padding:"9px 14px",marginBottom:14,fontSize:12,color:"#0369a1",fontWeight:600}}>
+            ✏️ Enter final scores — winners advance automatically in the bracket view.
+          </div>}
+          {!dGames.filter(g=>g.status!=="bye").length&&(
+            <div style={{textAlign:"center",padding:"40px 20px",color:"#94a3b8",fontSize:13}}>
+              No bracket games yet — use the Builder tab to generate a bracket first.
+            </div>
+          )}
+          {dGames.filter(g=>g.status!=="bye").length>0&&(
+            <div style={{overflowX:"auto"}}>
+              <table style={{width:"100%",borderCollapse:"separate",borderSpacing:"0 6px",minWidth:560}}>
+                <thead>
+                  <tr>
+                    <th style={{padding:"8px 12px",background:NAVY,color:"#fff",fontSize:10,fontWeight:800,
+                      textTransform:"uppercase",letterSpacing:.5,textAlign:"center",
+                      borderRadius:"8px 0 0 8px",width:66}}>Game</th>
+                    <th style={{padding:"8px 12px",background:NAVY,color:"#fff",fontSize:10,fontWeight:800,
+                      textTransform:"uppercase",letterSpacing:.5,textAlign:"left"}}>Team 1</th>
+                    <th style={{padding:"8px 8px",background:NAVY,color:"#fff",fontSize:10,fontWeight:800,
+                      textTransform:"uppercase",textAlign:"center",width:90}}>Score</th>
+                    <th style={{padding:"8px 4px",background:NAVY,color:"rgba(255,255,255,.4)",
+                      fontSize:11,textAlign:"center",width:28}}>vs</th>
+                    <th style={{padding:"8px 8px",background:NAVY,color:"#fff",fontSize:10,fontWeight:800,
+                      textTransform:"uppercase",textAlign:"center",width:90}}>Score</th>
+                    <th style={{padding:"8px 12px",background:NAVY,color:"#fff",fontSize:10,fontWeight:800,
+                      textTransform:"uppercase",letterSpacing:.5,textAlign:"left"}}>Team 2</th>
+                    <th style={{padding:"8px 12px",background:NAVY,color:"#fff",fontSize:10,fontWeight:800,
+                      textTransform:"uppercase",textAlign:"center",borderRadius:"0 8px 8px 0",width:96}}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {dGames.filter(g=>g.status!=="bye").map(g=>{
+                    const t1=getT(g.t1),t2=getT(g.t2);
+                    const w=winOf(g);
+                    const final=g.status==="final";
+                    const gNum=displayNum[g.id]||g.num;
+                    const rIdx=rounds.indexOf(g.round);
+                    const t1win=w===g.t1,t2win=w===g.t2;
+                    const scoreStyle=(isWin)=>({
+                      width:74,height:42,textAlign:"center",fontSize:24,fontWeight:900,
+                      border:`2px solid ${isWin?"#16a34a":"#d1d5db"}`,borderRadius:8,
+                      background:isWin?"#dcfce7":"#fff",
+                      color:isWin?"#15803d":"#1e293b",
+                      outline:"none",padding:"0 4px"
+                    });
+                    return(
+                      <tr key={g.id} style={{background:final?"#f0fdf4":"#fff",
+                        boxShadow:"0 1px 4px rgba(0,0,0,.06)"}}>
+                        {/* Game badge */}
+                        <td style={{padding:"10px 10px",textAlign:"center",
+                          borderRadius:"8px 0 0 8px",borderLeft:`3px solid ${final?"#16a34a":NAVY}`}}>
+                          <span style={{background:NAVY,color:"#fff",borderRadius:5,
+                            padding:"3px 8px",fontSize:11,fontWeight:800,fontFamily:"monospace",
+                            display:"inline-block",marginBottom:3}}>{gNum}</span>
+                          <div style={{fontSize:9,color:"#94a3b8",fontWeight:600,lineHeight:1.2}}>
+                            {rndLabel[rIdx]||`Rd ${rIdx+1}`}
+                          </div>
+                        </td>
+                        {/* Team 1 */}
+                        <td style={{padding:"10px 8px"}}>
+                          <div style={{display:"flex",alignItems:"center",gap:6}}>
+                            {seedMap[g.t1]&&(
+                              <span style={{background:"#1e3a5f",color:"#fff",borderRadius:4,
+                                fontSize:9,fontWeight:800,padding:"2px 6px",flexShrink:0}}>
+                                #{seedMap[g.t1]}
+                              </span>
+                            )}
+                            <span style={{fontSize:13,fontWeight:t1win?800:500,
+                              color:w&&!t1win?"#94a3b8":"#1e293b"}}>
+                              {t1?t1.name:<em style={{color:"#c0cad8",fontSize:11}}>TBD</em>}
+                            </span>
+                            {t1win&&<span style={{fontSize:14}}>🏆</span>}
+                          </div>
+                        </td>
+                        {/* Score 1 */}
+                        <td style={{padding:"6px 6px",textAlign:"center"}}>
+                          {editable&&g.t1?(
+                            <input type="number" min="0" max="99" value={g.s1??""}
+                              onChange={e=>upd(g.id,"s1",e.target.value)}
+                              style={scoreStyle(t1win)}/>
+                          ):(
+                            <span style={{fontSize:22,fontWeight:900,
+                              color:t1win?"#16a34a":"#374151"}}>{g.s1??"-"}</span>
+                          )}
+                        </td>
+                        {/* vs */}
+                        <td style={{padding:"6px 2px",textAlign:"center"}}>
+                          <span style={{fontSize:11,fontWeight:700,color:"#cbd5e1"}}>vs</span>
+                        </td>
+                        {/* Score 2 */}
+                        <td style={{padding:"6px 6px",textAlign:"center"}}>
+                          {editable&&g.t2?(
+                            <input type="number" min="0" max="99" value={g.s2??""}
+                              onChange={e=>upd(g.id,"s2",e.target.value)}
+                              style={scoreStyle(t2win)}/>
+                          ):(
+                            <span style={{fontSize:22,fontWeight:900,
+                              color:t2win?"#16a34a":"#374151"}}>{g.s2??"-"}</span>
+                          )}
+                        </td>
+                        {/* Team 2 */}
+                        <td style={{padding:"10px 8px"}}>
+                          <div style={{display:"flex",alignItems:"center",gap:6}}>
+                            {t2win&&<span style={{fontSize:14}}>🏆</span>}
+                            {seedMap[g.t2]&&(
+                              <span style={{background:"#1e3a5f",color:"#fff",borderRadius:4,
+                                fontSize:9,fontWeight:800,padding:"2px 6px",flexShrink:0}}>
+                                #{seedMap[g.t2]}
+                              </span>
+                            )}
+                            <span style={{fontSize:13,fontWeight:t2win?800:500,
+                              color:w&&!t2win?"#94a3b8":"#1e293b"}}>
+                              {t2?t2.name:<em style={{color:"#c0cad8",fontSize:11}}>TBD</em>}
+                            </span>
+                          </div>
+                        </td>
+                        {/* Status + clear */}
+                        <td style={{padding:"10px 10px",textAlign:"center",borderRadius:"0 8px 8px 0"}}>
+                          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                            <span style={{padding:"4px 10px",borderRadius:20,fontSize:10,fontWeight:700,
+                              background:final?"#dcfce7":"#f1f5f9",
+                              color:final?"#16a34a":"#64748b",
+                              border:`1px solid ${final?"#86efac":"#e2e8f0"}`}}>
+                              {final?"✓ Final":"Scheduled"}
+                            </span>
+                            {editable&&final&&(
+                              <button onClick={()=>setDGames(prev=>prev.map(g2=>g2.id===g.id?{...g2,s1:null,s2:null,status:"scheduled"}:g2))}
+                                style={{border:"none",background:"none",cursor:"pointer",
+                                  color:"#94a3b8",fontSize:10,fontWeight:600,padding:"1px 4px"}}>
+                                ✕ clear
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>
