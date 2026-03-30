@@ -2137,9 +2137,9 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
     minWidth:w,width:w,...extra});
 
   return(
-    <div>
-      {/* ══ Top tools — sticky panel below topbar ══ */}
-      <div style={{position:"sticky",top:48,zIndex:50,background:"#f8fafc",paddingBottom:10,marginBottom:4}}>
+    <div style={{display:"flex",flexDirection:"column",height:"calc(100vh - 88px)"}}>
+      {/* ══ Top tools — sticky, does not scroll ══ */}
+      <div style={{flexShrink:0}}>
       {/* ══ Event selector (shown when arriving directly from sidebar with no context) ══ */}
       {!schedCtx&&events&&events.length>0&&(
         <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:8,padding:"12px 16px",marginBottom:16,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
@@ -2661,8 +2661,9 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
         </div>
       )}
 
-      </div>{/* /top-tools-sticky */}
-      {/* ══ Schedule Grid ══ */}
+      </div>{/* /top-tools */}
+      {/* ══ Schedule Grid — scrollable section ══ */}
+      <div style={{flex:1,overflowY:"auto",minHeight:0}}>
       <div style={{overflowX:"auto",border:"1px solid #cbd5e1",borderRadius:8,boxShadow:"0 2px 8px rgba(0,0,0,.06)"}}>
         <table style={{borderCollapse:"collapse",fontSize:12}}>
           <thead>
@@ -2889,6 +2890,7 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
         <span style={{fontSize:11,color:"#94a3b8",marginLeft:4}}>{rows.length} rows · {nf} fields · {assignedIds.size} assigned · {unscheduled.length} unscheduled</span>
         <button style={B("#16a34a","#fff",{marginLeft:"auto",boxShadow:"0 2px 8px rgba(22,163,74,.25)"})}>💾 Save Layout</button>
       </div>
+      </div>{/* /scrollable-grid */}
 
       {/* ══ Cell Team Picker — inline autocomplete dropdown ══ */}
       {cellPickModal&&(()=>{
