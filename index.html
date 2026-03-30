@@ -1562,7 +1562,7 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
   const toMins=t=>{const[h,mn]=t.split(":").map(Number);return h*60+mn;};
   const toLabel=m=>{const h=Math.floor(m/60),mn=m%60,ap=h>=12?"PM":"AM",h12=h>12?h-12:h===0?12:h;return`${h12}:${mn.toString().padStart(2,"0")} ${ap}`;};
   const TIME_OPTS=["6:00 AM","6:30 AM","7:00 AM","7:30 AM","8:00 AM","8:30 AM","9:00 AM","9:30 AM","10:00 AM","10:30 AM","11:00 AM","11:30 AM","12:00 PM","12:30 PM","1:00 PM","1:30 PM","2:00 PM","2:30 PM","3:00 PM","3:30 PM","4:00 PM","4:30 PM","5:00 PM","5:30 PM","6:00 PM","6:30 PM","7:00 PM","7:30 PM","8:00 PM","8:30 PM","9:00 PM"];
-  const FIELD_OPTS=["LWR B1","LWR B2","LWR B3","LWR B4","LWR B5","LWR B6","LWR B7","LWR B8","Frank Brown F1","Frank Brown F2","Frank Brown F3","Frank Brown F4","Frank Brown F5","Field 1","Field 2","Field 3","Field 4","Field 5","Field 6","Field 7","Field 8","Diamond 1","Diamond 2","Diamond 3","Diamond 4","Turf 1","Turf 2","Turf 3","Main Field","Varsity","JV Field","East 1","East 2","West 1","West 2","North 1","North 2","South 1","South 2","Complex A","Complex B","Complex C","Showcase 1","Showcase 2","Championship","Stadium","Auxiliary","Practice 1","Practice 2","TBD"];
+  const FIELD_OPTS=["BR Field 1","BR Field 2","BR Field 3","BR Field 4","BR Field 5","BR Field 6","BR Field 7","LWR B1","LWR B2","LWR B3","LWR B4","LWR B5","LWR B6","Frank Brown F1","Frank Brown F2","Frank Brown F3","Frank Brown F4","Frank Brown F5","Field 1","Field 2","Field 3","Field 4","Field 5","Field 6","Field 7","Field 8","Diamond 1","Diamond 2","Diamond 3","Diamond 4","Turf 1","Turf 2","Turf 3","Main Field","Varsity","JV Field","East 1","East 2","West 1","West 2","North 1","North 2","South 1","South 2","Complex A","Complex B","Complex C","Showcase 1","Showcase 2","Championship","Stadium","Auxiliary","Practice 1","Practice 2","TBD"];
   // Per-field color palettes: [headerBg, headerBorder, cellTintEven, cellTintOdd, accentText, accentBorder]
   const FIELD_COLORS=[
     ["#1e3a5f","#16305a","#eff6ff","#e0f0ff","#1d4ed8","#93c5fd"],   // blue (F1)
@@ -4426,6 +4426,8 @@ function ParksView({eventParks=[]}){
     {id:'bv_38',name:'Tallahassee Sports Complex',city:'Tallahassee',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6'],source:'builtin'},
     {id:'bv_39',name:'Publix Field at Holman Stadium',city:'Vero Beach',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4'],source:'builtin'},
     {id:'bv_40',name:'Palm Beach Athletic Fields',city:'West Palm Beach',state:'FL',fields:['Field 1','Field 2','Field 3','Field 4','Field 5','Field 6'],source:'builtin'},
+    {id:'bv_41',name:'Braden River Park',city:'Bradenton',state:'FL',fields:['BR Field 1','BR Field 2','BR Field 3','BR Field 4','BR Field 5','BR Field 6','BR Field 7'],source:'builtin'},
+    {id:'bv_42',name:'Lakewood Ranch Multi-Purpose Fields',city:'Lakewood Ranch',state:'FL',fields:['LWR B1','LWR B2','LWR B3','LWR B4','LWR B5','LWR B6'],source:'builtin'},
   ];
 
   const [venues,setVenues]=useState(BUILTIN_VENUES);
