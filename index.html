@@ -530,8 +530,8 @@ const EVENTS_DB=[
 
 /* ════════════════════ HELPERS ════════════════════ */
 function tByIdFrom(id,db){return db.find(t=>t.id===id)}
-function winOf(g){if(g.status!=="final"||g.s1===null)return null;return g.s1>g.s2?g.t1:g.t2}
-function loseOf(g){if(g.status!=="final"||g.s1===null)return null;return g.s1>g.s2?g.t2:g.t1}
+function winOf(g){if(g.status==="bye"&&g.t1)return g.t1;if(g.status!=="final"||g.s1===null||g.s2===null)return null;return g.s1>g.s2?g.t1:g.t2}
+function loseOf(g){if(g.status==="bye")return null;if(g.status!=="final"||g.s1===null||g.s2===null)return null;return g.s1>g.s2?g.t2:g.t1}
 function calcStandings(teams,games){
   const s={};
   teams.forEach(t=>{s[t.id]={...t,w:0,l:0,t_:0,pf:0,pa:0,pts:0}});
@@ -3475,6 +3475,18 @@ function genBracketGames(seeds){
       gn++;
     }
   }
+  // Auto-advance bye teams into their next-round slots
+  const allRounds=[...new Set(gs.map(g=>g.round))].sort((a,b)=>a-b);
+  for(const r of allRounds.slice(0,-1)){
+    const rGames=gs.filter(g=>g.round===r);
+    const rNext=gs.filter(g=>g.round===r+1);
+    rGames.forEach((g,pos)=>{
+      if(g.status==="bye"&&g.t1){
+        const ng=rNext[Math.floor(pos/2)];
+        if(ng){if(pos%2===0)ng.t1=g.t1;else ng.t2=g.t1;}
+      }
+    });
+  }
   return gs;
 }
 
@@ -3899,7 +3911,22 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
   function upd(id,k,v){
     if(!editable)return;
     const n=v===""?null:parseInt(v);
-    setDGames(prev=>prev.map(g=>g.id===id?{...g,[k]:isNaN(n)?null:n,status:n!==null?"final":"scheduled"}:g));
+    setDGames(prev=>{
+      let gs=prev.map(g=>g.id===id?{...g,[k]:isNaN(n)?null:n,status:n!==null?"final":"scheduled"}:g);
+      // Propagate winner to next round when both scores are set
+      const cg=gs.find(g=>g.id===id);
+      if(cg&&cg.s1!==null&&cg.s2!==null){
+        const w=cg.s1>cg.s2?cg.t1:cg.t2;
+        if(w){
+          const rGames=gs.filter(g=>g.round===cg.round);
+          const pos=rGames.findIndex(g=>g.id===id);
+          const nextGames=gs.filter(g=>g.round===cg.round+1);
+          const ng=nextGames[Math.floor(pos/2)];
+          if(ng){const slot=pos%2===0?"t1":"t2";gs=gs.map(g=>g.id===ng.id?{...g,[slot]:w}:g);}
+        }
+      }
+      return gs;
+    });
   }
   function getT(id){return tByIdFrom(id,dTeams)}
   const finalGame=dGames.find(g=>g.round===maxRound);
