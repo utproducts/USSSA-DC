@@ -3813,7 +3813,7 @@ function BracketBuilderView({teams,games=[],onBuild}){
 }
 
 /* ════════════════════ BRACKET ════════════════════ */
-function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,evRosters,bracketCtx,setBracketCtx}){
+function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,evRosters,bracketCtx,setBracketCtx,savedBrackets,setSavedBrackets}){
   const NAVY="#1e3a5f";
   const [tab,setTab]=useState("build");  // open Builder first by default
   const [builtGames,setBuiltGames]=useState(null);
@@ -3821,6 +3821,15 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
   const [bracketNoTeamsMsg,setBracketNoTeamsMsg]=useState('');
 
   function onBuild(games,seeds){setBuiltGames(games);setBuiltSeeds(seeds);setTab("view")}
+
+  function saveBracket(){
+    const divLabel=bracketCtx?.activeDivLabel;
+    if(!divLabel||!builtGames)return;
+    setSavedBrackets&&setSavedBrackets(prev=>({...prev,[divLabel]:{games:builtGames,seeds:builtSeeds,savedAt:new Date().toISOString()}}));
+    // Reset builder so director can pick next division
+    setBuiltGames(null);setBuiltSeeds(null);setTab("build");
+    setBracketCtx&&setBracketCtx(prev=>prev?{...prev,activeDivLabel:null}:null);
+  }
 
   // Effective teams: bracketCtx.teams when event selected, else propTeams (ALL_TEAMS)
   const teams=React.useMemo(()=>{
@@ -4016,18 +4025,32 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
             {bracketCtx.loadingTeams
               ?<div style={{textAlign:"center",color:"#2563eb",fontWeight:600,padding:"20px 0",fontSize:13}}>⏳ Loading teams…</div>
               :<>
+                {savedBrackets&&Object.keys(savedBrackets).length>0&&(
+                  <div style={{marginBottom:12,padding:"8px 12px",background:"#f0fdf4",border:"1px solid #86efac",borderRadius:7,fontSize:12,color:"#15803d",fontWeight:700}}>
+                    ✓ Brackets saved: {Object.keys(savedBrackets).join(" · ")} — click a green division to view it
+                  </div>
+                )}
                 <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
                   {Object.entries(bracketCtx.divCounts).sort((a,b)=>b[1]-a[1]).map(([lbl,cnt])=>{
                     const dc=getDivColor(lbl);
+                    const saved=savedBrackets&&savedBrackets[lbl];
                     return(
-                      <span key={lbl} onClick={()=>loadDivisionTeams(lbl)}
+                      <span key={lbl} onClick={()=>{
+                        if(saved){
+                          setBuiltGames(saved.games);setBuiltSeeds(saved.seeds);setTab("view");
+                          setBracketCtx&&setBracketCtx(prev=>prev?{...prev,activeDivLabel:lbl}:null);
+                        } else {
+                          loadDivisionTeams(lbl);
+                        }
+                      }}
                         style={{fontSize:13,fontWeight:800,padding:"7px 18px",borderRadius:22,cursor:"pointer",
                           userSelect:"none",transition:"transform .1s, box-shadow .1s",
-                          background:dc.bg,color:dc.text,border:`2px solid ${dc.border}`,
+                          background:saved?"#16a34a":dc.bg,color:saved?"#fff":dc.text,
+                          border:`2px solid ${saved?"#15803d":dc.border}`,
                           boxShadow:"0 2px 6px rgba(0,0,0,.08)"}}
                         onMouseEnter={e=>{e.currentTarget.style.transform="scale(1.06)";e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,.15)";}}
                         onMouseLeave={e=>{e.currentTarget.style.transform="scale(1)";e.currentTarget.style.boxShadow="0 2px 6px rgba(0,0,0,.08)";}}>
-                        {lbl} <span style={{opacity:.7,fontWeight:600}}>· {cnt} teams</span>
+                        {saved&&<span style={{marginRight:5}}>✓</span>}{lbl} <span style={{opacity:.7,fontWeight:600}}>· {cnt} teams</span>
                       </span>
                     );
                   })}
@@ -4051,19 +4074,28 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
           {Object.entries(bracketCtx.divCounts).sort((a,b)=>b[1]-a[1]).map(([lbl,cnt])=>{
             const dc=getDivColor(lbl);
             const active=lbl===bracketCtx.activeDivLabel;
+            const saved=savedBrackets&&savedBrackets[lbl];
             return(
-              <span key={lbl} onClick={()=>loadDivisionTeams(lbl)}
+              <span key={lbl} onClick={()=>{
+                if(saved&&!active){
+                  // Load the saved bracket for this division to view it
+                  setBuiltGames(saved.games);setBuiltSeeds(saved.seeds);setTab("view");
+                  setBracketCtx&&setBracketCtx(prev=>prev?{...prev,activeDivLabel:lbl}:null);
+                } else {
+                  loadDivisionTeams(lbl);
+                }
+              }}
                 style={{fontSize:12,fontWeight:800,padding:"4px 13px",borderRadius:20,cursor:"pointer",
                   userSelect:"none",transition:"transform .1s, box-shadow .1s",
-                  background:active?dc.border:dc.bg,
-                  color:active?"#fff":dc.text,
-                  border:`2px solid ${dc.border}`,
+                  background:active?dc.border:saved?"#16a34a":dc.bg,
+                  color:active?"#fff":saved?"#fff":dc.text,
+                  border:`2px solid ${active?dc.border:saved?"#15803d":dc.border}`,
                   boxShadow:active?"0 2px 8px rgba(0,0,0,.18)":"0 1px 3px rgba(0,0,0,.07)",
-                  opacity:active?1:0.75}}
+                  opacity:active?1:0.85}}
                 onMouseEnter={e=>{if(!active){e.currentTarget.style.opacity="1";e.currentTarget.style.transform="scale(1.05)";}}}
-                onMouseLeave={e=>{if(!active){e.currentTarget.style.opacity="0.75";e.currentTarget.style.transform="scale(1)";}}}
+                onMouseLeave={e=>{if(!active){e.currentTarget.style.opacity="0.85";e.currentTarget.style.transform="scale(1)";}}}
               >
-                {lbl}{active&&<span style={{marginLeft:4,opacity:.8}}>· {cnt}</span>}
+                {saved&&!active&&<span style={{marginRight:4}}>✓</span>}{lbl}{active&&<span style={{marginLeft:4,opacity:.8}}>· {cnt}</span>}
               </span>
             );
           })}
@@ -4103,6 +4135,26 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
                 <div style={{fontSize:9,fontWeight:700,opacity:.85,textTransform:"uppercase",letterSpacing:1.2}}>Division Champion</div>
                 <div style={{fontSize:15,fontWeight:900,marginTop:1}}>{getT(champ)?.name}</div>
               </div>
+            </div>
+          )}
+          {editable&&builtGames&&bracketCtx?.activeDivLabel&&(
+            <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
+              <button onClick={saveBracket}
+                style={{background:"#16a34a",color:"#fff",border:"none",borderRadius:8,
+                  padding:"9px 20px",fontWeight:800,fontSize:13,cursor:"pointer",
+                  boxShadow:"0 2px 8px rgba(22,163,74,.35)",display:"flex",alignItems:"center",gap:8}}>
+                💾 Save {bracketCtx.activeDivLabel} Bracket &amp; Pick Next Division
+              </button>
+              <button onClick={()=>{setBuiltGames(null);setBuiltSeeds(null);setTab("build");}}
+                style={{background:"#fff",color:"#475569",border:"1px solid #cbd5e1",borderRadius:8,
+                  padding:"9px 16px",fontWeight:700,fontSize:12,cursor:"pointer"}}>
+                ⚙️ Rebuild
+              </button>
+              {savedBrackets&&Object.keys(savedBrackets).length>0&&(
+                <span style={{fontSize:11,color:"#16a34a",fontWeight:700}}>
+                  ✓ Done: {Object.keys(savedBrackets).join(" · ")}
+                </span>
+              )}
             </div>
           )}
           {editable&&<Alrt type="info">✏️ Enter scores on each game to advance teams. Use the Builder tab to set up a new bracket.</Alrt>}
@@ -7261,6 +7313,7 @@ function App(){
   const [schedCtx,setSchedCtx]=useState(null);
   const [gridCtx,setGridCtx]=useState(null);
   const [bracketCtx,setBracketCtx]=useState(null);
+  const [savedBrackets,setSavedBrackets]=useState({}); // {divLabel:{games,seeds,savedAt}}
   const [evFieldAssignments,setEvFieldAssignments]=useState({});
   const [dbStatus,setDbStatus]=useState('connecting');
   const [liveDiv,setLiveDiv]=useState({status:'idle',updatedAt:null});
@@ -7361,7 +7414,7 @@ function App(){
           {view==="s-game-mgr"&&<GameMgrView games={allGames} setGames={setAllGames} teams={ALL_TEAMS}/>}
           {view==="s-grid"&&<GridBuilderView gridCtx={gridCtx} setGridCtx={setGridCtx} onSendToSchedule={handleSendToSchedule} events={events} evRosters={evRosters}/>}
           {view==="s-layout"&&<LayoutView games={allGames} setGames={setAllGames} teams={ALL_TEAMS} schedCtx={schedCtx} setSchedCtx={setSchedCtx} events={events} evRosters={evRosters}/>}
-          {view==="s-bracket"&&<BracketView bGames={allBracketGames} setBGames={setAllBracketGames} teams={ALL_TEAMS} games={allGames} editable={true} events={events} evRosters={evRosters} bracketCtx={bracketCtx} setBracketCtx={setBracketCtx}/>}
+          {view==="s-bracket"&&<BracketView bGames={allBracketGames} setBGames={setAllBracketGames} teams={ALL_TEAMS} games={allGames} editable={true} events={events} evRosters={evRosters} bracketCtx={bracketCtx} setBracketCtx={setBracketCtx} savedBrackets={savedBrackets} setSavedBrackets={setSavedBrackets}/>}
           {view==="s-standings"&&<StandingsView teams={ALL_TEAMS} games={allGames}/>}
           {view==="s-seeds"&&<SeedsView teams={ALL_TEAMS}/>}
           {view==="s-parks"&&<ParksView eventParks={[]}/>}
