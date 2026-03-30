@@ -3824,6 +3824,11 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
   async function loadDivisionTeams(divLabel){
     if(!bracketCtx?.evId||!setBracketCtx)return;
     setBracketNoTeamsMsg('');
+    // ── 0. Teams already in context? Just set active division ──
+    if(bracketCtx.teams&&bracketCtx.teams.length>0){
+      setBracketCtx(prev=>prev?{...prev,activeDivLabel:divLabel}:null);
+      return;
+    }
     // ── 1. Try evRosters in memory first ──
     const normalizedDivs=(bracketCtx._divisions||[]).map(normDiv);
     let allTeams=normalizedDivs.flatMap(d=>{
@@ -3966,7 +3971,7 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
       )}
 
       {/* ── Division picker (event selected, no teams loaded yet) ── */}
-      {editable&&bracketCtx&&bracketCtx.evId&&!teams.length&&bracketCtx.divCounts&&Object.keys(bracketCtx.divCounts).length>0&&(
+      {editable&&bracketCtx&&bracketCtx.evId&&!bracketCtx.activeDivLabel&&bracketCtx.divCounts&&Object.keys(bracketCtx.divCounts).length>0&&(
         <div className="card mb4">
           <div className="card-hd" style={{background:"linear-gradient(135deg,#1e3a5f,#2563eb)"}}>
             <span className="card-title" style={{color:"#fff"}}>🏆 Bracket Builder</span>
@@ -4022,7 +4027,7 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
       </div>
 
       {/* ── Builder tab ── */}
-      {tab==="build"&&(teams.length>0||!bracketCtx?.evId)&&<BracketBuilderView
+      {tab==="build"&&(!bracketCtx?.evId||bracketCtx?.activeDivLabel)&&<BracketBuilderView
         key={bracketCtx?.activeDivLabel||'free'}
         teams={bracketCtx?.activeDivLabel?teams.filter(t=>t.cls===bracketCtx.activeDivLabel):teams}
         games={games} onBuild={onBuild}/>}
