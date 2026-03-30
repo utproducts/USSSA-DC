@@ -3490,7 +3490,7 @@ function BracketBuilderView({teams,games=[],onBuild}){
     return s.map(row=>teams.find(t=>t.id===row.id)||row).filter(Boolean);
   },[teams,games]);
 
-  const [count,setCount]=useState(8);
+  const [count,setCount]=useState(()=>Math.max(4,Math.min(32,teams.length||8)));
   const [names,setNames]=useState(()=>Array(32).fill("").map((_,i)=>rankedTeams[i]?rankedTeams[i].name:""));
 
   /* ── scheduling state ── */
@@ -3824,7 +3824,7 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
   async function loadDivisionTeams(divLabel){
     if(!bracketCtx?.evId||!setBracketCtx)return;
     setBracketNoTeamsMsg('');
-    // ── 0. Teams already in context? Just set active division ──
+    // ── 0. Teams already in context? Just switch active division ──
     if(bracketCtx.teams&&bracketCtx.teams.length>0){
       setBracketCtx(prev=>prev?{...prev,activeDivLabel:divLabel}:null);
       return;
@@ -4008,6 +4008,32 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
               </>
             }
           </div>
+        </div>
+      )}
+
+      {/* ── Division switcher (when event selected) ── */}
+      {editable&&bracketCtx&&bracketCtx.evId&&bracketCtx.activeDivLabel&&bracketCtx.divCounts&&Object.keys(bracketCtx.divCounts).length>0&&(
+        <div style={{marginBottom:12,display:"flex",flexWrap:"wrap",gap:6,alignItems:"center"}}>
+          <span style={{fontSize:11,fontWeight:700,color:"#64748b",marginRight:2}}>Division:</span>
+          {Object.entries(bracketCtx.divCounts).sort((a,b)=>b[1]-a[1]).map(([lbl,cnt])=>{
+            const dc=getDivColor(lbl);
+            const active=lbl===bracketCtx.activeDivLabel;
+            return(
+              <span key={lbl} onClick={()=>loadDivisionTeams(lbl)}
+                style={{fontSize:12,fontWeight:800,padding:"4px 13px",borderRadius:20,cursor:"pointer",
+                  userSelect:"none",transition:"transform .1s, box-shadow .1s",
+                  background:active?dc.border:dc.bg,
+                  color:active?"#fff":dc.text,
+                  border:`2px solid ${dc.border}`,
+                  boxShadow:active?"0 2px 8px rgba(0,0,0,.18)":"0 1px 3px rgba(0,0,0,.07)",
+                  opacity:active?1:0.75}}
+                onMouseEnter={e=>{if(!active){e.currentTarget.style.opacity="1";e.currentTarget.style.transform="scale(1.05)";}}}
+                onMouseLeave={e=>{if(!active){e.currentTarget.style.opacity="0.75";e.currentTarget.style.transform="scale(1)";}}}
+              >
+                {lbl}{active&&<span style={{marginLeft:4,opacity:.8}}>· {cnt}</span>}
+              </span>
+            );
+          })}
         </div>
       )}
 
