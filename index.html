@@ -2418,6 +2418,7 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
           </div>
         </div>
       </div>
+      </div>{/* /top-tools-sticky */}
 
       {/* ══ Build Matchups — click a division to load teams ══ */}
       {schedCtx&&schedCtx.evId&&!teams.length&&schedCtx.divCounts&&Object.keys(schedCtx.divCounts).length>0&&(
@@ -2661,7 +2662,6 @@ function LayoutView({games:propGames,setGames,teams:propTeams,schedCtx,setSchedC
         </div>
       )}
 
-      </div>{/* /top-tools-sticky */}
       {/* ══ Schedule Grid ══ */}
       <div style={{overflowX:"auto",border:"1px solid #cbd5e1",borderRadius:8,boxShadow:"0 2px 8px rgba(0,0,0,.06)"}}>
         <table style={{borderCollapse:"collapse",fontSize:12}}>
