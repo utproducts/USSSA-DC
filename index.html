@@ -3886,6 +3886,12 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
 
   /* ── Layout constants (compact USSSA style) ── */
   const GW=205,GH=62,TEAM_H=26,HDR_H=18,BASE_GAP=16,CONN=56;
+
+  // Seed map: teamId → seed number (from builtSeeds array)
+  const seedMap=React.useMemo(()=>{const m={};(builtSeeds||[]).forEach((t,i)=>{if(t?.id)m[t.id]=i+1;});return m;},[builtSeeds]);
+  // Sequential display numbers for non-bye games only
+  const displayNum=React.useMemo(()=>{const m={};let n=1;[...new Set(dGames.map(g=>g.round))].sort((a,b)=>a-b).forEach(r=>{dGames.filter(g=>g.round===r&&g.status!=="bye").forEach(g=>{m[g.id]=`G${n++}`;});});return m;},[dGames]);
+
   const rounds=[...new Set(dGames.map(g=>g.round))].sort((a,b)=>a-b);
   const maxRound=rounds.length?Math.max(...rounds):1;
   const N=rounds.length||1;
@@ -4117,9 +4123,10 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
               {/* Game slots */}
               {rounds.map((round,ri)=>
                 dGames.filter(g=>g.round===round).map((g,pi)=>{
+                  if(g.status==="bye") return null; // hide bye slots; pi intact for positioning
                   const t1=getT(g.t1),t2=g.t2?getT(g.t2):null;
                   const w=winOf(g);
-                  const isBye=g.status==="bye"||(!g.t2&&!!g.t1);
+                  const isBye=false;
                   const top=GT(ri,pi),left=RX(ri);
                   const teamRow=(side)=>{
                     const isT1=side===1;
@@ -4133,9 +4140,10 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
                         padding:"0 7px",
                         background:win?"#f0fdf4":lose?"#fff8f8":"#fff",
                         borderTop:isT1?"none":"1px solid #e8ecf0"}}>
-                        {/* Seed badge (round 1, when seed number stored) */}
-                        {ri===0&&(isT1?g.sn1:g.sn2)&&(()=>{
-                          const sn=isT1?g.sn1:g.sn2;
+                        {/* Seed badge — shown for all rounds using seedMap */}
+                        {(()=>{
+                          const sn=seedMap[tId];
+                          if(!sn)return null;
                           const bg=sn===1?"#b45309":sn===2?"#1d4ed8":sn===3?"#7c3aed":sn<=4?"#0e7490":sn<=8?"#1e3a5f":"#475569";
                           return(
                             <span style={{background:bg,color:"#fff",borderRadius:3,
@@ -4173,7 +4181,7 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
                         padding:"0 7px",background:NAVY,borderRadius:"5px 5px 0 0"}}>
                         <span style={{background:"#0e7490",color:"#fff",borderRadius:3,
                           fontSize:8,fontWeight:800,padding:"1px 5px",fontFamily:"monospace"}}>
-                          {g.num}
+                          {displayNum[g.id]||g.num}
                         </span>
                         <span style={{fontSize:8,color:"rgba(255,255,255,.55)",fontWeight:400}}>
                           {[g.date,g.time,g.field].filter(Boolean).join(" · ")||""}
@@ -4202,23 +4210,28 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
                   const pairs=Math.ceil(rGames.length/2);
                   return Array.from({length:pairs}).map((__,pi)=>{
                     const g1=rGames[pi*2],g2=rGames[pi*2+1];
+                    const g1Bye=g1?.status==="bye";
+                    const g2Bye=!g2||g2?.status==="bye";
                     const y1=GC(ri,pi*2);
                     const y2=g2?GC(ri,pi*2+1):y1;
                     const yMid=GC(ri+1,pi);
                     const x1=RX(ri)+GW;
                     const xC=x1+CONN/2;
                     const x2=RX(ri+1);
+                    // Vertical line spans only between visible game(s) and QF center
+                    const vTop=g1Bye?Math.min(y2,yMid):y1;
+                    const vBot=g2Bye?Math.max(y1,yMid):y2;
+                    const w1=winOf(g1||{});
                     return(
                       <g key={`c${ri}-${pi}`}>
-                        <line x1={x1} y1={y1} x2={xC} y2={y1} stroke="#94a3b8" strokeWidth={1.5}/>
-                        {g2&&<line x1={x1} y1={y2} x2={xC} y2={y2} stroke="#94a3b8" strokeWidth={1.5}/>}
-                        <line x1={xC} y1={y1} x2={xC} y2={g2?y2:y1} stroke="#94a3b8" strokeWidth={1.5}/>
+                        {!g1Bye&&<line x1={x1} y1={y1} x2={xC} y2={y1} stroke="#94a3b8" strokeWidth={1.5}/>}
+                        {!g2Bye&&<line x1={x1} y1={y2} x2={xC} y2={y2} stroke="#94a3b8" strokeWidth={1.5}/>}
+                        <line x1={xC} y1={vTop} x2={xC} y2={vBot} stroke="#94a3b8" strokeWidth={1.5}/>
                         <line x1={xC} y1={yMid} x2={x2} y2={yMid} stroke="#94a3b8" strokeWidth={1.5}/>
-                        {/* winner name on connector */}
-                        {g2&&winOf(g1||{})&&(
+                        {w1&&(
                           <text x={(xC+x2)/2} y={yMid-3} textAnchor="middle"
                             style={{fontSize:8,fill:"#475569",fontFamily:"sans-serif"}}>
-                            {getT(winOf(g1))?.name?.split(" ").slice(-1)[0]||""}
+                            {getT(w1)?.name?.split(" ").slice(-1)[0]||""}
                           </text>
                         )}
                       </g>
