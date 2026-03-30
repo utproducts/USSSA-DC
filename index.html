@@ -8038,7 +8038,7 @@ function App(){
           {view==="s-game-mgr"&&<GameMgrView games={allGames} setGames={setAllGames} teams={ALL_TEAMS}/>}
           {view==="s-grid"&&<GridBuilderView gridCtx={gridCtx} setGridCtx={setGridCtx} onSendToSchedule={handleSendToSchedule} events={events} evRosters={evRosters}/>}
           {view==="s-layout"&&<LayoutView games={allGames} setGames={setAllGames} teams={[]} schedCtx={schedCtx} setSchedCtx={setSchedCtx} events={events} evRosters={evRosters}/>}
-          {view==="s-bracket"&&<BracketView bGames={allBracketGames} setBGames={setAllBracketGames} teams={ALL_TEAMS} games={allGames} editable={true} events={events} evRosters={evRosters} bracketCtx={bracketCtx} setBracketCtx={setBracketCtx} savedBrackets={savedBrackets} setSavedBrackets={setSavedBrackets}/>}
+          {view==="s-bracket"&&<BracketView bGames={allBracketGames} setBGames={setAllBracketGames} teams={[]} games={allGames} editable={true} events={events} evRosters={evRosters} bracketCtx={bracketCtx} setBracketCtx={setBracketCtx} savedBrackets={savedBrackets} setSavedBrackets={setSavedBrackets}/>}
           {view==="s-standings"&&<StandingsView teams={ALL_TEAMS} games={allGames}/>}
           {view==="s-seeds"&&<SeedsView teams={ALL_TEAMS}/>}
           {view==="s-parks"&&<ParksView eventParks={[]}/>}
