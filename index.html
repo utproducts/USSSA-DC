@@ -588,12 +588,52 @@ function Alrt({type="info",children}){
 }
 
 /* ════════════════════ SEEDS ════════════════════ */
-function SeedsView({teams,divCode=""}){
+function SeedsView({seedsCtx,setSeedsCtx,events,evRosters}){
+  const [noTeamsMsg,setNoTeamsMsg]=useState('');
+
+  async function loadEvent(ev){
+    if(!ev||!setSeedsCtx)return;
+    const normalizedDivs=(ev.divisions||[]).map(normDiv);
+    const divCounts={};
+    let allTeams=normalizedDivs.flatMap(d=>{
+      const rk=String(ev.id)+"_"+d.id;
+      const t=(evRosters&&evRosters[rk])||[];
+      if(d.label)divCounts[d.label]=t.length||d.numTeams||0;
+      return t;
+    });
+    const usssaId=String(ev.evid||ev.id);
+    setSeedsCtx({evId:String(ev.id),usssaId,evName:ev.name,teams:allTeams,divCounts,loadingTeams:!allTeams.length,_divisions:ev.divisions||[]});
+    if(!allTeams.length){
+      setSeedsCtx(prev=>prev?{...prev,loadingTeams:true}:null);
+      try{
+        const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(usssaId));
+        const j=await r.json();
+        if(j.status==='ok'&&j.teams&&j.teams.length){
+          const evId=String(ev.id);
+          const appTeams=j.teams.map(t=>({
+            id:'us_'+evId+'_'+(t.team_name||'').replace(/\W+/g,'_'),
+            name:t.team_name||'',cls:t.division||'',city:t.team_city||'',
+            state:t.team_state||'FL',pts:t.pts||0,pr:t.pr||0,
+            icr:t.icr||'',ovr:t.ovr||''
+          }));
+          setSeedsCtx(prev=>prev?{...prev,teams:appTeams,loadingTeams:false}:null);
+        }else{
+          setSeedsCtx(prev=>prev?{...prev,loadingTeams:false}:null);
+          setNoTeamsMsg('No teams found — sync teams in Director Tools → Roster first.');
+        }
+      }catch(e){
+        setSeedsCtx(prev=>prev?{...prev,loadingTeams:false}:null);
+        setNoTeamsMsg('Could not load teams: '+e.message);
+      }
+    }
+  }
+
+  const teams=seedsCtx?.teams||[];
+  const divCode=seedsCtx?._divisions?.[0]?.label||"";
   const ageNum=cls=>{const m=(cls||"").match(/^(\d+)/);return m?parseInt(m[1]):0};
   const clsSuffix=cls=>(cls||"").replace(/^\d+/,"");
   const CLASS_ORDER=["Maj","AAA","AA","A","B","C"];
   const isOpen=/Op$/i.test(divCode);
-  // Open events: group by age only. Classed events: group by age + class.
   const groupMap={};
   teams.forEach(t=>{
     const age=ageNum(t.cls);
@@ -602,53 +642,99 @@ function SeedsView({teams,divCode=""}){
     if(!groupMap[key])groupMap[key]={age,suf,teams:[]};
     groupMap[key].teams.push(t);
   });
-  // Sort groups: age ascending, then class by rank (Maj first)
   const groups=Object.values(groupMap).sort((a,b)=>{
     if(a.age!==b.age)return a.age-b.age;
     if(a.suf==="Open"&&b.suf==="Open")return 0;
     const ai=CLASS_ORDER.indexOf(a.suf),bi=CLASS_ORDER.indexOf(b.suf);
     return (ai<0?99:ai)-(bi<0?99:bi);
   });
-  // Sort teams within each group by pts+pr desc
   groups.forEach(g=>g.teams.sort((a,b)=>((b.pts||0)+(b.pr||0))-((a.pts||0)+(a.pr||0))));
+
   return(
     <div>
-      <Alrt type="info">📊 Teams seeded by USSSA Points + Power Rating.{isOpen?" Open event — all teams seeded together by age.":" Classed event — each age + class division seeds independently."}</Alrt>
-      {groups.map(g=>(
-        <div key={`${g.age}${g.suf}`} style={{marginBottom:24}}>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,padding:"7px 14px",
-            background:"#eff6ff",borderLeft:"4px solid #1e3a5f",borderRadius:"0 5px 5px 0"}}>
-            <span style={{fontWeight:800,fontSize:15,color:"#1e3a5f"}}>{g.age>0?`${g.age}U`:""}{g.suf?" "+g.suf:""}</span>
-            <span style={{fontSize:12,color:"#64748b",fontWeight:600}}>{g.teams.length} {g.teams.length===1?"team":"teams"}</span>
+      {/* ── Event selector ── */}
+      {!seedsCtx&&events&&events.length>0&&(
+        <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:10,padding:"14px 18px",marginBottom:18,display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+          <span style={{fontSize:14}}>🎯</span>
+          <span style={{fontSize:13,fontWeight:700,color:"#92400e"}}>Select an event to view seedings:</span>
+          <select defaultValue="" onChange={e=>{const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);if(ev)loadEvent(ev);}}
+            style={{flex:1,minWidth:220,padding:"7px 10px",borderRadius:7,border:"1px solid #d1d5db",fontSize:13,fontWeight:600,background:"#fff"}}>
+            <option value="">— choose event —</option>
+            {(events||[]).map(ev=><option key={ev.id} value={String(ev.id)}>{ev.name}{ev.date?` · ${ev.date}`:""}</option>)}
+          </select>
+        </div>
+      )}
+      {/* ── Active event banner ── */}
+      {seedsCtx&&(
+        <div style={{background:"#dbeafe",border:"1px solid #93c5fd",borderRadius:8,padding:"10px 16px",marginBottom:14,
+          display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#1e40af",display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:15}}>🎯</span>
+            <span>Seedings for: <strong>{seedsCtx.evName}</strong></span>
+            {seedsCtx.loadingTeams&&<span style={{color:"#2563eb",fontStyle:"italic",fontSize:12}}>loading teams…</span>}
+            {!seedsCtx.loadingTeams&&teams.length>0&&<span style={{fontWeight:500,fontSize:12,color:"#3b82f6"}}>· {teams.length} teams</span>}
           </div>
-          <div className="tbl-wrap">
-            <table>
-              <thead><tr>
-                <th style={{width:40}}>#</th>
-                <th>Team</th>
-                <th>State · City</th>
-                <th>USSSA Pts</th>
-                <th>Power Rating</th>
-                <th>Total Score</th>
-                <th>In-Class</th>
-                <th>Overall</th>
-              </tr></thead>
-              <tbody>{g.teams.map((t,i)=>(
-                <tr key={t.id}>
-                  <td><SeedRank n={i+1}/></td>
-                  <td className="fw7" style={{color:"var(--blue)"}}>{t.name}</td>
-                  <td className="t-sm">{t.state} · {t.city}</td>
-                  <td className="fw7">{t.pts||"—"}</td>
-                  <td>{t.pr||"—"}</td>
-                  <td className="fw8" style={{color:"var(--navy)"}}>{(t.pts||0)+(t.pr||0)||"—"}</td>
-                  <td>{t.icr||"—"}</td>
-                  <td>{t.ovr||"—"}</td>
-                </tr>
-              ))}</tbody>
-            </table>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            {events&&events.length>0&&(
+              <select defaultValue="" onChange={e=>{const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);if(ev)loadEvent(ev);}}
+                style={{padding:"5px 8px",borderRadius:6,border:"1px solid #93c5fd",fontSize:12,fontWeight:600,background:"#eff6ff",color:"#1e40af"}}>
+                <option value="">↔ Switch event</option>
+                {(events||[]).map(ev=><option key={ev.id} value={String(ev.id)}>{ev.name}</option>)}
+              </select>
+            )}
+            <button onClick={()=>{setSeedsCtx&&setSeedsCtx(null);setNoTeamsMsg('');}}
+              style={{padding:"4px 12px",fontSize:11,fontWeight:700,borderRadius:6,border:"1px solid #93c5fd",background:"#fff",color:"#1e40af",cursor:"pointer"}}>
+              ✕ Clear
+            </button>
           </div>
         </div>
-      ))}
+      )}
+      {noTeamsMsg&&<Alrt type="warn">{noTeamsMsg}</Alrt>}
+      {!seedsCtx&&(!events||!events.length)&&(
+        <Alrt type="info">No events found. Create an event first in Event Management.</Alrt>
+      )}
+      {seedsCtx&&!seedsCtx.loadingTeams&&teams.length===0&&(
+        <Alrt type="info">No teams found for <strong>{seedsCtx.evName}</strong>. Sync teams in Director Tools → Roster first.</Alrt>
+      )}
+      {/* ── Seedings table ── */}
+      {groups.length>0&&(<>
+        <Alrt type="info">📊 Teams seeded by USSSA Points + Power Rating.{isOpen?" Open event — all teams seeded together by age.":" Classed event — each age + class division seeds independently."}</Alrt>
+        {groups.map(g=>(
+          <div key={`${g.age}${g.suf}`} style={{marginBottom:24}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8,padding:"7px 14px",
+              background:"#eff6ff",borderLeft:"4px solid #1e3a5f",borderRadius:"0 5px 5px 0"}}>
+              <span style={{fontWeight:800,fontSize:15,color:"#1e3a5f"}}>{g.age>0?`${g.age}U`:""}{g.suf?" "+g.suf:""}</span>
+              <span style={{fontSize:12,color:"#64748b",fontWeight:600}}>{g.teams.length} {g.teams.length===1?"team":"teams"}</span>
+            </div>
+            <div className="tbl-wrap">
+              <table>
+                <thead><tr>
+                  <th style={{width:40}}>#</th>
+                  <th>Team</th>
+                  <th>State · City</th>
+                  <th>USSSA Pts</th>
+                  <th>Power Rating</th>
+                  <th>Total Score</th>
+                  <th>In-Class</th>
+                  <th>Overall</th>
+                </tr></thead>
+                <tbody>{g.teams.map((t,i)=>(
+                  <tr key={t.id}>
+                    <td><SeedRank n={i+1}/></td>
+                    <td className="fw7" style={{color:"var(--blue)"}}>{t.name}</td>
+                    <td className="t-sm">{t.state} · {t.city}</td>
+                    <td className="fw7">{t.pts||"—"}</td>
+                    <td>{t.pr||"—"}</td>
+                    <td className="fw8" style={{color:"var(--navy)"}}>{(t.pts||0)+(t.pr||0)||"—"}</td>
+                    <td>{t.icr||"—"}</td>
+                    <td>{t.ovr||"—"}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+      </>)}
     </div>
   );
 }
@@ -3253,8 +3339,55 @@ function calcUSSSAStandings(teams,games){
     return (b.pts||0)-(a.pts||0);                               // 7. USSSA Points desc
   });
 }
-function StandingsView({teams,games}){
+function StandingsView({standingsCtx,setStandingsCtx,events,evRosters,allGames}){
   const NAVY="#1e3a5f";
+  const [noTeamsMsg,setNoTeamsMsg]=useState('');
+
+  // Load teams for a selected event (same pattern as other tools)
+  async function loadEvent(ev){
+    if(!ev||!setStandingsCtx)return;
+    const normalizedDivs=(ev.divisions||[]).map(normDiv);
+    const divCounts={};
+    let allTeams=normalizedDivs.flatMap(d=>{
+      const rk=String(ev.id)+"_"+d.id;
+      const t=(evRosters&&evRosters[rk])||[];
+      if(d.label)divCounts[d.label]=t.length||d.numTeams||0;
+      return t;
+    });
+    const usssaId=String(ev.evid||ev.id);
+    setStandingsCtx({evId:String(ev.id),usssaId,evName:ev.name,teams:allTeams,divCounts,loadingTeams:!allTeams.length,_divisions:ev.divisions||[]});
+    if(!allTeams.length){
+      setStandingsCtx(prev=>prev?{...prev,loadingTeams:true}:null);
+      try{
+        const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(usssaId));
+        const j=await r.json();
+        if(j.status==='ok'&&j.teams&&j.teams.length){
+          const evId=String(ev.id);
+          const appTeams=j.teams.map(t=>({
+            id:'us_'+evId+'_'+(t.team_name||'').replace(/\W+/g,'_'),
+            name:t.team_name||'',cls:t.division||'',city:t.team_city||'',
+            state:t.team_state||'FL',pts:t.pts||0,pr:t.pr||0,
+            icr:t.icr||'',ovr:t.ovr||''
+          }));
+          const byDiv={};j.teams.forEach(t=>{const dl=(t.division||'').trim();if(!byDiv[dl])byDiv[dl]=[];byDiv[dl].push(t);});
+          const newDivCounts={};Object.keys(divCounts).forEach(l=>{newDivCounts[l]=(byDiv[l]||[]).length||divCounts[l]||0;});
+          setStandingsCtx(prev=>prev?{...prev,teams:appTeams,divCounts:newDivCounts,loadingTeams:false}:null);
+        }else{
+          setStandingsCtx(prev=>prev?{...prev,loadingTeams:false}:null);
+          setNoTeamsMsg('No teams found — sync teams in Director Tools → Roster first.');
+        }
+      }catch(e){
+        setStandingsCtx(prev=>prev?{...prev,loadingTeams:false}:null);
+        setNoTeamsMsg('Could not load teams: '+e.message);
+      }
+    }
+  }
+
+  // Derive teams + games from context
+  const teams=standingsCtx?.teams||[];
+  const evTeamIds=new Set(teams.map(t=>t.id));
+  const games=(allGames||[]).filter(g=>evTeamIds.has(g.t1)||evTeamIds.has(g.t2));
+
   /* extract age number from class string e.g. "12AAA" → 12 */
   const ageNum=cls=>{const m=(cls||"").match(/^(\d+)/);return m?parseInt(m[1]):0};
   const ageLabel=n=>n>0?`${n}U`:"Other";
@@ -3265,7 +3398,6 @@ function StandingsView({teams,games}){
     .filter(a=>a>0).sort((a,b)=>a-b);
   const [activeAge,setActiveAge]=useState(ageGroups[0]||0);
   const [showRules,setShowRules]=useState(false);
-  if(ageGroups.length===0)return <Alrt type="info">No pool play games scheduled yet. Add games with pool assignments to see standings.</Alrt>;
   /* teams + games for the selected age */
   const ageTeams=teams.filter(t=>ageNum(t.cls)===activeAge);
   const ageTeamIds=new Set(ageTeams.map(t=>t.id));
@@ -3296,7 +3428,54 @@ function StandingsView({teams,games}){
   };
   return(
     <div>
-      {/* ── Age group tabs ── */}
+      {/* ── Event selector ── */}
+      {!standingsCtx&&events&&events.length>0&&(
+        <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:10,padding:"14px 18px",marginBottom:18,display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+          <span style={{fontSize:14}}>📊</span>
+          <span style={{fontSize:13,fontWeight:700,color:"#92400e"}}>Select an event to view standings:</span>
+          <select defaultValue="" onChange={e=>{const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);if(ev)loadEvent(ev);}}
+            style={{flex:1,minWidth:220,padding:"7px 10px",borderRadius:7,border:"1px solid #d1d5db",fontSize:13,fontWeight:600,background:"#fff"}}>
+            <option value="">— choose event —</option>
+            {(events||[]).map(ev=><option key={ev.id} value={String(ev.id)}>{ev.name}{ev.date?` · ${ev.date}`:""}</option>)}
+          </select>
+        </div>
+      )}
+      {/* ── Active event banner ── */}
+      {standingsCtx&&(
+        <div style={{background:"#dbeafe",border:"1px solid #93c5fd",borderRadius:8,padding:"10px 16px",marginBottom:14,
+          display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#1e40af",display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:15}}>📊</span>
+            <span>Standings for: <strong>{standingsCtx.evName}</strong></span>
+            {standingsCtx.loadingTeams&&<span style={{color:"#2563eb",fontStyle:"italic",fontSize:12}}>loading teams…</span>}
+            {!standingsCtx.loadingTeams&&teams.length>0&&<span style={{fontWeight:500,fontSize:12,color:"#3b82f6"}}>· {teams.length} teams</span>}
+          </div>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            {events&&events.length>0&&(
+              <select defaultValue="" onChange={e=>{const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);if(ev)loadEvent(ev);}}
+                style={{padding:"5px 8px",borderRadius:6,border:"1px solid #93c5fd",fontSize:12,fontWeight:600,background:"#eff6ff",color:"#1e40af"}}>
+                <option value="">↔ Switch event</option>
+                {(events||[]).map(ev=><option key={ev.id} value={String(ev.id)}>{ev.name}</option>)}
+              </select>
+            )}
+            <button onClick={()=>{setStandingsCtx&&setStandingsCtx(null);setNoTeamsMsg('');}}
+              style={{padding:"4px 12px",fontSize:11,fontWeight:700,borderRadius:6,border:"1px solid #93c5fd",background:"#fff",color:"#1e40af",cursor:"pointer"}}>
+              ✕ Clear
+            </button>
+          </div>
+        </div>
+      )}
+      {noTeamsMsg&&<Alrt type="warn">{noTeamsMsg}</Alrt>}
+      {/* No event selected */}
+      {!standingsCtx&&(!events||!events.length)&&(
+        <Alrt type="info">No events found. Create an event first in Event Management.</Alrt>
+      )}
+      {/* Event selected but no pool games yet */}
+      {standingsCtx&&!standingsCtx.loadingTeams&&ageGroups.length===0&&(
+        <Alrt type="info">No pool play games found for <strong>{standingsCtx.evName}</strong>. Add games with pool assignments in Game Manager, or enter scores in Schedule Builder.</Alrt>
+      )}
+      {/* ── Age group tabs + all standings content ── */}
+      {ageGroups.length>0&&(<>
       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:14,flexWrap:"wrap"}}>
         <span style={{fontSize:11,fontWeight:700,color:"#64748b",marginRight:4}}>Age Group:</span>
         {ageGroups.map(age=>{
@@ -3457,6 +3636,7 @@ function StandingsView({teams,games}){
           </div>
         )}
       </div>
+      </>)}
     </div>
   );
 }
@@ -8097,6 +8277,8 @@ function App(){
   const [gridCtx,setGridCtx]=useState(null);
   const [bracketCtx,setBracketCtx]=useState(null);
   const [savedBrackets,setSavedBrackets]=useState({}); // {divLabel:{games,seeds,savedAt}}
+  const [standingsCtx,setStandingsCtx]=useState(null);
+  const [seedsCtx,setSeedsCtx]=useState(null);
   const [evFieldAssignments,setEvFieldAssignments]=useState({});
   const [dbStatus,setDbStatus]=useState('connecting');
   const [liveDiv,setLiveDiv]=useState({status:'idle',updatedAt:null});
@@ -8198,8 +8380,8 @@ function App(){
           {view==="s-grid"&&<GridBuilderView gridCtx={gridCtx} setGridCtx={setGridCtx} onSendToSchedule={handleSendToSchedule} events={events} evRosters={evRosters}/>}
           {view==="s-layout"&&<LayoutView games={allGames} setGames={setAllGames} teams={[]} schedCtx={schedCtx} setSchedCtx={setSchedCtx} events={events} evRosters={evRosters}/>}
           {view==="s-bracket"&&<BracketView bGames={allBracketGames} setBGames={setAllBracketGames} teams={[]} games={allGames} editable={true} events={events} evRosters={evRosters} bracketCtx={bracketCtx} setBracketCtx={setBracketCtx} savedBrackets={savedBrackets} setSavedBrackets={setSavedBrackets}/>}
-          {view==="s-standings"&&<StandingsView teams={ALL_TEAMS} games={allGames}/>}
-          {view==="s-seeds"&&<SeedsView teams={ALL_TEAMS}/>}
+          {view==="s-standings"&&<StandingsView standingsCtx={standingsCtx} setStandingsCtx={setStandingsCtx} events={events} evRosters={evRosters} allGames={allGames}/>}
+          {view==="s-seeds"&&<SeedsView seedsCtx={seedsCtx} setSeedsCtx={setSeedsCtx} events={events} evRosters={evRosters}/>}
           {view==="s-parks"&&<ParksView eventParks={[]}/>}
           {view==="s-umpires"&&<UmpiresView/>}
           {view==="s-pitching"&&<PitchingView teams={ALL_TEAMS} games={allGames}/>}
