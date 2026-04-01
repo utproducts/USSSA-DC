@@ -4152,6 +4152,43 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
     });
   }
   function getT(id){return tByIdFrom(id,dTeams)}
+
+  // Extracted event loader — matches pattern used by SeedsView / StandingsView / LayoutView
+  async function loadBracketEvent(ev){
+    if(!ev||!setBracketCtx)return;
+    const normalizedDivs=(ev.divisions||[]).map(normDiv);
+    const divCounts={};
+    let allTeams=normalizedDivs.flatMap(d=>{
+      const rk=String(ev.id)+"_"+d.id;
+      const t=(evRosters&&evRosters[rk])||[];
+      if(d.label)divCounts[d.label]=t.length||d.numTeams||0;
+      return t;
+    });
+    const bracketUsssaId=String(ev.evid||ev.id);
+    setBracketCtx({evId:String(ev.id),usssaId:bracketUsssaId,evName:ev.name,teams:allTeams,divCounts,loadingTeams:!allTeams.length,_divisions:ev.divisions||[]});
+    if(!allTeams.length){
+      try{
+        const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(bracketUsssaId));
+        const j=await r.json();
+        if(j.status==='ok'&&j.teams&&j.teams.length){
+          const evId=String(ev.id);
+          const byDivLabel={};
+          j.teams.forEach(t=>{const dl=(t.division||'').trim();if(!byDivLabel[dl])byDivLabel[dl]=[];byDivLabel[dl].push(t);});
+          const newDivCounts={};
+          normalizedDivs.forEach(d=>{newDivCounts[d.label]=(byDivLabel[d.label]||[]).length||d.numTeams||0;});
+          allTeams=j.teams.map(t=>({
+            id:'us_'+evId+'_'+(t.team_name||'').replace(/\W+/g,'_'),
+            name:t.team_name||'',cls:t.division||'',city:t.team_city||'',
+            state:t.team_state||'FL',coach:t.manager_name||'',
+            email:t.manager_email||'',phone:t.manager_phone||''
+          }));
+          setBracketCtx({evId,usssaId:bracketUsssaId,evName:ev.name,teams:allTeams,divCounts:newDivCounts,loadingTeams:false,_divisions:ev.divisions||[]});
+        }else{
+          setBracketCtx(prev=>prev?{...prev,loadingTeams:false}:null);
+        }
+      }catch(err){setBracketCtx(prev=>prev?{...prev,loadingTeams:false}:null);}
+    }
+  }
   const finalGame=dGames.find(g=>g.round===maxRound);
   const champ=finalGame?winOf(finalGame):null;
 
@@ -4161,42 +4198,7 @@ function BracketView({bGames,setBGames,teams:propTeams,games=[],editable,events,
       {editable&&!bracketCtx&&events&&events.length>0&&(
         <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:8,padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
           <span style={{fontSize:13,fontWeight:700,color:"#92400e"}}>🏆 Select an event to build a bracket for:</span>
-          <select defaultValue="" onChange={async e=>{
-            const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);
-            if(!ev||!setBracketCtx)return;
-            const normalizedDivs=(ev.divisions||[]).map(normDiv);
-            const divCounts={};
-            let allTeams=normalizedDivs.flatMap(d=>{
-              const rk=String(ev.id)+"_"+d.id;
-              const t=(evRosters&&evRosters[rk])||[];
-              if(d.label)divCounts[d.label]=t.length||d.numTeams||0;
-              return t;
-            });
-            const bracketUsssaId=String(ev.evid||ev.id);
-            setBracketCtx({evId:String(ev.id),usssaId:bracketUsssaId,evName:ev.name,teams:allTeams,divCounts,loadingTeams:!allTeams.length,_divisions:ev.divisions||[]});
-            if(!allTeams.length){
-              try{
-                const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(bracketUsssaId));
-                const j=await r.json();
-                if(j.status==='ok'&&j.teams&&j.teams.length){
-                  const evId=String(ev.id);
-                  const byDivLabel={};
-                  j.teams.forEach(t=>{const dl=(t.division||'').trim();if(!byDivLabel[dl])byDivLabel[dl]=[];byDivLabel[dl].push(t);});
-                  const newDivCounts={};
-                  normalizedDivs.forEach(d=>{newDivCounts[d.label]=(byDivLabel[d.label]||[]).length||d.numTeams||0;});
-                  allTeams=j.teams.map(t=>({
-                    id:'us_'+evId+'_'+(t.team_name||'').replace(/\W+/g,'_'),
-                    name:t.team_name||'',cls:t.division||'',city:t.team_city||'',
-                    state:t.team_state||'FL',coach:t.manager_name||'',
-                    email:t.manager_email||'',phone:t.manager_phone||''
-                  }));
-                  setBracketCtx({evId,evName:ev.name,teams:allTeams,divCounts:newDivCounts,loadingTeams:false,_divisions:ev.divisions||[]});
-                } else {
-                  setBracketCtx(prev=>prev?{...prev,loadingTeams:false}:null);
-                }
-              }catch(e){setBracketCtx(prev=>prev?{...prev,loadingTeams:false}:null);}
-            }
-          }} style={{padding:"5px 10px",borderRadius:6,border:"1px solid #fcd34d",fontSize:13,background:"#fff",minWidth:220,cursor:"pointer"}}>
+          <select defaultValue="" onChange={e=>{const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);if(ev)loadBracketEvent(ev);}} style={{padding:"5px 10px",borderRadius:6,border:"1px solid #fcd34d",fontSize:13,background:"#fff",minWidth:220,cursor:"pointer"}}>
             <option value="">— Choose event —</option>
             {(events||[]).filter(ev=>ev.status!=="complete").map(ev=>(
               <option key={ev.id} value={String(ev.id)}>{ev.name}{ev.date?` (${ev.date})`:""}</option>
