@@ -925,14 +925,14 @@ function GameMgrView({games,setGames,teams,readOnly,gameMgrCtx,setGameMgrCtx,eve
 
   function updField(id,k,v){
     if(readOnly)return;
-    setGames(prev=>{const u=prev.map(g=>g.id===id?{...g,[k]:v}:g);const gm=u.find(g=>g.id===id);if(gm)dbSave('games',gm);return u;});
+    setGames(prev=>{const u=prev.map(g=>g.id===id?{...g,[k]:v}:g);const gm=u.find(g=>g.id===id);if(gm&&gm.evId!=="__demo__")dbSave('games',gm);return u;});
   }
   function updScore(id,k,v){
     if(readOnly)return;
     const n=v===""?null:parseInt(v);
     setGames(prev=>{
       const u=prev.map(g=>{if(g.id!==id)return g;const u2={...g,[k]:isNaN(n)?null:n};if(u2.s1!=null&&u2.s2!=null)u2.status="final";return u2;});
-      const gm=u.find(g=>g.id===id);if(gm)dbSave('games',gm);return u;
+      const gm=u.find(g=>g.id===id);if(gm&&gm.evId!=="__demo__")dbSave('games',gm);return u;
     });
   }
   function setStatus(id,status){
@@ -942,11 +942,11 @@ function GameMgrView({games,setGames,teams,readOnly,gameMgrCtx,setGameMgrCtx,eve
         if(status==="clear")return{...g,s1:null,s2:null,status:"scheduled",home:null,gameType:"scored"};
         if(status==="scheduled")return{...g,s1:null,s2:null,status:"scheduled"};
         return{...g,status,gameType:status};});
-      const gm=u.find(g=>g.id===id);if(gm)dbSave('games',gm);return u;
+      const gm=u.find(g=>g.id===id);if(gm&&gm.evId!=="__demo__")dbSave('games',gm);return u;
     });
   }
   function swapTeams(id){
-    setGames(prev=>{const u=prev.map(g=>g.id===id?{...g,t1:g.t2,t2:g.t1,s1:g.s2,s2:g.s1}:g);const gm=u.find(g=>g.id===id);if(gm)dbSave('games',gm);return u;});
+    setGames(prev=>{const u=prev.map(g=>g.id===id?{...g,t1:g.t2,t2:g.t1,s1:g.s2,s2:g.s1}:g);const gm=u.find(g=>g.id===id);if(gm&&gm.evId!=="__demo__")dbSave('games',gm);return u;});
   }
   function renumber(){
     if(!gameMgrCtx)return;
@@ -957,7 +957,7 @@ function GameMgrView({games,setGames,teams,readOnly,gameMgrCtx,setGameMgrCtx,eve
         byP[g.pool]=(byP[g.pool]||0)+1;
         return{...g,num:`${g.pool||"G"}${byP[g.pool]}`};
       });
-      u.filter(g=>g.evId===gameMgrCtx.evId).forEach(g=>dbSave('games',g));
+      u.filter(g=>g.evId===gameMgrCtx.evId).forEach(g=>{if(g.evId!=="__demo__")dbSave('games',g);});
       return u;
     });
   }
@@ -968,7 +968,7 @@ function GameMgrView({games,setGames,teams,readOnly,gameMgrCtx,setGameMgrCtx,eve
     const g={id:"g_"+Date.now(),num:`${pool}${pGames.length+1}`,pool,date:newGame.date,time:newGame.time,
       field:newGame.field,t1:newGame.t1,t2:newGame.t2,s1:null,s2:null,status:"scheduled",home:null,gameType:"scored",
       evId:gameMgrCtx?.evId};
-    setGames(prev=>[...prev,g]);dbSave('games',g);
+    setGames(prev=>[...prev,g]);if(g.evId!=="__demo__")dbSave('games',g);
     setNewGame({pool:"A",date:"",time:"",field:"",t1:"",t2:""});setShowAddGame(false);
   }
 
@@ -979,9 +979,10 @@ function GameMgrView({games,setGames,teams,readOnly,gameMgrCtx,setGameMgrCtx,eve
         <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:10,padding:"14px 18px",marginBottom:18,display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
           <span style={{fontSize:14}}>⚾</span>
           <span style={{fontSize:13,fontWeight:700,color:"#92400e"}}>Select an event to manage games:</span>
-          <select defaultValue="" onChange={e=>{const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);if(ev)loadEvent(ev);}}
+          <select defaultValue="" onChange={e=>{if(e.target.value==="__demo__"){const DT=[{id:"d_t1",name:"Tampa Bay Rays 10U",cls:"10U",city:"Tampa",state:"FL"},{id:"d_t2",name:"Orlando Heat 10U",cls:"10U",city:"Orlando",state:"FL"},{id:"d_t3",name:"Sarasota Stars 10U",cls:"10U",city:"Sarasota",state:"FL"},{id:"d_t4",name:"Clearwater Cubs 10U",cls:"10U",city:"Clearwater",state:"FL"},{id:"d_t5",name:"Tampa Bay Rays 12U",cls:"12U",city:"Tampa",state:"FL"},{id:"d_t6",name:"Orlando Heat 12U",cls:"12U",city:"Orlando",state:"FL"},{id:"d_t7",name:"Lakeland Lightning 12U",cls:"12U",city:"Lakeland",state:"FL"},{id:"d_t8",name:"Bradenton Bulls 12U",cls:"12U",city:"Bradenton",state:"FL"}];const DG=[{id:"dg1",num:"A1",pool:"A",date:"2026-04-12",time:"9:00 AM",field:"Field 1",t1:"d_t1",t2:"d_t2",s1:4,s2:2,status:"final",gameType:"scored",evId:"__demo__"},{id:"dg2",num:"A2",pool:"A",date:"2026-04-12",time:"11:00 AM",field:"Field 2",t1:"d_t3",t2:"d_t4",s1:3,s2:1,status:"final",gameType:"scored",evId:"__demo__"},{id:"dg3",num:"A3",pool:"A",date:"2026-04-12",time:"1:00 PM",field:"Field 1",t1:"d_t1",t2:"d_t3",s1:null,s2:null,status:"scheduled",gameType:"scored",evId:"__demo__"},{id:"dg4",num:"A4",pool:"A",date:"2026-04-12",time:"3:00 PM",field:"Field 2",t1:"d_t2",t2:"d_t4",s1:null,s2:null,status:"scheduled",gameType:"scored",evId:"__demo__"},{id:"dg5",num:"B1",pool:"B",date:"2026-04-12",time:"9:00 AM",field:"Field 3",t1:"d_t5",t2:"d_t6",s1:7,s2:3,status:"final",gameType:"scored",evId:"__demo__"},{id:"dg6",num:"B2",pool:"B",date:"2026-04-12",time:"11:00 AM",field:"Field 4",t1:"d_t7",t2:"d_t8",s1:null,s2:null,status:"scheduled",gameType:"scored",evId:"__demo__"},{id:"dg7",num:"B3",pool:"B",date:"2026-04-12",time:"1:00 PM",field:"Field 3",t1:"d_t5",t2:"d_t7",s1:null,s2:null,status:"scheduled",gameType:"scored",evId:"__demo__"}];setGames(prev=>[...prev.filter(g=>g.evId!=="__demo__"),...DG]);if(setGameMgrCtx)setGameMgrCtx({evId:"__demo__",evName:"Demo Event — Spring 2026",isDemoMode:true,teams:DT,divCounts:{"10U":4,"12U":4},loadingTeams:false,_divisions:[]});return;}const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);if(ev)loadEvent(ev);}}
             style={{flex:1,minWidth:220,padding:"7px 10px",borderRadius:7,border:"1px solid #d1d5db",fontSize:13,fontWeight:600,background:"#fff"}}>
             <option value="">— choose event —</option>
+            <option value="__demo__">🎭 Demo Mode (sample data)</option>
             {(events||[]).map(ev=><option key={ev.id} value={String(ev.id)}>{ev.name}{ev.date?` · ${ev.date}`:""}</option>)}
           </select>
         </div>
@@ -992,15 +993,16 @@ function GameMgrView({games,setGames,teams,readOnly,gameMgrCtx,setGameMgrCtx,eve
           display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
           <div style={{fontSize:13,fontWeight:700,color:"#1e40af",display:"flex",alignItems:"center",gap:8}}>
             <span style={{fontSize:15}}>⚾</span>
-            <span>Games for: <strong>{gameMgrCtx.evName}</strong></span>
+            <span>Games for: <strong>{gameMgrCtx.evName}</strong></span>{gameMgrCtx.isDemoMode&&<span style={{background:"#fef3c7",color:"#92400e",fontSize:11,fontWeight:700,padding:"2px 7px",borderRadius:4,border:"1px solid #fcd34d",marginLeft:4}}>🎭 DEMO</span>}
             {gameMgrCtx.loadingTeams&&<span style={{color:"#2563eb",fontStyle:"italic",fontSize:12}}>loading teams…</span>}
             {!gameMgrCtx.loadingTeams&&ctxTeams.length>0&&<span style={{fontWeight:500,fontSize:12,color:"#3b82f6"}}>· {ctxTeams.length} teams</span>}
           </div>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             {events&&events.length>0&&(
-              <select defaultValue="" onChange={e=>{const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);if(ev)loadEvent(ev);}}
+              <select defaultValue="" onChange={e=>{if(e.target.value==="__demo__"){const DT=[{id:"d_t1",name:"Tampa Bay Rays 10U",cls:"10U",city:"Tampa",state:"FL"},{id:"d_t2",name:"Orlando Heat 10U",cls:"10U",city:"Orlando",state:"FL"},{id:"d_t3",name:"Sarasota Stars 10U",cls:"10U",city:"Sarasota",state:"FL"},{id:"d_t4",name:"Clearwater Cubs 10U",cls:"10U",city:"Clearwater",state:"FL"},{id:"d_t5",name:"Tampa Bay Rays 12U",cls:"12U",city:"Tampa",state:"FL"},{id:"d_t6",name:"Orlando Heat 12U",cls:"12U",city:"Orlando",state:"FL"},{id:"d_t7",name:"Lakeland Lightning 12U",cls:"12U",city:"Lakeland",state:"FL"},{id:"d_t8",name:"Bradenton Bulls 12U",cls:"12U",city:"Bradenton",state:"FL"}];const DG=[{id:"dg1",num:"A1",pool:"A",date:"2026-04-12",time:"9:00 AM",field:"Field 1",t1:"d_t1",t2:"d_t2",s1:4,s2:2,status:"final",gameType:"scored",evId:"__demo__"},{id:"dg2",num:"A2",pool:"A",date:"2026-04-12",time:"11:00 AM",field:"Field 2",t1:"d_t3",t2:"d_t4",s1:3,s2:1,status:"final",gameType:"scored",evId:"__demo__"},{id:"dg6",num:"B2",pool:"B",date:"2026-04-12",time:"11:00 AM",field:"Field 4",t1:"d_t7",t2:"d_t8",s1:null,s2:null,status:"scheduled",gameType:"scored",evId:"__demo__"},{id:"dg7",num:"B3",pool:"B",date:"2026-04-12",time:"1:00 PM",field:"Field 3",t1:"d_t5",t2:"d_t7",s1:null,s2:null,status:"scheduled",gameType:"scored",evId:"__demo__"}];setGames(prev=>[...prev.filter(g=>g.evId!=="__demo__"),...DG]);if(setGameMgrCtx)setGameMgrCtx({evId:"__demo__",evName:"Demo Event — Spring 2026",isDemoMode:true,teams:DT,divCounts:{"10U":4,"12U":4},loadingTeams:false,_divisions:[]});return;}const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);if(ev)loadEvent(ev);}}
                 style={{padding:"5px 8px",borderRadius:6,border:"1px solid #93c5fd",fontSize:12,fontWeight:600,background:"#eff6ff",color:"#1e40af"}}>
                 <option value="">↔ Switch event</option>
+                <option value="__demo__">🎭 Demo Mode</option>
                 {(events||[]).map(ev=><option key={ev.id} value={String(ev.id)}>{ev.name}</option>)}
               </select>
             )}
@@ -5864,7 +5866,7 @@ function PPMatrixView(){
 }
 
 /* ════════════════════ PITCHING ════════════════════ */
-function PitchingView({teams,games=[],pitchCtx,setPitchCtx,events,evRosters}){
+function PitchingView({teams,games=[],setGames,pitchCtx,setPitchCtx,events,evRosters}){
   const INN_OPTS=["","0/3 Inn","1/3 Inn","2/3 Inn","1 Inn","1-1/3 Inn","1-2/3 Inn","2 Inn","2-1/3 Inn","2-2/3 Inn","3 Inn","3-1/3 Inn","3-2/3 Inn","4 Inn","4-1/3 Inn","4-2/3 Inn","5 Inn","5-1/3 Inn","5-2/3 Inn","6 Inn","6-1/3 Inn","6-2/3 Inn","7 Inn","7-1/3 Inn","7-2/3 Inn","8 Inn","8-1/3 Inn","8-2/3 Inn","9 Inn","9-1/3 Inn","9-2/3 Inn","10 Inn"];
   const ROWS=10;
   const [entries,setEntries]=useState({});
@@ -5953,9 +5955,10 @@ function PitchingView({teams,games=[],pitchCtx,setPitchCtx,events,evRosters}){
         <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:10,padding:"14px 18px",marginBottom:18,display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
           <span style={{fontSize:14}}>⚾</span>
           <span style={{fontSize:13,fontWeight:700,color:"#92400e"}}>Select an event to track pitching:</span>
-          <select defaultValue="" onChange={e=>{const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);if(ev)loadEvent(ev);}}
+          <select defaultValue="" onChange={e=>{if(e.target.value==="__demo__"){const DT=[{id:"d_t1",name:"Tampa Bay Rays 10U",cls:"10U",city:"Tampa",state:"FL"},{id:"d_t2",name:"Orlando Heat 10U",cls:"10U",city:"Orlando",state:"FL"},{id:"d_t3",name:"Sarasota Stars 10U",cls:"10U",city:"Sarasota",state:"FL"},{id:"d_t4",name:"Clearwater Cubs 10U",cls:"10U",city:"Clearwater",state:"FL"},{id:"d_t5",name:"Tampa Bay Rays 12U",cls:"12U",city:"Tampa",state:"FL"},{id:"d_t6",name:"Orlando Heat 12U",cls:"12U",city:"Orlando",state:"FL"},{id:"d_t7",name:"Lakeland Lightning 12U",cls:"12U",city:"Lakeland",state:"FL"},{id:"d_t8",name:"Bradenton Bulls 12U",cls:"12U",city:"Bradenton",state:"FL"}];const DG=[{id:"dg1",num:"A1",pool:"A",date:"2026-04-12",time:"9:00 AM",field:"Field 1",t1:"d_t1",t2:"d_t2",s1:4,s2:2,status:"final",gameType:"scored",evId:"__demo__"},{id:"dg2",num:"A2",pool:"A",date:"2026-04-12",time:"11:00 AM",field:"Field 2",t1:"d_t3",t2:"d_t4",s1:3,s2:1,status:"final",gameType:"scored",evId:"__demo__"},{id:"dg3",num:"A3",pool:"A",date:"2026-04-12",time:"1:00 PM",field:"Field 1",t1:"d_t1",t2:"d_t3",s1:null,s2:null,status:"scheduled",gameType:"scored",evId:"__demo__"},{id:"dg4",num:"A4",pool:"A",date:"2026-04-12",time:"3:00 PM",field:"Field 2",t1:"d_t2",t2:"d_t4",s1:null,s2:null,status:"scheduled",gameType:"scored",evId:"__demo__"},{id:"dg5",num:"B1",pool:"B",date:"2026-04-12",time:"9:00 AM",field:"Field 3",t1:"d_t5",t2:"d_t6",s1:7,s2:3,status:"final",gameType:"scored",evId:"__demo__"},{id:"dg6",num:"B2",pool:"B",date:"2026-04-12",time:"11:00 AM",field:"Field 4",t1:"d_t7",t2:"d_t8",s1:null,s2:null,status:"scheduled",gameType:"scored",evId:"__demo__"},{id:"dg7",num:"B3",pool:"B",date:"2026-04-12",time:"1:00 PM",field:"Field 3",t1:"d_t5",t2:"d_t7",s1:null,s2:null,status:"scheduled",gameType:"scored",evId:"__demo__"}];setGames&&setGames(prev=>[...prev.filter(g=>g.evId!=="__demo__"),...DG]);setEntries({"dg1||d_t1||0":{player:"Jake Martinez",outs:"3 Inn",pitches:"52"},"dg1||d_t2||0":{player:"Tyler Smith",outs:"2-2/3 Inn",pitches:"47"},"dg2||d_t3||0":{player:"Marcus Lee",outs:"4 Inn",pitches:"64"},"dg2||d_t4||0":{player:"Ryan Davis",outs:"3-2/3 Inn",pitches:"58"},"dg5||d_t5||0":{player:"Austin Chen",outs:"5 Inn",pitches:"76"},"dg5||d_t6||0":{player:"Brandon Cole",outs:"4-2/3 Inn",pitches:"71"}});if(setPitchCtx)setPitchCtx({evId:"__demo__",evName:"Demo Event — Spring 2026",isDemoMode:true,teams:DT,divCounts:{"10U":4,"12U":4},loadingTeams:false,_divisions:[]});return;}const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);if(ev)loadEvent(ev);}}
             style={{flex:1,minWidth:220,padding:"7px 10px",borderRadius:7,border:"1px solid #d1d5db",fontSize:13,fontWeight:600,background:"#fff"}}>
             <option value="">— choose event —</option>
+            <option value="__demo__">🎭 Demo Mode (sample data)</option>
             {(events||[]).map(ev=><option key={ev.id} value={String(ev.id)}>{ev.name}{ev.date?` · ${ev.date}`:""}</option>)}
           </select>
         </div>
@@ -5966,15 +5969,16 @@ function PitchingView({teams,games=[],pitchCtx,setPitchCtx,events,evRosters}){
           display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
           <div style={{fontSize:13,fontWeight:700,color:"#1e40af",display:"flex",alignItems:"center",gap:8}}>
             <span style={{fontSize:15}}>⚾</span>
-            <span>Pitching for: <strong>{pitchCtx.evName}</strong></span>
+            <span>Pitching for: <strong>{pitchCtx.evName}</strong></span>{pitchCtx.isDemoMode&&<span style={{background:"#fef3c7",color:"#92400e",fontSize:11,fontWeight:700,padding:"2px 7px",borderRadius:4,border:"1px solid #fcd34d",marginLeft:4}}>🎭 DEMO</span>}
             {pitchCtx.loadingTeams&&<span style={{color:"#2563eb",fontStyle:"italic",fontSize:12}}>loading teams…</span>}
             {!pitchCtx.loadingTeams&&ctxTeams.length>0&&<span style={{fontWeight:500,fontSize:12,color:"#3b82f6"}}>· {ctxTeams.length} teams</span>}
           </div>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             {events&&events.length>0&&(
-              <select defaultValue="" onChange={e=>{const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);if(ev)loadEvent(ev);}}
+              <select defaultValue="" onChange={e=>{if(e.target.value==="__demo__"){const DT=[{id:"d_t1",name:"Tampa Bay Rays 10U",cls:"10U",city:"Tampa",state:"FL"},{id:"d_t2",name:"Orlando Heat 10U",cls:"10U",city:"Orlando",state:"FL"},{id:"d_t3",name:"Sarasota Stars 10U",cls:"10U",city:"Sarasota",state:"FL"},{id:"d_t4",name:"Clearwater Cubs 10U",cls:"10U",city:"Clearwater",state:"FL"},{id:"d_t5",name:"Tampa Bay Rays 12U",cls:"12U",city:"Tampa",state:"FL"},{id:"d_t6",name:"Orlando Heat 12U",cls:"12U",city:"Orlando",state:"FL"},{id:"d_t7",name:"Lakeland Lightning 12U",cls:"12U",city:"Lakeland",state:"FL"},{id:"d_t8",name:"Bradenton Bulls 12U",cls:"12U",city:"Bradenton",state:"FL"}];const DG=[{id:"dg1",num:"A1",pool:"A",date:"2026-04-12",time:"9:00 AM",field:"Field 1",t1:"d_t1",t2:"d_t2",s1:4,s2:2,status:"final",gameType:"scored",evId:"__demo__"},{id:"dg2",num:"A2",pool:"A",date:"2026-04-12",time:"11:00 AM",field:"Field 2",t1:"d_t3",t2:"d_t4",s1:3,s2:1,status:"final",gameType:"scored",evId:"__demo__"},{id:"dg3",num:"A3",pool:"A",date:"2026-04-12",time:"1:00 PM",field:"Field 1",t1:"d_t1",t2:"d_t3",s1:null,s2:null,status:"scheduled",gameType:"scored",evId:"__demo__"},{id:"dg4",num:"A4",pool:"A",date:"2026-04-12",time:"3:00 PM",field:"Field 2",t1:"d_t2",t2:"d_t4",s1:null,s2:null,status:"scheduled",gameType:"scored",evId:"__demo__"},{id:"dg5",num:"B1",pool:"B",date:"2026-04-12",time:"9:00 AM",field:"Field 3",t1:"d_t5",t2:"d_t6",s1:7,s2:3,status:"final",gameType:"scored",evId:"__demo__"},{id:"dg6",num:"B2",pool:"B",date:"2026-04-12",time:"11:00 AM",field:"Field 4",t1:"d_t7",t2:"d_t8",s1:null,s2:null,status:"scheduled",gameType:"scored",evId:"__demo__"},{id:"dg7",num:"B3",pool:"B",date:"2026-04-12",time:"1:00 PM",field:"Field 3",t1:"d_t5",t2:"d_t7",s1:null,s2:null,status:"scheduled",gameType:"scored",evId:"__demo__"}];setGames&&setGames(prev=>[...prev.filter(g=>g.evId!=="__demo__"),...DG]);setEntries({"dg1||d_t1||0":{player:"Jake Martinez",outs:"3 Inn",pitches:"52"},"dg1||d_t2||0":{player:"Tyler Smith",outs:"2-2/3 Inn",pitches:"47"},"dg2||d_t3||0":{player:"Marcus Lee",outs:"4 Inn",pitches:"64"},"dg2||d_t4||0":{player:"Ryan Davis",outs:"3-2/3 Inn",pitches:"58"},"dg5||d_t5||0":{player:"Austin Chen",outs:"5 Inn",pitches:"76"},"dg5||d_t6||0":{player:"Brandon Cole",outs:"4-2/3 Inn",pitches:"71"}});if(setPitchCtx)setPitchCtx({evId:"__demo__",evName:"Demo Event — Spring 2026",isDemoMode:true,teams:DT,divCounts:{"10U":4,"12U":4},loadingTeams:false,_divisions:[]});return;}const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);if(ev)loadEvent(ev);}}
                 style={{padding:"5px 8px",borderRadius:6,border:"1px solid #93c5fd",fontSize:12,fontWeight:600,background:"#eff6ff",color:"#1e40af"}}>
                 <option value="">↔ Switch event</option>
+                <option value="__demo__">🎭 Demo Mode</option>
                 {(events||[]).map(ev=><option key={ev.id} value={String(ev.id)}>{ev.name}</option>)}
               </select>
             )}
@@ -8569,7 +8573,7 @@ function App(){
           {view==="s-seeds"&&<SeedsView seedsCtx={seedsCtx} setSeedsCtx={setSeedsCtx} events={events} evRosters={evRosters}/>}
           {view==="s-parks"&&<ParksView eventParks={[]}/>}
           {view==="s-umpires"&&<UmpiresView/>}
-          {view==="s-pitching"&&<PitchingView teams={ALL_TEAMS} games={allGames} pitchCtx={pitchCtx} setPitchCtx={setPitchCtx} events={events} evRosters={evRosters}/>}
+          {view==="s-pitching"&&<PitchingView teams={ALL_TEAMS} games={allGames} setGames={setAllGames} pitchCtx={pitchCtx} setPitchCtx={setPitchCtx} events={events} evRosters={evRosters}/>}
           {view==="s-ppmatrix"&&<PPMatrixView/>}
           {view==="s-placing"&&<PlacingView bGames={allBracketGames} teams={ALL_TEAMS}/>}
           {view==="s-livelock"&&<LiveLockView/>}
