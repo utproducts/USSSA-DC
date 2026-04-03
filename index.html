@@ -872,13 +872,50 @@ function GameCard({g,teams,readOnly,onUpdField,onUpdScore,onSetStatus,onSwapTeam
   );
 }
 
-function GameMgrView({games,setGames,teams,readOnly}){
+function GameMgrView({games,setGames,teams,readOnly,gameMgrCtx,setGameMgrCtx,events,evRosters}){
   const [fTeam,setFTeam]=useState("all");
   const [fPool,setFPool]=useState("all");
   const [showAddGame,setShowAddGame]=useState(false);
   const [newGame,setNewGame]=useState({pool:"A",date:"",time:"",field:"",t1:"",t2:""});
-  const pools=[...new Set(games.map(g=>g.pool))].filter(Boolean).sort();
-  const shown=games.filter(g=>(fPool==="all"||g.pool===fPool)&&(fTeam==="all"||g.t1===fTeam||g.t2===fTeam));
+  async function loadEvent(ev){
+    if(!ev||!setGameMgrCtx)return;
+    const normalizedDivs=(ev.divisions||[]).map(normDiv);
+    const divCounts={};
+    let allTeams=normalizedDivs.flatMap(d=>{
+      const rk=String(ev.id)+"_"+d.id;
+      const t=(evRosters&&evRosters[rk])||[];
+      if(d.label)divCounts[d.label]=t.length||d.numTeams||0;
+      return t;
+    });
+    const usssaId=String(ev.evid||ev.id);
+    setGameMgrCtx({evId:String(ev.id),usssaId,evName:ev.name,teams:allTeams,divCounts,loadingTeams:!allTeams.length,_divisions:ev.divisions||[]});
+    if(!allTeams.length){
+      try{
+        const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(usssaId));
+        const j=await r.json();
+        if(j.status==='ok'&&j.teams&&j.teams.length){
+          const evId=String(ev.id);
+          const byDivLabel={};
+          j.teams.forEach(t=>{const dl=(t.division||'').trim();if(!byDivLabel[dl])byDivLabel[dl]=[];byDivLabel[dl].push(t);});
+          const newDivCounts={};
+          normalizedDivs.forEach(d=>{newDivCounts[d.label]=(byDivLabel[d.label]||[]).length||d.numTeams||0;});
+          allTeams=j.teams.map(t=>({
+            id:'us_'+evId+'_'+(t.team_name||'').replace(/\W+/g,'_'),
+            name:t.team_name||'',cls:t.division||'',city:t.team_city||'',
+            state:t.team_state||'FL',coach:t.manager_name||'',
+            email:t.manager_email||'',phone:t.manager_phone||''
+          }));
+          setGameMgrCtx({evId,usssaId,evName:ev.name,teams:allTeams,divCounts:newDivCounts,loadingTeams:false,_divisions:ev.divisions||[]});
+        }else{
+          setGameMgrCtx(prev=>prev?{...prev,loadingTeams:false}:null);
+        }
+      }catch(err){setGameMgrCtx(prev=>prev?{...prev,loadingTeams:false}:null);}
+    }
+  }
+  const ctxTeams=gameMgrCtx?.teams?.length?gameMgrCtx.teams:teams;
+  const evGames=gameMgrCtx?games.filter(g=>g.evId===gameMgrCtx.evId):[];
+  const pools=[...new Set(evGames.map(g=>g.pool))].filter(Boolean).sort();
+  const shown=evGames.filter(g=>(fPool==="all"||g.pool===fPool)&&(fTeam==="all"||g.t1===fTeam||g.t2===fTeam));
   const byPool={};
   shown.forEach(g=>{if(!byPool[g.pool])byPool[g.pool]=[];byPool[g.pool].push(g);});
   const poolPalette=[
@@ -912,20 +949,78 @@ function GameMgrView({games,setGames,teams,readOnly}){
     setGames(prev=>{const u=prev.map(g=>g.id===id?{...g,t1:g.t2,t2:g.t1,s1:g.s2,s2:g.s1}:g);const gm=u.find(g=>g.id===id);if(gm)dbSave('games',gm);return u;});
   }
   function renumber(){
-    setGames(prev=>{const byP={};const u=prev.map(g=>{byP[g.pool]=(byP[g.pool]||0)+1;return{...g,num:`${g.pool||"G"}${byP[g.pool]}`};});u.forEach(g=>dbSave('games',g));return u;});
+    if(!gameMgrCtx)return;
+    setGames(prev=>{
+      const byP={};
+      const u=prev.map(g=>{
+        if(g.evId!==gameMgrCtx.evId)return g;
+        byP[g.pool]=(byP[g.pool]||0)+1;
+        return{...g,num:`${g.pool||"G"}${byP[g.pool]}`};
+      });
+      u.filter(g=>g.evId===gameMgrCtx.evId).forEach(g=>dbSave('games',g));
+      return u;
+    });
   }
   function addGame(){
     if(!newGame.t1||!newGame.t2){alert("Please select both teams.");return;}
     const pool=newGame.pool||"A";
-    const pGames=games.filter(g=>g.pool===pool);
+    const pGames=evGames.filter(g=>g.pool===pool);
     const g={id:"g_"+Date.now(),num:`${pool}${pGames.length+1}`,pool,date:newGame.date,time:newGame.time,
-      field:newGame.field,t1:newGame.t1,t2:newGame.t2,s1:null,s2:null,status:"scheduled",home:null,gameType:"scored"};
+      field:newGame.field,t1:newGame.t1,t2:newGame.t2,s1:null,s2:null,status:"scheduled",home:null,gameType:"scored",
+      evId:gameMgrCtx?.evId};
     setGames(prev=>[...prev,g]);dbSave('games',g);
     setNewGame({pool:"A",date:"",time:"",field:"",t1:"",t2:""});setShowAddGame(false);
   }
 
   return(
     <div>
+      {/* ── Event selector ── */}
+      {!gameMgrCtx&&events&&events.length>0&&(
+        <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:10,padding:"14px 18px",marginBottom:18,display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+          <span style={{fontSize:14}}>⚾</span>
+          <span style={{fontSize:13,fontWeight:700,color:"#92400e"}}>Select an event to manage games:</span>
+          <select defaultValue="" onChange={e=>{const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);if(ev)loadEvent(ev);}}
+            style={{flex:1,minWidth:220,padding:"7px 10px",borderRadius:7,border:"1px solid #d1d5db",fontSize:13,fontWeight:600,background:"#fff"}}>
+            <option value="">— choose event —</option>
+            {(events||[]).map(ev=><option key={ev.id} value={String(ev.id)}>{ev.name}{ev.date?` · ${ev.date}`:""}</option>)}
+          </select>
+        </div>
+      )}
+      {/* ── Active event banner ── */}
+      {gameMgrCtx&&(
+        <div style={{background:"#dbeafe",border:"1px solid #93c5fd",borderRadius:8,padding:"10px 16px",marginBottom:14,
+          display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#1e40af",display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:15}}>⚾</span>
+            <span>Games for: <strong>{gameMgrCtx.evName}</strong></span>
+            {gameMgrCtx.loadingTeams&&<span style={{color:"#2563eb",fontStyle:"italic",fontSize:12}}>loading teams…</span>}
+            {!gameMgrCtx.loadingTeams&&ctxTeams.length>0&&<span style={{fontWeight:500,fontSize:12,color:"#3b82f6"}}>· {ctxTeams.length} teams</span>}
+          </div>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            {events&&events.length>0&&(
+              <select defaultValue="" onChange={e=>{const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);if(ev)loadEvent(ev);}}
+                style={{padding:"5px 8px",borderRadius:6,border:"1px solid #93c5fd",fontSize:12,fontWeight:600,background:"#eff6ff",color:"#1e40af"}}>
+                <option value="">↔ Switch event</option>
+                {(events||[]).map(ev=><option key={ev.id} value={String(ev.id)}>{ev.name}</option>)}
+              </select>
+            )}
+            <button onClick={()=>setGameMgrCtx&&setGameMgrCtx(null)}
+              style={{padding:"4px 12px",fontSize:11,fontWeight:700,borderRadius:6,border:"1px solid #93c5fd",background:"#fff",color:"#1e40af",cursor:"pointer"}}>
+              ✕ Clear
+            </button>
+          </div>
+        </div>
+      )}
+      {/* No event selected → placeholder */}
+      {!gameMgrCtx&&(
+        <div style={{textAlign:"center",padding:"56px 0",color:"#94a3b8"}}>
+          <div style={{fontSize:44,marginBottom:10}}>⚾</div>
+          <div style={{fontSize:16,fontWeight:600,color:"#475569",marginBottom:4}}>Select an event above to manage games</div>
+          <div style={{fontSize:13}}>Choose an event from the dropdown to load its teams and games</div>
+        </div>
+      )}
+      {/* Main content — only when event selected */}
+      {gameMgrCtx&&<div>
       {/* Top bar */}
       <div className="card mb4">
         <div className="card-body flex-w gap-3" style={{alignItems:"flex-end"}}>
@@ -938,7 +1033,7 @@ function GameMgrView({games,setGames,teams,readOnly}){
           <div><label>Team</label>
             <select value={fTeam} onChange={e=>setFTeam(e.target.value)} style={{width:200}}>
               <option value="all">All Teams</option>
-              {teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+              {ctxTeams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
           <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
@@ -963,12 +1058,12 @@ function GameMgrView({games,setGames,teams,readOnly}){
               <div><label style={{fontSize:11,fontWeight:600}}>Team 1</label>
                 <select style={{width:"100%",padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}} value={newGame.t1} onChange={e=>setNewGame(p=>({...p,t1:e.target.value}))}>
                   <option value="">— Select —</option>
-                  {teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+                  {ctxTeams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
                 </select></div>
               <div><label style={{fontSize:11,fontWeight:600}}>Team 2</label>
                 <select style={{width:"100%",padding:"5px 8px",border:"1px solid #cdd5df",borderRadius:4,fontSize:13}} value={newGame.t2} onChange={e=>setNewGame(p=>({...p,t2:e.target.value}))}>
                   <option value="">— Select —</option>
-                  {teams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+                  {ctxTeams.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
                 </select></div>
             </div>
             <div style={{display:"flex",gap:8,marginTop:10}}>
@@ -990,7 +1085,7 @@ function GameMgrView({games,setGames,teams,readOnly}){
               <div style={{flex:1,height:1,background:"#e2e8f0"}}/>
             </div>
             {byPool[pool].map(g=>(
-              <GameCard key={g.id} g={g} teams={teams} readOnly={readOnly}
+              <GameCard key={g.id} g={g} teams={ctxTeams} readOnly={readOnly}
                 onUpdField={updField} onUpdScore={updScore} onSetStatus={setStatus} onSwapTeams={swapTeams}/>
             ))}
           </div>
@@ -1004,6 +1099,7 @@ function GameMgrView({games,setGames,teams,readOnly}){
           <div style={{fontSize:13}}>Adjust filters or add a game above</div>
         </div>
       )}
+      </div>}
     </div>
   );
 }
@@ -5768,7 +5864,7 @@ function PPMatrixView(){
 }
 
 /* ════════════════════ PITCHING ════════════════════ */
-function PitchingView({teams,games=[]}){
+function PitchingView({teams,games=[],pitchCtx,setPitchCtx,events,evRosters}){
   const INN_OPTS=["","0/3 Inn","1/3 Inn","2/3 Inn","1 Inn","1-1/3 Inn","1-2/3 Inn","2 Inn","2-1/3 Inn","2-2/3 Inn","3 Inn","3-1/3 Inn","3-2/3 Inn","4 Inn","4-1/3 Inn","4-2/3 Inn","5 Inn","5-1/3 Inn","5-2/3 Inn","6 Inn","6-1/3 Inn","6-2/3 Inn","7 Inn","7-1/3 Inn","7-2/3 Inn","8 Inn","8-1/3 Inn","8-2/3 Inn","9 Inn","9-1/3 Inn","9-2/3 Inn","10 Inn"];
   const ROWS=10;
   const [entries,setEntries]=useState({});
@@ -5776,9 +5872,46 @@ function PitchingView({teams,games=[]}){
   const [activeTab,setActiveTab]=useState("entry");
   const [activeTeam,setActiveTeam]=useState(0);
   const [savedMsg,setSavedMsg]=useState("");
-  const glist=games.filter(g=>g.status!=="bye"&&g.t1&&g.t2);
+  async function loadEvent(ev){
+    if(!ev||!setPitchCtx)return;
+    const normalizedDivs=(ev.divisions||[]).map(normDiv);
+    const divCounts={};
+    let allTeams=normalizedDivs.flatMap(d=>{
+      const rk=String(ev.id)+"_"+d.id;
+      const t=(evRosters&&evRosters[rk])||[];
+      if(d.label)divCounts[d.label]=t.length||d.numTeams||0;
+      return t;
+    });
+    const usssaId=String(ev.evid||ev.id);
+    setPitchCtx({evId:String(ev.id),usssaId,evName:ev.name,teams:allTeams,divCounts,loadingTeams:!allTeams.length,_divisions:ev.divisions||[]});
+    if(!allTeams.length){
+      try{
+        const r=await fetch('https://usssa-poller.chad-157.workers.dev/event-teams?event_id='+encodeURIComponent(usssaId));
+        const j=await r.json();
+        if(j.status==='ok'&&j.teams&&j.teams.length){
+          const evId=String(ev.id);
+          const byDivLabel={};
+          j.teams.forEach(t=>{const dl=(t.division||'').trim();if(!byDivLabel[dl])byDivLabel[dl]=[];byDivLabel[dl].push(t);});
+          const newDivCounts={};
+          normalizedDivs.forEach(d=>{newDivCounts[d.label]=(byDivLabel[d.label]||[]).length||d.numTeams||0;});
+          allTeams=j.teams.map(t=>({
+            id:'us_'+evId+'_'+(t.team_name||'').replace(/\W+/g,'_'),
+            name:t.team_name||'',cls:t.division||'',city:t.team_city||'',
+            state:t.team_state||'FL',coach:t.manager_name||'',
+            email:t.manager_email||'',phone:t.manager_phone||''
+          }));
+          setPitchCtx({evId,usssaId,evName:ev.name,teams:allTeams,divCounts:newDivCounts,loadingTeams:false,_divisions:ev.divisions||[]});
+        }else{
+          setPitchCtx(prev=>prev?{...prev,loadingTeams:false}:null);
+        }
+      }catch(err){setPitchCtx(prev=>prev?{...prev,loadingTeams:false}:null);}
+    }
+  }
+  const ctxTeams=pitchCtx?.teams?.length?pitchCtx.teams:teams;
+  const evGames=pitchCtx?games.filter(g=>g.evId===pitchCtx.evId):[];
+  const glist=evGames.filter(g=>g.status!=="bye"&&g.t1&&g.t2);
   const selG=glist.find(g=>g.id===selId)||(glist[0]||null);
-  function tm(id){return teams.find(t=>t.id===id)||{name:id||"TBD"}}
+  function tm(id){return ctxTeams.find(t=>t.id===id)||{name:id||"TBD"}}
   function eKey(gId,tId,r){return `${gId}||${tId}||${r}`}
   function getE(gId,tId,r){return entries[eKey(gId,tId,r)]||{player:"",outs:"",pitches:""}}
   function setE(gId,tId,r,field,val){
@@ -5815,6 +5948,53 @@ function PitchingView({teams,games=[]}){
   const TD={padding:"6px 10px",verticalAlign:"middle",borderBottom:"1px solid #f1f5f9"};
   return(
     <div>
+      {/* ── Event selector ── */}
+      {!pitchCtx&&events&&events.length>0&&(
+        <div style={{background:"#fffbeb",border:"1px solid #fcd34d",borderRadius:10,padding:"14px 18px",marginBottom:18,display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+          <span style={{fontSize:14}}>⚾</span>
+          <span style={{fontSize:13,fontWeight:700,color:"#92400e"}}>Select an event to track pitching:</span>
+          <select defaultValue="" onChange={e=>{const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);if(ev)loadEvent(ev);}}
+            style={{flex:1,minWidth:220,padding:"7px 10px",borderRadius:7,border:"1px solid #d1d5db",fontSize:13,fontWeight:600,background:"#fff"}}>
+            <option value="">— choose event —</option>
+            {(events||[]).map(ev=><option key={ev.id} value={String(ev.id)}>{ev.name}{ev.date?` · ${ev.date}`:""}</option>)}
+          </select>
+        </div>
+      )}
+      {/* ── Active event banner ── */}
+      {pitchCtx&&(
+        <div style={{background:"#dbeafe",border:"1px solid #93c5fd",borderRadius:8,padding:"10px 16px",marginBottom:14,
+          display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+          <div style={{fontSize:13,fontWeight:700,color:"#1e40af",display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:15}}>⚾</span>
+            <span>Pitching for: <strong>{pitchCtx.evName}</strong></span>
+            {pitchCtx.loadingTeams&&<span style={{color:"#2563eb",fontStyle:"italic",fontSize:12}}>loading teams…</span>}
+            {!pitchCtx.loadingTeams&&ctxTeams.length>0&&<span style={{fontWeight:500,fontSize:12,color:"#3b82f6"}}>· {ctxTeams.length} teams</span>}
+          </div>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            {events&&events.length>0&&(
+              <select defaultValue="" onChange={e=>{const ev=(events||[]).find(ev=>String(ev.id)===e.target.value);if(ev)loadEvent(ev);}}
+                style={{padding:"5px 8px",borderRadius:6,border:"1px solid #93c5fd",fontSize:12,fontWeight:600,background:"#eff6ff",color:"#1e40af"}}>
+                <option value="">↔ Switch event</option>
+                {(events||[]).map(ev=><option key={ev.id} value={String(ev.id)}>{ev.name}</option>)}
+              </select>
+            )}
+            <button onClick={()=>setPitchCtx&&setPitchCtx(null)}
+              style={{padding:"4px 12px",fontSize:11,fontWeight:700,borderRadius:6,border:"1px solid #93c5fd",background:"#fff",color:"#1e40af",cursor:"pointer"}}>
+              ✕ Clear
+            </button>
+          </div>
+        </div>
+      )}
+      {/* No event selected → placeholder */}
+      {!pitchCtx&&(
+        <div style={{textAlign:"center",padding:"56px 0",color:"#94a3b8"}}>
+          <div style={{fontSize:44,marginBottom:10}}>⚾</div>
+          <div style={{fontSize:16,fontWeight:600,color:"#475569",marginBottom:4}}>Select an event above to track pitching</div>
+          <div style={{fontSize:13}}>Choose an event from the dropdown to load its games and teams</div>
+        </div>
+      )}
+      {/* Main content — only when event selected */}
+      {pitchCtx&&<div>
       <div style={{display:"flex",gap:4,marginBottom:12}}>
         {[["entry","⚾ Game Entry"],["summary","📊 Pitcher Summary"]].map(([t,lbl])=>(
           <button key={t} onClick={()=>setActiveTab(t)} style={{padding:"5px 14px",border:"none",borderRadius:4,fontWeight:700,fontSize:12,cursor:"pointer",
@@ -5969,6 +6149,7 @@ function PitchingView({teams,games=[]}){
           }
         </div>
       )}
+      </div>}
     </div>
   );
 }
@@ -8281,6 +8462,8 @@ function App(){
   const [savedBrackets,setSavedBrackets]=useState({}); // {divLabel:{games,seeds,savedAt}}
   const [standingsCtx,setStandingsCtx]=useState(null);
   const [seedsCtx,setSeedsCtx]=useState(null);
+  const [gameMgrCtx,setGameMgrCtx]=useState(null);
+  const [pitchCtx,setPitchCtx]=useState(null);
   const [evFieldAssignments,setEvFieldAssignments]=useState({});
   const [dbStatus,setDbStatus]=useState('connecting');
   const [liveDiv,setLiveDiv]=useState({status:'idle',updatedAt:null});
@@ -8378,7 +8561,7 @@ function App(){
           {view==="events"&&<Dashboard events={events} onSelect={selectEvent} onNav={nav} evRosters={evRosters} setEvRosters={setEvRosters}/>}
           {view==="event-detail"&&selEv&&<EventDetailView ev={selEv} onBack={()=>nav("events")} onNav={nav} evRosters={evRosters} setEvRosters={setEvRosters} onSchedule={handleSchedule} onGrid={handleGrid} fieldAssignments={evFieldAssignments[selEv?.id]||[]} setFieldAssignments={fa=>setEvFieldAssignments(prev=>({...prev,[selEv.id]:fa}))}/>}
           {view==="create"&&<CreateEventView/>}
-          {view==="s-game-mgr"&&<GameMgrView games={allGames} setGames={setAllGames} teams={ALL_TEAMS}/>}
+          {view==="s-game-mgr"&&<GameMgrView games={allGames} setGames={setAllGames} teams={ALL_TEAMS} gameMgrCtx={gameMgrCtx} setGameMgrCtx={setGameMgrCtx} events={events} evRosters={evRosters}/>}
           {view==="s-grid"&&<GridBuilderView gridCtx={gridCtx} setGridCtx={setGridCtx} onSendToSchedule={handleSendToSchedule} events={events} evRosters={evRosters}/>}
           {view==="s-layout"&&<LayoutView games={allGames} setGames={setAllGames} teams={[]} schedCtx={schedCtx} setSchedCtx={setSchedCtx} events={events} evRosters={evRosters}/>}
           {view==="s-bracket"&&<BracketView bGames={allBracketGames} setBGames={setAllBracketGames} teams={[]} games={allGames} editable={true} events={events} evRosters={evRosters} bracketCtx={bracketCtx} setBracketCtx={setBracketCtx} savedBrackets={savedBrackets} setSavedBrackets={setSavedBrackets}/>}
@@ -8386,7 +8569,7 @@ function App(){
           {view==="s-seeds"&&<SeedsView seedsCtx={seedsCtx} setSeedsCtx={setSeedsCtx} events={events} evRosters={evRosters}/>}
           {view==="s-parks"&&<ParksView eventParks={[]}/>}
           {view==="s-umpires"&&<UmpiresView/>}
-          {view==="s-pitching"&&<PitchingView teams={ALL_TEAMS} games={allGames}/>}
+          {view==="s-pitching"&&<PitchingView teams={ALL_TEAMS} games={allGames} pitchCtx={pitchCtx} setPitchCtx={setPitchCtx} events={events} evRosters={evRosters}/>}
           {view==="s-ppmatrix"&&<PPMatrixView/>}
           {view==="s-placing"&&<PlacingView bGames={allBracketGames} teams={ALL_TEAMS}/>}
           {view==="s-livelock"&&<LiveLockView/>}
